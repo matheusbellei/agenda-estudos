@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenda e Controle de Estudos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="vendor/toastui/toastui-editor.min.css">
+<link rel="stylesheet" href="css/estilos.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<section id="tela-login" hidden>
+  <form class="cartao" id="login-form" novalidate>
+    <div class="marca"><h1>Agenda e Controle de Estudos</h1><p class="suave">Entre com a sua conta</p></div>
+    <label class="campo"><span>E-mail</span><input id="login-email" type="email" autocomplete="username" placeholder="voce@email.com"></label>
+    <label class="campo"><span>Senha</span><input id="login-senha" type="password" autocomplete="current-password"></label>
+    <div class="erro" id="login-erro" role="alert"></div>
+    <button class="btn btn-principal" id="login-entrar" type="submit">Entrar</button>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header id="cabecalho">
+    <span id="cabecalho-titulo">Agenda de Estudos</span>
+    <button class="btn-icone" id="menu-ajustes" aria-label="Ajustes" title="Ajustes">&#9881;</button>
+  </header>
+  <nav id="abas" aria-label="Telas">
+    <button data-aba="hoje">Hoje</button>
+    <button data-aba="semana">Semana</button>
+    <button data-aba="quadro">Quadro</button>
+    <button data-aba="fixas">Fixas</button>
+    <button data-aba="busca">Busca</button>
+  </nav>
+  <main>
+    <section id="tela-hoje" hidden></section>
+    <section id="tela-semana" hidden></section>
+    <section id="tela-quadro" hidden></section>
+    <section id="tela-fixas" hidden></section>
+    <section id="tela-busca" hidden></section>
+    <section id="tela-ajustes" hidden></section>
+  </main>
+</div>
+
+<!-- Editor visual: se não carregar, as anotações abrem numa caixa de texto simples (js/editor.js). -->
+<script defer src="vendor/toastui/toastui-editor-all.min.js"></script>
+<script defer src="vendor/toastui/pt-br.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "agenda-estudos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "sh tests/db/start-pg.sh && TZ=America/Sao_Paulo node --test \"tests/**/*.test.mjs\" && cd tests/ui && python3 -W ignore -m unittest -q"
+  }
+}

@@ -1,0 +1,292 @@
+{
+  "id": "quadro1",
+  "name": "Quadro de exemplo",
+  "labels": [
+    {
+      "id": "6a0000000000000000001001",
+      "idBoard": "quadro1",
+      "name": "Fundamentos",
+      "color": "blue"
+    },
+    {
+      "id": "6a0000000000000000001002",
+      "idBoard": "quadro1",
+      "name": "Prática",
+      "color": "orange"
+    }
+  ],
+  "lists": [
+    {
+      "id": "6a0000000000000000000001",
+      "name": "Backlog",
+      "closed": false,
+      "pos": 16384,
+      "idBoard": "quadro1"
+    },
+    {
+      "id": "6a0000000000000000000002",
+      "name": "Fixas",
+      "closed": false,
+      "pos": 32768,
+      "idBoard": "quadro1"
+    },
+    {
+      "id": "6a0000000000000000000003",
+      "name": "Em andamento",
+      "closed": false,
+      "pos": 49152,
+      "idBoard": "quadro1"
+    },
+    {
+      "id": "6a0000000000000000000004",
+      "name": "Concluído",
+      "closed": false,
+      "pos": 65536,
+      "idBoard": "quadro1"
+    },
+    {
+      "id": "6a0000000000000000000005",
+      "name": "Lista antiga",
+      "closed": true,
+      "pos": 81920,
+      "idBoard": "quadro1"
+    }
+  ],
+  "cards": [
+    {
+      "id": "6a71291155c0fb09282d6b2e",
+      "name": "Ler o guia de exemplo",
+      "desc": "# Guia\n\nTexto **inventado** para o teste.\n\n- um\n- dois",
+      "closed": false,
+      "idList": "6a0000000000000000000001",
+      "idLabels": [
+        "6a0000000000000000001001"
+      ],
+      "labels": [
+        {
+          "id": "6a0000000000000000001001",
+          "idBoard": "quadro1",
+          "name": "Fundamentos",
+          "color": "blue"
+        }
+      ],
+      "idChecklists": [],
+      "pos": 16384,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": null,
+      "attachments": []
+    },
+    {
+      "id": "6a0000000000000000002002",
+      "name": "Trilha de exemplo",
+      "desc": "",
+      "closed": false,
+      "idList": "6a0000000000000000000003",
+      "idLabels": [],
+      "labels": [],
+      "idChecklists": [
+        "6a0000000000000000003001"
+      ],
+      "pos": 16384,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": null,
+      "attachments": [
+        {
+          "id": "6a0000000000000000004001",
+          "name": "apostila.pdf",
+          "fileName": "apostila.pdf",
+          "url": "https://trello.example/apostila.pdf",
+          "isUpload": true,
+          "bytes": 1000,
+          "mimeType": "application/pdf"
+        }
+      ]
+    },
+    {
+      "id": "6a0000000000000000002003",
+      "name": "Card com duas etiquetas",
+      "desc": "",
+      "closed": false,
+      "idList": "6a0000000000000000000001",
+      "idLabels": [
+        "6a0000000000000000001001",
+        "6a0000000000000000001002"
+      ],
+      "labels": [
+        {
+          "id": "6a0000000000000000001001",
+          "idBoard": "quadro1",
+          "name": "Fundamentos",
+          "color": "blue"
+        },
+        {
+          "id": "6a0000000000000000001002",
+          "idBoard": "quadro1",
+          "name": "Prática",
+          "color": "orange"
+        }
+      ],
+      "idChecklists": [],
+      "pos": 32768,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": null,
+      "attachments": [
+        {
+          "id": "6a0000000000000000004002",
+          "name": "Vídeo de exemplo",
+          "fileName": null,
+          "url": "https://www.youtube.com/watch?v=exemplo",
+          "isUpload": false
+        }
+      ]
+    },
+    {
+      "id": "6a0000000000000000002004",
+      "name": "Card arquivado",
+      "desc": "",
+      "closed": true,
+      "idList": "6a0000000000000000000001",
+      "idLabels": [],
+      "labels": [],
+      "idChecklists": [],
+      "pos": 49152,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": null,
+      "attachments": []
+    },
+    {
+      "id": "6a0000000000000000002005",
+      "name": "Card de lista fechada",
+      "desc": "",
+      "closed": false,
+      "idList": "6a0000000000000000000005",
+      "idLabels": [],
+      "labels": [],
+      "idChecklists": [],
+      "pos": 16384,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": null,
+      "attachments": []
+    },
+    {
+      "id": "6a0000000000000000002006",
+      "name": "Fixa de quinta",
+      "desc": "",
+      "closed": false,
+      "idList": "6a0000000000000000000002",
+      "idLabels": [],
+      "labels": [],
+      "idChecklists": [],
+      "pos": 16384,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": {
+        "rule": "DTSTART;TZID=America/Sao_Paulo:20260507T090000\nRRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=TH",
+        "triggers": [],
+        "typeName": "recurrenceRule"
+      },
+      "attachments": []
+    },
+    {
+      "id": "6a0000000000000000002007",
+      "name": "Fixa diária arquivada",
+      "desc": "",
+      "closed": true,
+      "idList": "6a0000000000000000000002",
+      "idLabels": [],
+      "labels": [],
+      "idChecklists": [],
+      "pos": 32768,
+      "due": null,
+      "dueComplete": false,
+      "recurrenceRule": {
+        "rule": "RRULE:FREQ=DAILY",
+        "triggers": [],
+        "typeName": "recurrenceRule"
+      },
+      "attachments": []
+    },
+    {
+      "id": "6a0000000000000000002008",
+      "name": "Card concluído",
+      "desc": "",
+      "closed": false,
+      "idList": "6a0000000000000000000004",
+      "idLabels": [],
+      "labels": [],
+      "idChecklists": [],
+      "pos": 16384,
+      "due": "2026-09-10T15:00:00.000Z",
+      "dueComplete": true,
+      "recurrenceRule": null,
+      "attachments": []
+    }
+  ],
+  "checklists": [
+    {
+      "id": "6a0000000000000000003001",
+      "name": "Plano de estudo",
+      "idCard": "6a0000000000000000002002",
+      "pos": 16384,
+      "checkItems": [
+        {
+          "id": "6a0000000000000000005001",
+          "name": "Aula 1",
+          "pos": 16384,
+          "state": "complete",
+          "idChecklist": "6a0000000000000000003001"
+        },
+        {
+          "id": "6a0000000000000000005002",
+          "name": "Aula 2\tIntrodução ao tema",
+          "pos": 32768,
+          "state": "complete",
+          "idChecklist": "6a0000000000000000003001"
+        },
+        {
+          "id": "6a0000000000000000005003",
+          "name": "Aula 3",
+          "pos": 49152,
+          "state": "incomplete",
+          "idChecklist": "6a0000000000000000003001"
+        },
+        {
+          "id": "6a0000000000000000005004",
+          "name": "Aula 4",
+          "pos": 65536,
+          "state": "incomplete",
+          "idChecklist": "6a0000000000000000003001"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "6a0000000000000000006001",
+      "type": "commentCard",
+      "date": "2026-08-04T23:44:55.052Z",
+      "data": {
+        "text": "Anotei isto depois.",
+        "card": {
+          "id": "6a71291155c0fb09282d6b2e",
+          "name": "Ler o guia de exemplo"
+        }
+      }
+    },
+    {
+      "id": "6a0000000000000000006002",
+      "type": "updateCard",
+      "date": "2026-08-05T10:00:00.000Z",
+      "data": {
+        "card": {
+          "id": "6a0000000000000000002002"
+        }
+      }
+    }
+  ]
+}
