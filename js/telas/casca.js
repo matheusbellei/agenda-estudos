@@ -39,11 +39,17 @@ export async function iniciarCasca({ store, aoEntrar, aoSair }) {
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     $('#login-erro').textContent = '';
+    const botao = $('#login-entrar');
+    botao.disabled = true;
+    botao.textContent = 'Entrando…';
     try {
       const usuario = await store.signIn($('#login-email').value.trim(), $('#login-senha').value);
       await entrar(usuario, aoEntrar);
     } catch (err) {
       $('#login-erro').textContent = err.message || 'Não foi possível entrar.';
+    } finally {
+      botao.disabled = false;
+      botao.textContent = 'Entrar';
     }
   });
 

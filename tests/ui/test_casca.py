@@ -79,3 +79,39 @@ class TestCasca(UITest):
           return { items: (await s.list('items')).length, blocks: await s.list('blocks') }; }""")
         self.assertEqual(r['items'], 0)
         self.assertEqual((r['blocks'][0]['card_id'], r['blocks'][0]['item_id']), (None, None))
+
+class TestTelaDeEntrada(UITest):
+    def test_semana_atual_com_hoje_marcado(self):
+        self.open(); p = self.page
+        dias = p.eval_on_selector_all('#login-semana li', 'els => els.map(e => [e.className, e.innerText.replace(/\\s+/g, " ")])')
+        self.assertEqual(len(dias), 7)
+        self.assertEqual(dias[0], ['hoje', 'Seg 16'])
+        self.assertEqual(dias[6], ['', 'Dom 22'])
+        self.assertIn('16 de novembro', p.inner_text('#login-dia'))
+
+    def test_titulo_visivel_e_sem_sobrepor_os_campos(self):
+        self.open(); p = self.page
+        h1 = p.locator('#tela-login h1').bounding_box()
+        email = p.locator('#login-email').bounding_box()
+        self.assertGreater(h1['width'], 150)
+        self.assertLess(h1['y'] + h1['height'], email['y'])
+
+    def test_mostrar_e_ocultar_senha(self):
+        self.open(); p = self.page
+        p.fill('#login-senha', 'segredo')
+        p.click('#login-ver-senha')
+        self.assertEqual(p.get_attribute('#login-senha', 'type'), 'text')
+        self.assertEqual(p.inner_text('#login-ver-senha'), 'Ocultar')
+        p.click('#login-ver-senha')
+        self.assertEqual(p.get_attribute('#login-senha', 'type'), 'password')
+
+    def test_manifesto_do_app_instalavel(self):
+        self.open(); p = self.page
+        m = p.evaluate("fetch(document.querySelector('link[rel=manifest]').href).then(r => r.json())")
+        self.assertEqual(m['display'], 'standalone')
+        self.assertEqual(m['start_url'], './')
+        tamanhos = {(i['sizes'], i.get('purpose')) for i in m['icons']}
+        self.assertIn(('192x192', 'any'), tamanhos)
+        self.assertIn(('512x512', 'maskable'), tamanhos)
+        for i in m['icons']:
+            self.assertEqual(p.evaluate(f"fetch('icones/{i['src'].split('/')[-1]}').then(r => r.status)"), 200)

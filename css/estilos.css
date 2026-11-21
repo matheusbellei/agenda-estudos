@@ -34,11 +34,44 @@ button { cursor: pointer; }
 .suave { color: var(--texto-suave); font-size: 13px; }
 .erro { color: var(--nao-feito); font-size: 13px; min-height: 18px; margin-top: 8px; }
 
-/* Login */
-#tela-login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
-#tela-login .cartao { width: 100%; max-width: 360px; padding: 28px 22px; }
-#tela-login .marca { text-align: center; margin-bottom: 8px; }
-#tela-login .btn-principal { width: 100%; justify-content: center; margin-top: 8px; padding: 12px; }
+/* Login: a semana atual em cima (no computador, à esquerda) e o formulário embaixo */
+#tela-login { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+.login-palco { width: 100%; max-width: 400px; display: grid; gap: 22px; }
+.login-marca { display: grid; justify-items: start; gap: 6px; padding: 0 4px; }
+.login-icone { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 8px; }
+.login-marca h1 { font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; }
+.login-dia { margin: 0; color: var(--texto-suave); }
+.login-dia::first-letter { text-transform: uppercase; }
+.login-semana { list-style: none; margin: 14px 0 0; padding: 0; width: 100%; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.login-semana li { display: grid; justify-items: center; gap: 2px; padding: 8px 0 9px; border-radius: 10px; border: 1px dashed #D9BFA0; color: var(--texto-suave); font-size: 11px; }
+.login-semana li b { font-size: 16px; font-weight: 600; color: var(--espresso); font-variant-numeric: tabular-nums; }
+.login-semana li.passou { border-style: solid; border-color: transparent; background: var(--latte); }
+.login-semana li.hoje { border: 1px solid var(--espresso); background: var(--espresso); color: var(--latte); }
+.login-semana li.hoje b { color: var(--espuma); }
+.login-form { background: var(--espuma); border-radius: 16px; padding: 22px 20px 20px; box-shadow: 0 1px 0 var(--linha); }
+.login-form h2 { font-size: 20px; }
+.campo > .campo-senha { display: flex; margin: 0; font-size: inherit; color: inherit; position: relative; }
+.campo-senha input { padding-right: 84px; }
+.ver-senha { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: none; background: none; color: var(--mocha); font-size: 13px; font-weight: 500; padding: 8px 10px; border-radius: 8px; }
+.ver-senha:hover { background: var(--latte); }
+.ver-senha:focus-visible, .login-form .btn:focus-visible { outline: 2px solid var(--caramelo); outline-offset: 2px; }
+.login-form .btn-principal { width: 100%; justify-content: center; margin-top: 6px; padding: 12px; }
+.login-form .btn-principal:disabled { opacity: .7; cursor: progress; }
+@media (min-width: 900px) {
+  .login-palco { max-width: 880px; grid-template-columns: 1.1fr 1fr; gap: 0; background: var(--espuma); border-radius: 20px; overflow: hidden; box-shadow: 0 1px 0 var(--linha), 0 18px 40px rgba(59,36,22,.10); }
+  .login-marca { background: var(--espresso); color: var(--espuma); padding: 44px 40px; align-content: center; gap: 8px; }
+  .login-marca h1 { font-size: 40px; }
+  .login-icone { box-shadow: 0 0 0 1px rgba(232,211,185,.35); }
+  .login-dia { color: var(--latte); }
+  .login-semana { margin-top: 28px; gap: 8px; }
+  .login-semana li { border-color: rgba(232,211,185,.35); color: var(--latte); padding: 10px 0 11px; }
+  .login-semana li b { color: var(--espuma); font-size: 18px; }
+  .login-semana li.passou { background: rgba(232,211,185,.14); }
+  .login-semana li.hoje { background: var(--caramelo); border-color: var(--caramelo); color: var(--espresso); }
+  .login-semana li.hoje b { color: var(--espresso); }
+  .login-form { box-shadow: none; border-radius: 0; padding: 48px 40px; align-self: center; }
+  .login-form h2 { font-size: 24px; }
+}
 
 /* Cabeçalho */
 #cabecalho { position: sticky; top: 0; z-index: 20; background: var(--espresso); color: var(--espuma); display: flex; align-items: center; gap: 8px; padding: 10px 12px; }

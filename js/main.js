@@ -12,8 +12,15 @@ import { iniciarBusca } from './telas/busca.js';
 import { iniciarFixas, verificarVirada } from './telas/fixas.js';
 import { isoDe } from './regras/datas.js';
 import { haTextoNaoSalvo } from './telas/folhas.js';
+import { prepararLogin } from './telas/login.js';
+
+// App instalável: o service worker só entra no site publicado (nos testes o banco é simulado).
+if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 
 (async function iniciar() {
+  prepararLogin();
   if (!window.__TEST_STORE__ && SUPABASE_URL === 'COLOQUE_A_URL_AQUI') {
     document.querySelector('#tela-login').hidden = false;
     document.querySelector('#login-erro').textContent = 'Falta configurar o Supabase em js/config.js';

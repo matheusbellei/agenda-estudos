@@ -42,7 +42,7 @@ A publishable key é pública por natureza. Nunca coloque a *secret key* nem a s
 1. Crie um repositório **público** no GitHub (ex.: `agenda-estudos`).
 2. Publique o código no branch `main`, de um destes jeitos:
    - **Com git** (recomendado): na pasta do projeto, `git push` para o branch `main` do repositório. O git respeita o `.gitignore` e não envia pastas internas nem caches de teste.
-   - **Pelo site do GitHub** (**Add file → Upload files**): envie **somente** `index.html`, as pastas `css/`, `js/`, `vendor/` e `supabase/`, o `README.md` e o `docs/DECISOES.md`. Não arraste a pasta inteira: o upload pelo site ignora o `.gitignore` e levaria pastas ocultas (como `.superpowers/` e `.git/`) e caches dos testes (`__pycache__`). Sem `css/`, `js/` e `vendor/` a tela fica em branco.
+   - **Pelo site do GitHub** (**Add file → Upload files**): envie **somente** `index.html`, `manifest.webmanifest`, `sw.js`, as pastas `css/`, `js/`, `vendor/`, `icones/` e `supabase/`, o `README.md` e o `docs/DECISOES.md`. Não arraste a pasta inteira: o upload pelo site ignora o `.gitignore` e levaria pastas ocultas (como `.superpowers/` e `.git/`) e caches dos testes (`__pycache__`). Sem `css/`, `js/` e `vendor/` a tela fica em branco.
 3. Em **Settings → Pages**, escolha **Deploy from a branch**, branch `main`, pasta `/ (root)` e salve. O GitHub Pages publica o que está em `main`.
 4. Em 1 a 2 minutos o app fica em `https://SEU-USUARIO.github.io/agenda-estudos/`.
 5. No Supabase, em **Authentication → URL Configuration**, coloque esse endereço em **Site URL**.
@@ -89,6 +89,7 @@ No plano gratuito, o Supabase pausa projetos que ficam parados por um tempo. Se 
 - Não há etapa de compilação: tudo o que o navegador carrega está no repositório ou vem de CDN.
 - Mapa de arquivos:
   - `index.html` e `css/estilos.css`: casca e aparência;
+  - `manifest.webmanifest`, `sw.js` e `icones/`: app instalável (no celular, menu do Chrome → **Adicionar à tela inicial** / **Instalar app**; no computador, ícone de instalar na barra de endereço). O `sw.js` busca sempre a versão mais nova quando há internet;
   - `js/main.js`: liga tudo (login, estado, navegação);
   - `js/armazenamento.js`: a única porta para o Supabase;
   - `js/estado.js`: dados em memória e ações que gravam;
