@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ocorrenciasDeCompromissos, blocosDoPeriodo, horariosLivres,
-  faixasDaSemana, limitesDoDia, colunas, ajustarAFatia,
+  faixasDaSemana, limitesDoDia, posicionar, inicioMaisUmaHora, ajustarAFatia,
 } from '../../js/regras/calendario.js';
 
 const compromisso = (extra = {}) => ({
@@ -83,16 +83,85 @@ test('faixasDaSemana: bloco 470-610 aparece em três faixas de 120', () => {
   assert.equal(f.find((x) => x.start_min === 480).livre_min, 0);
 });
 
-test('colunas: dois sobrepostos lado a lado e um isolado', () => {
-  const r = colunas([
-    { id: 'a', start_min: 480, end_min: 600 },
-    { id: 'b', start_min: 540, end_min: 660 },
-    { id: 'c', start_min: 800, end_min: 860 },
-  ]);
-  const por = Object.fromEntries(r.map((b) => [b.id, b]));
-  assert.equal(por.a.cols, 2); assert.equal(por.b.cols, 2);
-  assert.deepEqual([por.a.col, por.b.col], [0, 1]);
-  assert.equal(por.c.cols, 1); assert.equal(por.c.col, 0);
+const pos = (blocos) => Object.fromEntries(posicionar(blocos).map((b) => [b.id, b]));
+const trabalho = { id: 't', start_min: 462, end_min: 1050 };
+
+test('posicionar: estudo 720-780 dentro do trabalho 462-1050 → trabalho fundo, estudo largura inteira e acima', () => {
+  const r = pos([trabalho, { id: 'e', start_min: 720, end_min: 780 }]);
+  assert.equal(r.t.fundo, true); assert.equal(r.e.fundo, false);
+  assert.equal(r.e.recuo, 0); assert.equal(r.e.total, 1); assert.equal(r.t.total, 1);
+  assert.ok(r.e.camada > r.t.camada);
+});
+
+test('posicionar: estudo 462-540 começa junto com o trabalho → lado a lado, ninguém é fundo', () => {
+  const r = pos([trabalho, { id: 'e', start_min: 462, end_min: 540 }]);
+  assert.equal(r.t.fundo, false); assert.equal(r.e.fundo, false);
+  assert.deepEqual([r.t.total, r.e.total], [2, 2]);
+  assert.deepEqual(new Set([r.t.indice, r.e.indice]), new Set([0, 1]));
+});
+
+test('posicionar: início e fim iguais → lado a lado', () => {
+  const r = pos([{ id: 'a', start_min: 600, end_min: 660 }, { id: 'b', start_min: 600, end_min: 660 }]);
+  assert.deepEqual([r.a.total, r.b.total], [2, 2]);
+  assert.notEqual(r.a.indice, r.b.indice);
+  assert.equal(r.a.fundo || r.b.fundo, false);
+});
+
+test('posicionar: 540-660 e 600-720 → o segundo recuado e acima, nenhum fundo', () => {
+  const r = pos([{ id: 'a', start_min: 540, end_min: 660 }, { id: 'b', start_min: 600, end_min: 720 }]);
+  assert.equal(r.a.recuo, 0); assert.equal(r.b.recuo, 1);
+  assert.ok(r.b.camada > r.a.camada);
+  assert.equal(r.a.fundo || r.b.fundo, false);
+  assert.deepEqual([r.a.total, r.b.total], [1, 1]);
+});
+
+test('posicionar: 540-660 e 560-700 (20 min de diferença) → lado a lado', () => {
+  const r = pos([{ id: 'a', start_min: 540, end_min: 660 }, { id: 'b', start_min: 560, end_min: 700 }]);
+  assert.deepEqual([r.a.total, r.b.total], [2, 2]);
+  assert.deepEqual([r.a.recuo, r.b.recuo], [0, 0]);
+});
+
+test('posicionar: trabalho com almoço 720-780 e reunião 900-960 → dois contidos de largura inteira', () => {
+  const r = pos([trabalho, { id: 'al', start_min: 720, end_min: 780 }, { id: 're', start_min: 900, end_min: 960 }]);
+  assert.equal(r.t.fundo, true);
+  for (const k of ['al', 're']) { assert.equal(r[k].total, 1); assert.equal(r[k].recuo, 0); assert.ok(r[k].camada > r.t.camada); }
+});
+
+test('posicionar: bloco isolado → sem fundo, sem recuo, largura inteira', () => {
+  const r = pos([{ id: 'a', start_min: 600, end_min: 660 }]);
+  assert.deepEqual([r.a.fundo, r.a.recuo, r.a.indice, r.a.total], [false, 0, 0, 1]);
+});
+
+test('posicionar: 120 min contendo 15 min → o de 120 é fundo', () => {
+  const r = pos([{ id: 'a', start_min: 600, end_min: 720 }, { id: 'b', start_min: 660, end_min: 675 }]);
+  assert.equal(r.a.fundo, true); assert.equal(r.b.fundo, false);
+});
+
+test('posicionar: dois que se cruzam dentro do trabalho → fundo + cascata entre eles', () => {
+  const r = pos([trabalho, { id: 'a', start_min: 600, end_min: 700 }, { id: 'b', start_min: 660, end_min: 760 }]);
+  assert.equal(r.t.fundo, true);
+  assert.equal(r.a.recuo, 0); assert.equal(r.b.recuo, 1);
+  assert.ok(r.b.camada > r.a.camada && r.a.camada > r.t.camada);
+});
+
+test('posicionar: não altera os blocos recebidos e mantém os campos', () => {
+  const entrada = [{ id: 'a', start_min: 600, end_min: 660, title: 'X' }];
+  const r = posicionar(entrada);
+  assert.equal(r[0].title, 'X'); assert.equal('fundo' in entrada[0], false);
+});
+
+test('inicioMaisUmaHora: 600 dentro do trabalho sem nada depois → 600-660', () => {
+  assert.deepEqual(inicioMaisUmaHora(600, [trabalho], 1440), { start_min: 600, end_min: 660 });
+});
+
+test('inicioMaisUmaHora: 600 com almoço 630-690 → 600-630', () => {
+  assert.deepEqual(inicioMaisUmaHora(600, [trabalho, { start_min: 630, end_min: 690 }], 1440), { start_min: 600, end_min: 630 });
+});
+
+test('inicioMaisUmaHora: perto do fim do período e no fim', () => {
+  assert.deepEqual(inicioMaisUmaHora(1410, [], 1440), { start_min: 1410, end_min: 1440 });
+  assert.equal(inicioMaisUmaHora(1440, [], 1440), null);
+  assert.deepEqual(inicioMaisUmaHora(1300, [], 1320), { start_min: 1300, end_min: 1320 });
 });
 
 test('ajustarAFatia: 487 com fatia 30 vira 480', () => {
@@ -101,4 +170,11 @@ test('ajustarAFatia: 487 com fatia 30 vira 480', () => {
 
 test('ajustarAFatia: 1439 com fatia 30 vira 1440', () => {
   assert.equal(ajustarAFatia(1439, 30), 1440);
+});
+
+test('ocorrências: regra com card leva card_id e vira kind study; sem card continua commitment', () => {
+  const [comCard] = ocorrenciasDeCompromissos([compromisso({ card_id: 'k1' })], '2026-11-16', '2026-11-16');
+  assert.deepEqual([comCard.card_id, comCard.kind], ['k1', 'study']);
+  const [semCard] = ocorrenciasDeCompromissos([compromisso()], '2026-11-16', '2026-11-16');
+  assert.deepEqual([semCard.card_id, semCard.kind], [null, 'commitment']);
 });

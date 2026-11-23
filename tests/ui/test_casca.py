@@ -8,15 +8,14 @@ class TestCasca(UITest):
         self.assertIn('incorretos', p.inner_text('#login-erro'))
         self.assertTrue(p.is_hidden('#app'))
 
-    def test_login_abre_na_semana_e_troca_de_aba(self):
+    def test_login_abre_na_semana_e_troca_de_tela(self):
         self.login(); p = self.page
         self.assertTrue(p.is_visible('#tela-semana'))
-        for aba in ['hoje', 'quadro', 'fixas', 'busca']:
-            p.click(f'[data-aba="{aba}"]')
-            self.assertTrue(p.is_visible(f'#tela-{aba}'))
+        self.assertEqual(p.inner_text('#cabecalho-titulo'), 'Agenda')
+        for tela in ['hoje', 'quadro', 'fixas', 'busca', 'tags', 'dashboards', 'ajustes']:
+            self.ir(tela)
             self.assertTrue(p.is_hidden('#tela-semana'))
-        p.click('#menu-ajustes')
-        self.assertTrue(p.is_visible('#tela-ajustes'))
+        self.ir('semana')
 
     def test_recarregar_mantem_sessao(self):
         self.login(); self.page.reload()
@@ -115,3 +114,64 @@ class TestTelaDeEntrada(UITest):
         self.assertIn(('512x512', 'maskable'), tamanhos)
         for i in m['icons']:
             self.assertEqual(p.evaluate(f"fetch('icones/{i['src'].split('/')[-1]}').then(r => r.status)"), 200)
+
+
+class TestMenu(UITest):
+    def test_menu_abre_e_lista_as_telas_na_ordem(self):
+        self.login(); p = self.page
+        self.assertEqual(p.locator('#abas').count(), 0)
+        self.assertEqual(p.locator('#menu-ajustes').count(), 0)
+        p.click('#menu-botao')
+        self.assertTrue(p.is_visible('#menu'))
+        self.assertEqual(p.get_attribute('#menu-botao', 'aria-expanded'), 'true')
+        itens = [t.strip() for t in p.locator('#menu button').all_inner_texts()]
+        self.assertEqual(itens, ['Agenda', 'Quadro', 'Fixas', 'Busca', 'Tags', 'Dashboards', 'Configurações', 'Sair'])
+
+    def test_escolher_item_troca_tela_titulo_e_fecha(self):
+        self.login(); p = self.page
+        self.ir('quadro')
+        self.assertEqual(p.inner_text('#cabecalho-titulo'), 'Quadro')
+        self.assertTrue(p.is_hidden('#menu'))
+        self.assertEqual(p.get_attribute('#menu-botao', 'aria-expanded'), 'false')
+        self.assertIn('ativo', p.get_attribute('#menu [data-tela="quadro"]', 'class'))
+        self.ir('ajustes')
+        self.assertEqual(p.inner_text('#cabecalho-titulo'), 'Configurações')
+
+    def test_fecha_com_esc_e_tocando_fora(self):
+        self.login(); p = self.page
+        p.click('#menu-botao'); p.keyboard.press('Escape')
+        self.assertTrue(p.is_hidden('#menu'))
+        p.click('#menu-botao'); p.mouse.click(200, 700)
+        self.assertTrue(p.is_hidden('#menu'))
+        self.assertTrue(p.is_visible('#tela-semana'))
+
+    def test_dashboards_em_breve(self):
+        self.login(); self.ir('dashboards')
+        self.assertIn('Em breve: horas por tag, metas e sequência de estudos.', self.page.inner_text('#tela-dashboards'))
+
+    def test_sair_pelo_menu(self):
+        self.login(); p = self.page
+        p.click('#menu-botao'); p.click('#menu-sair')
+        p.wait_for_selector('#tela-login', state='visible')
+        self.assertTrue(p.is_hidden('#app'))
+
+
+class TestAgenda(UITest):
+    def test_pagina_inicial_alterna_hoje_e_semana(self):
+        self.login(); p = self.page
+        self.assertTrue(p.is_visible('#visao'))
+        self.assertEqual([t.strip() for t in p.locator('#visao button').all_inner_texts()], ['Hoje', 'Semana'])
+        self.assertEqual(p.get_attribute('#visao [data-visao="semana"]', 'aria-pressed'), 'true')
+        p.click('#visao [data-visao="hoje"]')
+        self.assertTrue(p.is_visible('#tela-hoje')); self.assertTrue(p.is_hidden('#tela-semana'))
+        self.assertEqual(p.get_attribute('#visao [data-visao="hoje"]', 'aria-pressed'), 'true')
+        self.assertEqual(p.inner_text('#cabecalho-titulo'), 'Agenda')
+
+    def test_agenda_no_menu_volta_para_a_ultima_visao(self):
+        self.login(); p = self.page
+        p.click('#visao [data-visao="hoje"]')
+        self.ir('quadro')
+        self.assertTrue(p.is_hidden('#visao'))
+        p.click('#menu-botao'); p.click('#menu [data-tela="agenda"]')
+        self.assertTrue(p.is_visible('#tela-hoje'))
+        self.assertIn('ativo', p.get_attribute('#menu [data-tela="agenda"]', 'class'))

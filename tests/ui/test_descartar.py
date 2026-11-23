@@ -8,7 +8,7 @@ PERGUNTA = 'Descartar o que você escreveu?'
 class BlocoBase(CalendarioBase):
     def bloco_nao_feito(self, nota='Velho'):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula', status='missed', instead_note=nota)])
-        self.page.click(f'.dia[data-data="{TER}"] .bloco')
+        self.page.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca')
         self.folha_aberta()
 
     def tocar_fora(self, camada='#folha-bloco'):
@@ -37,7 +37,7 @@ class TestSalvarNoLugar(BlocoBase):
 class TestDescartarBloco(BlocoBase):
     def test_fundo_com_texto_pergunta_e_continuar_mantem(self):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula')]); p = self.page
-        p.click(f'.dia[data-data="{TER}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
         p.click('#bloco-nao-feito'); p.fill('#bloco-no-lugar', 'Fui estudar outra coisa')
         self.tocar_fora()
         self.assertTrue(self.aberta())
@@ -61,10 +61,10 @@ class TestDescartarBloco(BlocoBase):
 
     def test_sem_texto_fecha_na_hora(self):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula')]); p = self.page
-        p.click(f'.dia[data-data="{TER}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
         self.tocar_fora()
         p.wait_for_function("document.querySelector('#folha-bloco').hidden")
-        p.click(f'.dia[data-data="{TER}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
         p.keyboard.press('Escape')
         p.wait_for_function("document.querySelector('#folha-bloco').hidden")
 
@@ -73,7 +73,7 @@ class TestEscComCardAberto(CalendarioBase):
     def test_esc_na_folha_do_bloco_nao_fecha_o_card(self):
         self.preparar(lists=[dict(id='L1', name='Backlog', position=1)], cards=[dict(id='c1', title='Curso de Python', list_id='L1', position=1)])
         p = self.page
-        p.click('[data-aba="quadro"]'); p.click('.cartao-card[data-card="c1"] .cartao-titulo')
+        self.ir('quadro'); p.click('.cartao-card[data-card="c1"] .cartao-titulo')
         p.wait_for_selector('#folha-card', state='visible')
         p.click('#card-agendar'); self.folha_aberta()
         p.keyboard.press('Escape')
@@ -91,7 +91,7 @@ class TestExcluirRegraComHistorico(CalendarioBase):
 
     def test_todos_com_dias_marcados_pergunta_com_a_contagem(self):
         self.regra(); p = self.page
-        p.click(f'.dia[data-data="{SEX}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{SEX}"] .bloco .bloco-cabeca'); self.folha_aberta()
         p.click('#bloco-excluir'); p.click('[data-escopo="todos"]')
         p.wait_for_selector('#bloco-escopo:has-text("Isso apaga também 2 dia(s) já marcado(s) como cumprido ou não feito, com o que você escreveu. Excluir mesmo assim?")')
         self.assertEqual(len(self.db()['commitments']), 1)
@@ -102,7 +102,7 @@ class TestExcluirRegraComHistorico(CalendarioBase):
 
     def test_este_e_os_proximos_conta_so_os_do_dia_em_diante(self):
         self.regra(); p = self.page
-        p.click(f'.dia[data-data="{QUA}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca'); self.folha_aberta()
         p.click('#bloco-excluir'); p.click('[data-escopo="proximos"]')
         p.wait_for_selector('#bloco-escopo:has-text("Isso apaga também 1 dia(s) já marcado(s)")')
         self.assertIsNone(self.db()['commitments'][0]['valid_to'])
@@ -111,7 +111,7 @@ class TestExcluirRegraComHistorico(CalendarioBase):
 
     def test_sem_dias_marcados_nao_pergunta(self):
         self.regra(status_qua='planned', status_seg='planned'); p = self.page
-        p.click(f'.dia[data-data="{SEX}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{SEX}"] .bloco .bloco-cabeca'); self.folha_aberta()
         p.click('#bloco-excluir'); p.click('[data-escopo="todos"]')
         p.wait_for_function("window.__memdb.commitments.length === 0")
 
@@ -180,7 +180,7 @@ class TestDescartarNovoCard(QuadroBase):
 class TestSalvarComNotaEmBlocoPlanejado(BlocoBase):
     def test_salvar_nao_descarta_a_nota_de_bloco_planejado(self):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula')]); p = self.page
-        p.click(f'.dia[data-data="{TER}"] .bloco'); self.folha_aberta()
+        p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
         p.click('#bloco-nao-feito'); p.fill('#bloco-no-lugar', 'Estudei outra matéria')
         p.click('#bloco-salvar')
         p.wait_for_selector('#bloco-erro:has-text("Marcar como não feito")')

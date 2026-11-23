@@ -150,7 +150,7 @@ class TestCard(QuadroBase):
         self.seed('blocks', [
             {'date': '2026-11-10', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'title': 'Curso de Python', 'card_id': self.cid, 'status': 'done'},
             {'date': '2026-11-20', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'title': 'Curso de Python', 'card_id': self.cid, 'status': 'planned'}])
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         self.abrir()
         p.click('#card-excluir')
         p.wait_for_selector('#folha-card', state='hidden')

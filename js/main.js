@@ -3,6 +3,7 @@ import { criarStoreReal } from './armazenamento.js';
 import { criarEstado } from './estado.js';
 import { iniciarCasca } from './telas/casca.js';
 import { iniciarAjustes } from './telas/ajustes.js';
+import { iniciarTags } from './telas/tags.js';
 import { iniciarQuadro } from './telas/quadro.js';
 import { iniciarCard, abrirCard } from './telas/card.js';
 import { iniciarBloco } from './telas/bloco.js';
@@ -32,6 +33,7 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   const store = window.__TEST_STORE__ || criarStoreReal(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   const estado = criarEstado(store);
   iniciarAjustes({ estado, store });
+  iniciarTags({ estado });
   iniciarQuadro({ estado, abrirCard });
   iniciarCard({ estado, store });
   iniciarBloco({ estado, abrirCard });

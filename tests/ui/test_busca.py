@@ -26,7 +26,7 @@ class TestBusca(UITest):
         self.bloco = self.db()['blocks'][0]['id']
         p = self.page
         p.reload(); p.wait_for_selector('#app', state='visible')
-        p.click('[data-aba="busca"]')
+        self.ir('busca')
         p.wait_for_selector('#busca-termo', state='visible')
 
     def buscar(self, termo):
@@ -119,7 +119,7 @@ class TestBusca(UITest):
         self.preparar(); p = self.page
         self.seed('cards', [{'title': 'Longo', 'list_id': self.db()['lists'][0]['id'], 'notes': 'x ' * 80 + 'girafa' + ' y' * 80}])
         p.reload(); p.wait_for_selector('#app', state='visible')
-        p.click('[data-aba="busca"]')
+        self.ir('busca')
         self.buscar('girafa')
         p.wait_for_selector('.resultado')
         texto = p.inner_text('.resultado-trecho')

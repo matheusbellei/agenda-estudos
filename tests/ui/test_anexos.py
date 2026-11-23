@@ -36,7 +36,7 @@ class TestGravarERascunho(QuadroBase):
         self.assertEqual(self.db()['cards'][0]['notes'], 'antigo')
         self.assertEqual(self.rascunho()['texto'], 'texto perdido?')
         p.evaluate("window.__memFalharSempre = 'update'")  # ainda sem conexão quando a página sai (a saída também tenta gravar)
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         self.abrir()
         self.assertIn('Há um rascunho não salvo', p.inner_text('#card-notas'))
         self.assertEqual(p.input_value('#card-notas textarea'), 'antigo')
@@ -99,7 +99,7 @@ class TestGravarERascunho(QuadroBase):
     def test_so_um_editor_de_item_por_vez_e_trocar_grava(self):
         self.preparar_card(); p = self.page
         self.seed('items', [{'card_id': self.cid, 'title': 'Aula 1', 'position': 1}, {'card_id': self.cid, 'title': 'Aula 2', 'position': 2}])
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         self.abrir()
         p.click('#card-itens .item >> nth=0 >> [data-acao="expandir"]')
         p.click('#card-itens .item >> nth=0 >> .item-notas textarea'); p.keyboard.type('nota 1')
@@ -113,7 +113,7 @@ class TestGravarERascunho(QuadroBase):
     def test_falha_ao_trocar_de_item_mantem_o_item_aberto(self):
         self.preparar_card(); p = self.page
         self.seed('items', [{'card_id': self.cid, 'title': 'Aula 1', 'position': 1}, {'card_id': self.cid, 'title': 'Aula 2', 'position': 2}])
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         self.abrir()
         p.click('#card-itens .item >> nth=0 >> [data-acao="expandir"]')
         p.fill('#card-itens .item >> nth=0 >> .item-notas textarea', 'nota 1')
@@ -139,7 +139,7 @@ class TestAnexos(QuadroBase):
         self.cid = self.card_id('Curso de Python')
         if anexos:
             self.seed('attachments', [{'card_id': self.cid, **a} for a in anexos])
-            self.page.reload(); self.page.wait_for_selector('#app', state='visible'); self.page.click('[data-aba="quadro"]')
+            self.page.reload(); self.page.wait_for_selector('#app', state='visible'); self.ir('quadro')
         self.page.click(f'.cartao-card[data-card="{self.cid}"] .cartao-titulo')
         self.page.wait_for_selector('#folha-card', state='visible')
 

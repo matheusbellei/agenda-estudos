@@ -24,7 +24,7 @@ class BackupBase(UITest):
         self.seed('occurrences', [{'id': 'oco1', 'card_id': 'card2', 'date': '2026-11-09', 'status': 'done'}])
         self.seed('settings', [{'day_start_min': 420}])
         p.reload(); p.wait_for_selector('#app', state='visible')
-        p.click('#menu-ajustes')
+        self.ir('ajustes')
         p.wait_for_selector('#tela-ajustes', state='visible')
 
     def contagens(self):
@@ -136,7 +136,7 @@ class TestBackup(BackupBase):
         dados['tabelas']['cards'].append({'id': 'card9', 'title': '<img src=x onerror="window.__xss=1">', 'list_id': 'lis1', 'notes': '', 'archived': False, 'position': 0, 'is_fixed': False, 'fixed_days': []})
         self.restaurar(json.dumps(dados).encode())
         self.assertNotIn('<img', p.inner_html('#aj-backup'))
-        p.click('[data-aba="quadro"]')
+        self.ir('quadro')
         p.wait_for_selector('.coluna[data-lista]')
         self.assertIsNone(p.evaluate('window.__xss'))
 
@@ -170,6 +170,17 @@ class TestRestaurarEmOutraConta(BackupBase):
         self.esvaziar()
         self.assertTrue(self.restaurar(bruto).startswith('Restaurado:'))
         self.assertEqual(self.contagens(), antes)
+
+    def test_restaura_backup_antigo_sem_parent_id_e_com_subtag(self):
+        self.abrir_com_dados()
+        self.seed('categories', [{'id': 'sub1', 'name': 'Vocabulário', 'parent_id': 'cat1', 'icon': 'language'}])
+        _, bruto = self.exportar()
+        self.esvaziar()
+        self.assertTrue(self.restaurar(bruto).startswith('Restaurado:'))
+        cats = {c['id']: c for c in self.db()['categories']}
+        self.assertEqual(cats['sub1']['parent_id'], 'cat1')
+        self.assertEqual(cats['sub1']['icon'], 'language')
+        self.assertIsNone(cats['cat1'].get('parent_id'))
 
     def test_lista_ativa_diferente_recusa_sem_gravar_nada(self):
         self.abrir_com_dados()

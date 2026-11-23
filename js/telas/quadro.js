@@ -1,5 +1,6 @@
 // Tela Quadro: colunas (listas) com cards arrastáveis, filtro por categoria e Arquivo.
 import { registrarTela } from './casca.js';
+import { emOrdem, familia, nomeCompleto } from '../regras/tags.js';
 import { chipCategoria } from './ajustes.js';
 import { progresso } from '../regras/fila.js';
 import { registrarTextoNaoSalvo, pedirDescarte } from './folhas.js';
@@ -262,7 +263,7 @@ export function iniciarQuadro({ estado, abrirCard }) {
     .map((cc) => estado.dados.categories.find((c) => c.id === cc.category_id)).filter(Boolean);
 
   function cartaoDoCard(card, itens) {
-    const chips = categoriasDoCard(card.id).map(chipCategoria);
+    const chips = categoriasDoCard(card.id).map((k) => chipCategoria(k, nomeCompleto(estado.dados.categories, k)));
     const menu = criar('button', { type: 'button', class: 'btn-icone cartao-menu', 'aria-label': 'Opções do card', texto: '⋯' });
     menu.addEventListener('click', (e) => { e.stopPropagation(); menuDoCard(card); });
     const { feitos, total } = progresso(card.id, itens);
@@ -325,8 +326,9 @@ export function iniciarQuadro({ estado, abrirCard }) {
     menu.addEventListener('click', () => menuDaLista(lista));
     const marcas = [lista.is_active && 'em andamento', lista.is_done && 'conclusão'].filter(Boolean);
 
+    const daFamilia = filtro ? familia(estado.dados.categories, filtro) : null;
     const visiveis = cardsDaLista(estado, lista.id)
-      .filter((c) => !filtro || estado.dados.card_categories.some((cc) => cc.card_id === c.id && cc.category_id === filtro));
+      .filter((c) => !filtro || estado.dados.card_categories.some((cc) => cc.card_id === c.id && daFamilia.has(cc.category_id)));
     const corpo = criar('div', { class: 'coluna-cards' }, ...visiveis.map((c) => cartaoDoCard(c, itens)));
 
     const add = criar('button', { type: 'button', class: 'btn coluna-add', 'aria-label': 'Adicionar card', texto: '+ Adicionar card' });
@@ -358,15 +360,17 @@ export function iniciarQuadro({ estado, abrirCard }) {
   }
 
   function desenharTopo() {
-    const categorias = estado.dados.categories.filter((c) => !c.archived).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-    if (filtro && !estado.dados.categories.some((c) => c.id === filtro)) filtro = '';
-    const chip = (id, filho) => {
-      const b = criar('button', { type: 'button', class: `filtro-chip${filtro === id ? ' ativo' : ''}`, 'data-cat': id, 'aria-pressed': String(filtro === id) }, filho);
+    // Tag seguida das subtags; filtrar pela tag inclui as subtags dela.
+    const categorias = emOrdem(estado.dados.categories);
+    if (filtro && !categorias.some((c) => c.id === filtro)) filtro = '';
+    const chip = (c) => {
+      const id = c ? c.id : '';
+      const b = criar('button', { type: 'button', class: `filtro-chip${c?.parent_id ? ' filtro-sub' : ''}${filtro === id ? ' ativo' : ''}`, 'data-cat': id, 'aria-pressed': String(filtro === id) },
+        c ? chipCategoria(c) : criar('span', { class: 'chip', texto: 'Todas' }));
       b.addEventListener('click', () => { filtro = id; desenhar(); });
       return b;
     };
-    const filtros = criar('div', { class: 'filtro-categorias' },
-      chip('', criar('span', { class: 'chip', texto: 'Todas' })), ...categorias.map((c) => chip(c.id, chipCategoria(c))));
+    const filtros = criar('div', { class: 'filtro-categorias' }, chip(null), ...categorias.map(chip));
     const arquivados = estado.dados.cards.filter((c) => c.archived && !c.is_fixed).length;
     const btn = criar('button', { type: 'button', class: 'btn', id: 'quadro-arquivo-btn', 'aria-expanded': String(arquivoAberto), texto: `Arquivo (${arquivados})` });
     btn.addEventListener('click', () => { arquivoAberto = !arquivoAberto; desenhar(); });

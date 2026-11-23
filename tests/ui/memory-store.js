@@ -82,6 +82,7 @@
     db.attachments = db.attachments.filter((a) => a.card_id !== id);
     db.occurrences = db.occurrences.filter((o) => o.card_id !== id);
     db.card_categories = db.card_categories.filter((cc) => cc.card_id !== id);
+    db.commitments.forEach((c) => { if (c.card_id === id) c.card_id = null; });
     db.blocks.forEach((b) => {
       if (b.card_id === id) b.card_id = null;
       if (itens.has(b.item_id)) b.item_id = null;
@@ -153,6 +154,13 @@
       const antes = tabela(t).length;
       db[t] = tabela(t).filter((l) => !(l[chaveDe(t)] === id && l.owner_id === dono));
       if (t === 'cards' && db[t].length < antes) cascataCard(id);
+      if (t === 'categories' && db[t].length < antes) {
+        // como no banco: subtags vão junto; vínculos somem; blocos e fixas ficam sem categoria
+        const ids = new Set([id, ...db.categories.filter((c) => c.parent_id === id).map((c) => c.id)]);
+        db.categories = db.categories.filter((c) => !ids.has(c.id));
+        db.card_categories = db.card_categories.filter((cc) => !ids.has(cc.category_id));
+        [...db.blocks, ...db.commitments].forEach((b) => { if (ids.has(b.category_id)) b.category_id = null; });
+      }
       if (t === 'commitments' && db[t].length < antes) db.blocks = db.blocks.filter((b) => b.commitment_id !== id);
       if (t === 'items' && db[t].length < antes) {
         db.attachments = db.attachments.filter((a) => a.item_id !== id);

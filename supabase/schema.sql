@@ -12,6 +12,9 @@ create table public.categories (
   color     text not null default '#6F4E37',
   archived  boolean not null default false,
   trello_id text,
+  -- Subtag: aponta para a tag mãe (dois níveis só; a regra fica no app). Excluir a mãe leva as subtags.
+  parent_id uuid references public.categories(id) on delete cascade,
+  icon      text not null default 'tag',
   -- Tabela comum (não índice parcial): o upsert do supabase-js precisa de onConflict sem predicado.
   -- NULLs contam como distintos, então linhas sem trello_id continuam livres.
   unique (owner_id, trello_id)
@@ -47,6 +50,7 @@ create table public.cards (
   unique (owner_id, trello_id)
 );
 create index cards_list_idx on public.cards (list_id);
+create index categories_parent_idx on public.categories (parent_id);
 
 create table public.card_categories (
   owner_id    uuid not null default auth.uid() references auth.users(id),
@@ -96,9 +100,11 @@ create table public.commitments (
   end_min     int not null,
   valid_from  date not null,
   valid_to    date,
+  card_id     uuid references public.cards(id) on delete set null,
   check (start_min >= 0 and end_min <= 1440 and start_min < end_min),
   check (days <@ array[1,2,3,4,5,6,7])
 );
+create index commitments_card_idx on public.commitments (card_id);
 
 create table public.blocks (
   id            uuid primary key default gen_random_uuid(),
@@ -139,8 +145,20 @@ create table public.settings (
   day_end_min     int not null default 1320,
   week_slot_min   int not null default 120,
   day_slot_min    int not null default 30,
-  last_rollover   date
+  last_rollover   date,
+  -- Bloco sem card: perguntar ao salvar, criar sempre ou nunca criar; e a lista que recebe o card criado.
+  auto_card       text not null default 'perguntar' constraint settings_auto_card_check check (auto_card in ('perguntar','sempre','nunca')),
+  auto_card_list_id uuid references public.lists(id) on delete set null
 );
+
+-- A regra de acesso de categories não pode consultar categories (o Postgres acusa recursão):
+-- esta função confere, por fora das regras, se a tag mãe é de quem está logado.
+-- "volatile" para enxergar a mãe gravada no mesmo insert (a restauração do backup grava em lote).
+create or replace function public.e_minha_categoria(cat uuid) returns boolean
+  language sql volatile security definer set search_path = ''
+  as $$ select exists (select 1 from public.categories c where c.id = cat and c.owner_id = (select auth.uid())) $$;
+revoke all on function public.e_minha_categoria(uuid) from public, anon;
+grant execute on function public.e_minha_categoria(uuid) to authenticated;
 
 -- ============ Acesso ============
 -- Só o papel authenticated enxerga as tabelas, e só com select/insert/update/delete; anon não tem acesso a nada.
@@ -175,6 +193,10 @@ begin
   foreach t in array array['categories','lists','cards','card_categories','items','attachments',
                            'commitments','blocks','occurrences','settings'] loop
     extra := case t
+      when 'categories' then
+        ' and (parent_id is null or public.e_minha_categoria(parent_id))'
+      when 'settings' then
+        ' and (auto_card_list_id is null or exists (select 1 from public.lists x where x.id = auto_card_list_id and x.owner_id = ' || dono || '))'
       when 'cards' then
         ' and (list_id is null or exists (select 1 from public.lists x where x.id = list_id and x.owner_id = ' || dono || '))'
       when 'card_categories' then
@@ -187,6 +209,7 @@ begin
         || ' and (item_id is null or exists (select 1 from public.items x where x.id = item_id and x.owner_id = ' || dono || '))'
       when 'commitments' then
         ' and (category_id is null or exists (select 1 from public.categories x where x.id = category_id and x.owner_id = ' || dono || '))'
+        || ' and (card_id is null or exists (select 1 from public.cards x where x.id = card_id and x.owner_id = ' || dono || '))'
       when 'blocks' then
         ' and (category_id is null or exists (select 1 from public.categories x where x.id = category_id and x.owner_id = ' || dono || '))'
         || ' and (card_id is null or exists (select 1 from public.cards x where x.id = card_id and x.owner_id = ' || dono || '))'

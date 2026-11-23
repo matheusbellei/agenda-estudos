@@ -7,7 +7,7 @@ EXEMPLO = ROOT / 'tests/fixtures/trello-exemplo.json'
 class TestImportar(UITest):
     def abrir_ajustes(self):
         self.login()
-        self.page.click('#menu-ajustes')
+        self.ir('ajustes')
         self.page.wait_for_selector('#tela-ajustes', state='visible')
 
     def importar(self, arquivo=EXEMPLO, conteudo=None):
@@ -37,10 +37,10 @@ class TestImportar(UITest):
         self.assertTrue(all(i['card_id'] in ids_cards for i in db['items']))
         self.assertTrue(all(a['card_id'] in ids_cards for a in db['attachments']))
         self.assertEqual(sorted(a['kind'] for a in db['attachments']), ['link', 'pending'])
-        p.click('[data-aba="quadro"]')
+        self.ir('quadro')
         p.wait_for_selector('.coluna[data-lista]')
         self.assertEqual(p.locator('.coluna[data-lista]').count(), 3)
-        p.click('[data-aba="fixas"]')
+        self.ir('fixas')
         p.wait_for_selector('#tela-fixas', state='visible')
 
     def test_primeira_importacao_marca_a_virada_na_segunda_da_semana(self):
@@ -56,7 +56,7 @@ class TestImportar(UITest):
         self.seed('cards', [{'title': 'Revisão semanal', 'is_fixed': True, 'fixed_days': [1], 'created_at': '2026-08-01T12:00:00Z'}])
         self.page.reload(); self.page.wait_for_selector('#app', state='visible')
         self.page.click('#virada-depois')
-        self.page.click('#menu-ajustes')
+        self.ir('ajustes')
         self.importar()
         self.assertEqual(self.db()['settings'][0]['last_rollover'], '2026-11-02')
 
@@ -114,7 +114,7 @@ class TestImportar(UITest):
         self.seed('lists', [{'id': 'minha1', 'name': 'Fazendo', 'position': 1, 'is_active': True},
                             {'id': 'minha2', 'name': 'Feito', 'position': 2, 'is_done': True}])
         self.page.reload(); self.page.wait_for_selector('#app', state='visible')
-        self.page.click('#menu-ajustes')
+        self.ir('ajustes')
         self.importar()
         self.assertIn('8 cards', self.page.inner_text('#importar-resumo'))
         listas = self.db()['lists']

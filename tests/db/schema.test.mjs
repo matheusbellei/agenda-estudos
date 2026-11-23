@@ -148,3 +148,58 @@ test('authenticated só tem select, insert, update e delete; anon nada', () => {
   assert.equal(psql(DB, `select has_table_privilege('anon','public.cards','SELECT')`), 'f');
   assert.equal(psql(DB, `select has_table_privilege('authenticated','public.cards','UPDATE')`), 't');
 });
+
+// ---- Subtags, ícones, card nas fixas e criação automática de card (migração de 2026-11)
+test('categoria com parent_id do próprio dono é aceita e tem ícone padrão', () => {
+  const mae = id(as(A, `insert into categories(name) values ('Idiomas') returning id`));
+  const filha = id(as(A, `insert into categories(name, parent_id) values ('Vocabulário','${mae}') returning id`));
+  assert.equal(psql(DB, `select parent_id::text||':'||icon from categories where id='${filha}'`), `${mae}:tag`);
+  a.mae = mae; a.filha = filha;
+});
+
+test('B não consegue criar subtag apontando para tag de A', () => {
+  fails(() => as(B, `insert into categories(name, parent_id) values ('Intrusa','${a.mae}')`), /row-level security/);
+});
+
+test('excluir a mãe apaga as subtags', () => {
+  as(A, `delete from categories where id='${a.mae}'`);
+  assert.equal(psql(DB, `select count(*) from categories where id='${a.filha}'`), '0');
+});
+
+test('compromisso pode apontar para card do dono, não para card de outra pessoa', () => {
+  const cardA = id(as(A, `insert into cards(title) values ('Fixa com card') returning id`));
+  const cardB = id(as(B, `insert into cards(title) values ('Card alheio') returning id`));
+  as(A, `insert into commitments(title,days,start_min,end_min,valid_from,card_id) values ('Leitura','{1}',600,660,'2026-11-01','${cardA}')`);
+  fails(() => as(A, `insert into commitments(title,days,start_min,end_min,valid_from,card_id) values ('X','{1}',600,660,'2026-11-01','${cardB}')`), /row-level security/);
+});
+
+test('settings guarda o modo de criar card e rejeita valor desconhecido', () => {
+  as(A, `insert into settings(auto_card) values ('sempre') on conflict (owner_id) do update set auto_card = 'sempre'`);
+  assert.equal(psql(DB, `select auto_card from settings where owner_id='${A}'`), 'sempre');
+  fails(() => as(A, `update settings set auto_card='talvez'`), /check constraint/);
+});
+
+test('migração roda duas vezes sobre o schema antigo e mantém as categorias', () => {
+  const VELHO = 'estudos_migracao';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', '92da779:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psql(VELHO, `insert into auth.users values ('${A}','a@x.com')`);
+  psql(VELHO, `insert into categories(owner_id,name) values ('${A}','Antiga')`);
+  psqlFile(VELHO, 'supabase/migracao-2026-11-subtags.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-subtags.sql');
+  assert.equal(psql(VELHO, `select name||':'||coalesce(parent_id::text,'nulo')||':'||icon from categories`), 'Antiga:nulo:tag');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.columns where table_name='commitments' and column_name='card_id'`), '1');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.columns where table_name='settings' and column_name in ('auto_card','auto_card_list_id')`), '2');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+test('mãe e subtag no mesmo insert (restauração do backup em lote) são aceitas', () => {
+  const m = '33333333-3333-3333-3333-333333333333';
+  as(A, `insert into categories(id, name) values ('${m}','Lote mãe'), (gen_random_uuid(), 'Lote filha') `);
+  as(A, `delete from categories where id='${m}'`);
+  as(A, `insert into categories(id, name, parent_id) values ('${m}','Lote mãe', null), ('44444444-4444-4444-4444-444444444444','Lote filha','${m}')`);
+  assert.equal(psql(DB, `select count(*) from categories where parent_id='${m}'`), '1');
+});

@@ -73,7 +73,7 @@ class TestConflito(QuadroBase):
     def test_anotacao_de_item_tambem_nao_e_sobrescrita(self):
         self.preparar_card(); p = self.page
         self.seed('items', [{'id': 'it1', 'card_id': self.cid, 'title': 'Exercícios de álgebra', 'notes': 'item base'}])
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         self.abrir()
         p.click('.item[data-item="it1"] [data-acao="expandir"]')
         self.outro_aparelho('item do celular', 'items', 'it1')
@@ -158,7 +158,7 @@ class TestRecargaAoVoltar(QuadroBase):
         p.wait_for_selector('#folha-virada', state='visible')
         self.assertEqual(p.inner_text('#folha-virada .virada-quem'), 'Revisão semanal · 16/11')
         p.click('#virada-depois')
-        p.click('[data-aba="semana"]')
+        self.ir('semana')
         p.wait_for_selector('.dia[data-data="2026-11-23"]')
 
 

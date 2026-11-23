@@ -58,6 +58,15 @@ class UITest(unittest.TestCase):
         p.fill('#login-email', email); p.fill('#login-senha', senha); p.click('#login-entrar')
         p.wait_for_selector('#tela-semana', state='visible')
 
+    def ir(self, tela):
+        """Abre o menu ☰ e escolhe a tela."""
+        p = self.page
+        if p.is_hidden('#menu'): p.click('#menu-botao')
+        # Hoje e Semana são as duas visões da página inicial (item Agenda do menu).
+        p.click(f'#menu [data-tela="{"agenda" if tela in ("hoje", "semana") else tela}"]')
+        if tela in ('hoje', 'semana'): p.click(f'#visao [data-visao="{tela}"]')
+        p.wait_for_selector(f'#tela-{tela}', state='visible')
+
     def seed(self, table, rows):
         self.page.evaluate('([t, r]) => window.__memSeed(t, r)', [table, rows])
 

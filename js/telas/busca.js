@@ -1,5 +1,6 @@
 // Tela Busca: uma caixa, filtro por categoria e resultados com o trecho achado.
 import { registrarTela, irPara } from './casca.js';
+import { emOrdem } from '../regras/tags.js';
 import { criar } from './quadro.js';
 import { chipCategoria } from './ajustes.js';
 import { buscar } from '../regras/busca.js';
@@ -59,14 +60,16 @@ export function iniciarBusca({ estado, abrirCard, mostrarDia }) {
   }
 
   function desenharFiltros() {
-    const categorias = estado.dados.categories.filter((c) => !c.archived).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-    if (categoria && !estado.dados.categories.some((c) => c.id === categoria)) categoria = '';
-    const chip = (id, filho) => {
-      const b = criar('button', { type: 'button', class: `filtro-chip${categoria === id ? ' ativo' : ''}`, 'data-cat': id, 'aria-pressed': String(categoria === id) }, filho);
+    const categorias = emOrdem(estado.dados.categories);
+    if (categoria && !categorias.some((c) => c.id === categoria)) categoria = '';
+    const chip = (c) => {
+      const id = c ? c.id : '';
+      const b = criar('button', { type: 'button', class: `filtro-chip${c?.parent_id ? ' filtro-sub' : ''}${categoria === id ? ' ativo' : ''}`, 'data-cat': id, 'aria-pressed': String(categoria === id) },
+        c ? chipCategoria(c) : criar('span', { class: 'chip', texto: 'Todas' }));
       b.addEventListener('click', () => { categoria = id; desenhar(); });
       return b;
     };
-    filtros.replaceChildren(chip('', criar('span', { class: 'chip', texto: 'Todas' })), ...categorias.map((c) => chip(c.id, chipCategoria(c))));
+    filtros.replaceChildren(chip(null), ...categorias.map(chip));
   }
 
   function desenharResultados() {
@@ -75,7 +78,7 @@ export function iniciarBusca({ estado, abrirCard, mostrarDia }) {
       resultados.replaceChildren(criar('p', { class: 'vazio', texto: 'Digite pelo menos 2 letras para buscar.' }));
       return;
     }
-    const achados = buscar(limpo, estado.dados, { categoria: categoria || undefined });
+    const achados = buscar(limpo, estado.dados, { categoria: categoria || undefined, categories: estado.dados.categories });
     resultados.replaceChildren(...(achados.length
       ? achados.map(linha)
       : [criar('p', { class: 'vazio', texto: `Nada encontrado para “${limpo}”.` })]));

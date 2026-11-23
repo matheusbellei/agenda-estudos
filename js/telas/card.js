@@ -1,5 +1,6 @@
 // Card aberto numa folha sobre a tela: título, categorias, lista, anotações, itens, anexos e ações.
 import { criar, itensOrdenados, moverCard, posicaoNoFim, trocarPosicoes, cardsDaLista, restaurarCard } from './quadro.js';
+import { emOrdem, nomeCompleto } from '../regras/tags.js';
 import { chipCategoria } from './ajustes.js';
 import { progresso, proximoItem } from '../regras/fila.js';
 import { abrirBloco } from './bloco.js';
@@ -479,12 +480,12 @@ export function iniciarCard({ estado, store }) {
   // ---- categorias, lista e fixa
   function desenharCategorias(c) {
     const doCard = new Set(estado.dados.card_categories.filter((cc) => cc.card_id === c.id).map((cc) => cc.category_id));
-    const cats = estado.dados.categories.filter((k) => !k.archived || doCard.has(k.id)).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-    const assinatura = cats.map((k) => `${k.id}|${k.name}|${k.color}`).join(';');
+    const cats = emOrdem(estado.dados.categories, { incluir: doCard });
+    const assinatura = cats.map((k) => `${k.id}|${k.name}|${k.color}|${k.icon}|${k.parent_id}`).join(';');
     if (nodos.assinaturaCats !== assinatura) {
       nodos.assinaturaCats = assinatura;
       nodos.categorias.replaceChildren(...cats.map((k) => {
-        const b = criar('button', { type: 'button', class: 'cat-toggle', 'data-cat': k.id }, chipCategoria(k));
+        const b = criar('button', { type: 'button', class: `cat-toggle${k.parent_id ? ' cat-sub' : ''}`, 'data-cat': k.id }, chipCategoria(k, nomeCompleto(estado.dados.categories, k)));
         b.addEventListener('click', () => {
           const atuais = estado.dados.card_categories.filter((cc) => cc.card_id === cardId).map((cc) => cc.category_id);
           const novas = atuais.includes(k.id) ? atuais.filter((x) => x !== k.id) : [...atuais, k.id];

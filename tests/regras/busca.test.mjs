@@ -226,3 +226,22 @@ test('"o que fiz no lugar" de bloco só é achado enquanto o bloco está não fe
   const r = buscar('passeio', dados({ blocks: [bloco('b1', 'missed'), bloco('b2', 'done'), bloco('b3', 'planned')] }));
   assert.deepEqual(r.map((x) => x.bloco_id), ['b1']);
 });
+
+test('filtrar pela tag mãe acha card e bloco das subtags', () => {
+  const categories = [{ id: 'm', name: 'Idiomas', parent_id: null }, { id: 'f', name: 'Vocabulário', parent_id: 'm' }];
+  const r = buscar('verbo', dados({
+    cards: [{ id: 'c1', title: 'Verbos irregulares' }, { id: 'c2', title: 'Verbo sem tag' }],
+    card_categories: [{ card_id: 'c1', category_id: 'f' }],
+    blocks: [{ id: 'b1', title: 'x', status: 'missed', instead_note: 'revisei verbos', category_id: 'f', date: '2026-11-16' }],
+  }), { categoria: 'm', categories });
+  assert.deepEqual(new Set(r.map((x) => x.card_id ?? x.bloco_id)), new Set(['c1', 'b1']));
+});
+
+test('filtrar pela subtag não acha card só da mãe', () => {
+  const categories = [{ id: 'm', name: 'Idiomas', parent_id: null }, { id: 'f', name: 'Vocabulário', parent_id: 'm' }];
+  const r = buscar('verbo', dados({
+    cards: [{ id: 'c1', title: 'Verbos da mãe' }],
+    card_categories: [{ card_id: 'c1', category_id: 'm' }],
+  }), { categoria: 'f', categories });
+  assert.equal(r.length, 0);
+});

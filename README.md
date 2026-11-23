@@ -65,6 +65,10 @@ Para trocar as chaves de `js/config.js` depois que o código já está no GitHub
 3. No Supabase, **Table Editor → cards** deve mostrar a linha.
 4. No card de teste, toque em **Anexar arquivo**, escolha uma imagem ou PDF pequeno e depois toque no nome do anexo: o arquivo deve abrir. Isso confere o armazenamento privado `anexos`. Em **Storage → anexos** o arquivo aparece dentro de uma pasta com o código da sua conta.
 
+## Atualizações do banco
+
+Quem instalou antes de novembro de 2026 roda, uma vez e **antes de publicar o código novo no GitHub**, `supabase/migracao-2026-11-subtags.sql` no **SQL Editor** do Supabase (cole o arquivo inteiro e clique em **Run**). Se o código novo for ao ar antes, criar tags, compromissos fixos e salvar "Bloco sem card" dá erro até a migração rodar. Ela acrescenta as subtags e os ícones das tags, o card nos compromissos fixos e a criação automática de card. Pode rodar de novo sem problema, e nada do que já existe é apagado. Quem instalou depois já tem tudo pelo `schema.sql`.
+
 ## Backup
 
 Em **Ajustes → Backup**, **Exportar backup** baixa um arquivo `agenda-estudos-AAAA-MM-DD.json`. Ele é gerado no seu aparelho e não é enviado a lugar nenhum.

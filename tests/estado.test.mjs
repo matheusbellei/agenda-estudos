@@ -77,7 +77,7 @@ test('ajustes: padrões sem linha; alterar settings cria a linha e depois atuali
   const store = storeFalso();
   const e = criarEstado(store);
   await e.carregar();
-  assert.deepEqual(e.ajustes(), { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null });
+  assert.deepEqual(e.ajustes(), { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null });
   await e.alterar('settings', null, { day_start_min: 480 });
   assert.equal(e.ajustes().day_start_min, 480);
   assert.equal(e.ajustes().day_end_min, 1320);
@@ -213,4 +213,14 @@ test('recarregar sem gravações aplica a foto e respeita podeAplicar', async ()
   assert.equal(estado.dados.cards[0].notes, 'base');
   assert.equal(await estado.recarregar(), true);
   assert.equal(estado.dados.cards[0].notes, 'do celular');
+});
+
+test('excluir card tira o card das fixas que apontavam para ele (como o banco faz)', async () => {
+  const e = criarEstado(storeFalso({
+    cards: [{ id: 'c1' }],
+    commitments: [{ id: 'f1', card_id: 'c1' }, { id: 'f2', card_id: null }],
+  }));
+  await e.carregar();
+  await e.excluir('cards', 'c1');
+  assert.deepEqual(e.dados.commitments, [{ id: 'f1', card_id: null }, { id: 'f2', card_id: null }]);
 });

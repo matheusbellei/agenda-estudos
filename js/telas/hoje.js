@@ -1,12 +1,14 @@
 // Tela Hoje: um dia, com navegação entre dias.
 import { registrarTela, irPara } from './casca.js';
-import { criar, elementoBloco, abrirBloco, ligarAbertura, gravarBloco } from './bloco.js';
+import { criar, elementoBloco, abrirBloco, ligarCabecaECorpo, gravarBloco } from './bloco.js';
 import { ajustarAFatia } from '../regras/calendario.js';
 import { somaDias, isoDe, rotuloDia, horaTexto } from '../regras/datas.js';
-import { blocosDoPeriodo, horariosLivres, limitesDoDia, colunas } from '../regras/calendario.js';
+import { blocosDoPeriodo, horariosLivres, limitesDoDia, posicionar, inicioMaisUmaHora } from '../regras/calendario.js';
 import { montarFila, selecaoAtual, agendarSelecionada, agendarEntrada, umaHoraLivre, avisarSelecao } from './fila.js';
 
 const PX_POR_MIN = 1.4;
+// Recuo, por nível, de um bloco em cascata.
+const RECUO_PX = 22;
 
 let diaAtual = null;
 let manterDia = false;
@@ -39,7 +41,15 @@ export function iniciarHoje({ estado }) {
   let arrastando = false;
   let bloquearClique = false;
 
-  let desenhado = { blocos: [], fim: 1440 }; // o que está na tela, para o toque e o arrasto da fila
+  let desenhado = { blocos: [], inicio: 0, fim: 1440, fatia: 30 }; // o que está na tela, para o toque e o arrasto da fila
+
+  // Hora nova a partir do ponto `y` na linha do tempo (corpo de um bloco): fatia para baixo e uma hora.
+  // `piso`: início do bloco tocado — o novo nunca começa antes dele.
+  function horaNoPonto(y, piso = desenhado.inicio) {
+    const bruto = desenhado.inicio + (y - linha.getBoundingClientRect().top) / PX_POR_MIN;
+    const min = Math.max(desenhado.inicio, piso, Math.floor(bruto / desenhado.fatia) * desenhado.fatia);
+    return inicioMaisUmaHora(min, desenhado.blocos, desenhado.fim);
+  }
 
   // Uma hora a partir da fatia, sem entrar em bloco já marcado. Com item da fila escolhido, agenda direto.
   function novoNaFatia(ini, blocos, fim) {
@@ -50,8 +60,11 @@ export function iniciarHoje({ estado }) {
   }
 
   function soltarNaFatia(entrada, x, y) {
-    const fatia = document.elementFromPoint(x, y)?.closest('.fatia');
-    const hora = fatia ? umaHoraLivre(Number(fatia.dataset.inicio), desenhado.blocos, desenhado.fim) : null;
+    const sob = document.elementFromPoint(x, y);
+    const fatia = sob?.closest('.fatia');
+    const tocado = sob?.closest('.linha-do-tempo .bloco');
+    const hora = tocado ? horaNoPonto(y, Number(tocado.dataset.inicio) || desenhado.inicio)
+      : fatia ? umaHoraLivre(Number(fatia.dataset.inicio), desenhado.blocos, desenhado.fim) : null;
     if (hora) agendarEntrada(estado, entrada, { date: diaAtual, ...hora });
   }
 
@@ -149,14 +162,29 @@ export function iniciarHoje({ estado }) {
       livre.style.height = `${(l.end_min - l.start_min) * PX_POR_MIN}px`;
       filhos.push(livre);
     }
-    for (const b of colunas(blocos)) {
+    for (const b of posicionar(blocos)) {
       const el = elementoBloco(b, { compacto: false });
+      if (b.fundo) el.classList.add('bloco-fundo');
+      // Por cima de outro (dentro dele ou em cascata): contorno na cor da página para separar.
+      else if (b.camada >= 1000 || b.recuo > 0) el.classList.add('bloco-sobre');
+      const recuo = b.recuo * RECUO_PX;
+      el.dataset.inicio = String(b.start_min);
       el.style.top = posicao(b.start_min, inicio);
       el.style.height = `${(b.end_min - b.start_min) * PX_POR_MIN}px`;
-      el.style.left = `calc(var(--rotulo) + (100% - var(--rotulo)) * ${b.col / b.cols})`;
-      el.style.width = `calc((100% - var(--rotulo)) / ${b.cols} - 3px)`;
+      el.style.left = `calc(var(--rotulo) + ${recuo}px + (100% - var(--rotulo) - ${recuo}px) * ${b.indice / b.total})`;
+      el.style.width = `calc((100% - var(--rotulo) - ${recuo}px) / ${b.total} - 3px)`;
+      el.style.zIndex = String(b.camada + 2);
       if ((b.end_min - b.start_min) * PX_POR_MIN < 40) el.classList.add('bloco-curto');
-      ligarAbertura(el, b, () => { if (!bloquearClique) abrirBloco(b); });
+      ligarCabecaECorpo(el, b, {
+        aoAbrir: () => { if (!bloquearClique) abrirBloco(b); },
+        aoCorpo: (e) => {
+          if (bloquearClique) return;
+          const hora = horaNoPonto(e.clientY, b.start_min);
+          if (!hora) { if (selecaoAtual()) avisarSelecao('Sem espaço livre neste horário.'); return; }
+          if (selecaoAtual()) agendarSelecionada(estado, { date: diaAtual, ...hora });
+          else abrirBloco({ novo: true, date: diaAtual, ...hora });
+        },
+      });
       ligarArrasto(el, b, 'mover', inicio);
       const alca = criar('div', { class: 'bloco-alca', 'aria-hidden': 'true' }, criar('i'));
       el.append(alca);
@@ -171,7 +199,7 @@ export function iniciarHoje({ estado }) {
       filhos.push(marca);
     }
     linha.replaceChildren(...filhos);
-    desenhado = { blocos, fim };
+    desenhado = { blocos, inicio, fim, fatia: a.day_slot_min };
     montarFila(fila, { estado, hoje: isoDe(agora), aoSoltar: soltarNaFatia });
   }
 

@@ -16,7 +16,7 @@ class QuadroBase(UITest):
         if cards:
             self.seed('cards', [{**c, 'list_id': ids[c.pop('lista')]} if 'lista' in c else c for c in cards])
         p.reload(); p.wait_for_selector('#app', state='visible')
-        p.click('[data-aba="quadro"]')
+        self.ir('quadro')
         p.wait_for_selector('#tela-quadro', state='visible')
 
     def titulos(self, lista):
@@ -119,7 +119,7 @@ class TestQuadro(QuadroBase):
         cat = next(c['id'] for c in self.db()['categories'] if c['name'] == 'Programação')
         self.seed('card_categories', [{'card_id': self.card_id('C1'), 'category_id': cat}])
         p = self.page
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         p.click(f'.filtro-categorias [data-cat="{cat}"]')
         self.assertEqual(self.titulos('Backlog'), ['C1'])
         p.click('.filtro-categorias [data-cat=""]')
@@ -169,7 +169,7 @@ class TestQuadro(QuadroBase):
         self.seed('card_categories', [{'card_id': cid, 'category_id': cat}])
         self.seed('items', [{'card_id': cid, 'title': 'a', 'position': 1, 'done': True}, {'card_id': cid, 'title': 'b', 'position': 2}])
         p = self.page
-        p.reload(); p.wait_for_selector('#app', state='visible'); p.click('[data-aba="quadro"]')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
         c = f'.cartao-card[data-card="{cid}"]'
         self.assertEqual(p.inner_text(f'{c} .cartao-titulo'), 'Trilha <b>x</b>')
         self.assertEqual(p.locator(f'{c} .cartao-titulo b').count(), 0)

@@ -41,7 +41,7 @@ class FixasBase(UITest):
         self.page.click(f'#folha-virada .virada-linha[data-card="{card}"][data-data="{data}"] [data-resp="{resp}"]')
 
     def ir_fixas(self):
-        self.page.click('[data-aba="fixas"]')
+        self.ir('fixas')
         self.page.wait_for_selector('#tela-fixas', state='visible')
 
     def ocorrencias(self):
@@ -313,7 +313,7 @@ class TestTelaFixas(FixasBase):
         p.wait_for_function("window.__memdb.occurrences.length === 1")
         self.assertEqual(self.ocorrencias(), [('cL', SEG, 'done')])
         self.assertEqual(oc.get_attribute('data-estado'), 'cumprida')
-        p.click('[data-aba="semana"]')
+        self.ir('semana')
         self.assertEqual(p.locator('#fila-semana .fila-item[data-card="cL"]').count(), 0)
 
     def test_nao_feita_pede_o_que_fiz_no_lugar(self):
@@ -361,7 +361,7 @@ class TestTelaFixas(FixasBase):
         self.ir_fixas(); p = self.page
         p.click('#fixas-atrasadas .atrasada [data-resp="done"]')
         p.wait_for_function("window.__memdb.occurrences[0].status === 'done'")
-        p.click('[data-aba="semana"]')
+        self.ir('semana')
         datas = p.eval_on_selector_all('#fila-semana .fila-item[data-card="cL"]', 'els => els.map(e => e.dataset.fixaData)')
         self.assertEqual(datas, [SEG])
 
@@ -436,7 +436,7 @@ class TestTelaFixas(FixasBase):
         self.ir_fixas(); p = self.page
         self.assertIn('1 de 3', p.inner_text('.fixa[data-card="cE"] .fixa-progresso'))
         self.assertEqual(p.locator('.fixa[data-card="cE"] .oc').count(), 0)
-        p.click('[data-aba="semana"]')
+        self.ir('semana')
         self.assertEqual(p.get_attribute('#fila-semana .fila-item[data-card="cE"]', 'data-item'), 'i2')
 
     def test_fixa_arquivada_so_aparece_em_arquivadas_e_pode_ser_restaurada(self):
@@ -464,7 +464,7 @@ class TestBuscaDeOcorrencias(FixasBase):
         self.entrar(rollover=SEG, cards=[fixa('cL', 'Revisão semanal', [1])],
                     occurrences=[dict(card_id='cL', date=SEG_ANT, status='missed', instead_note='Passeio no parque')])
         p = self.page
-        p.click('[data-aba="busca"]')
+        self.ir('busca')
         p.fill('#busca-termo', 'parque'); p.press('#busca-termo', 'Enter')
         r = p.locator('#busca-resultados .resultado[data-campo="no_lugar"]')
         r.wait_for()

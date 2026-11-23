@@ -1,5 +1,6 @@
-// Tela Ajustes: categorias, horários do calendário, importação/backup (tarefas futuras) e sair.
+// Tela Configurações (id interno "ajustes"): horários do calendário, importação e backup. As tags ficam em telas/tags.js.
 import { registrarTela } from './casca.js';
+import { maesPrimeiro } from '../regras/tags.js';
 import { horaTexto, minutosDe, inicioDaSemana, isoDe } from '../regras/datas.js';
 import { planoDeImportacao } from '../regras/trello.js';
 import { TABELAS } from '../estado.js';
@@ -42,17 +43,24 @@ export function corDoTexto(cor) {
   return contraste(cor, CORES.espuma) >= contraste(cor, CORES.espresso) ? CORES.espuma : CORES.espresso;
 }
 
-export function chipCategoria(categoria) {
+const ICONE_OK = /^[a-z0-9-]{1,40}$/;
+
+// `nome` permite mostrar "Mãe › Filha" numa subtag; o ícone (Tabler) entra antes do texto.
+// Só vale se for texto: em `lista.map(chipCategoria)` o segundo argumento é o índice.
+export function chipCategoria(categoria, nome) {
+  if (typeof nome !== 'string') nome = categoria.name;
   const cor = corValida(categoria.color);
   const texto = corDoTexto(cor);
-  const chip = criar('span', { class: 'chip chip-categoria', texto: categoria.name });
+  const chip = criar('span', { class: 'chip chip-categoria' });
+  if (ICONE_OK.test(categoria.icon || '')) chip.append(criar('i', { class: `ti ti-${categoria.icon}`, 'aria-hidden': 'true' }));
+  chip.append(document.createTextNode(nome));
   chip.style.background = cor;
   chip.style.color = texto;
   return chip;
 }
 
-// 16 cores da paleta mais "Outra cor". `aoEscolher` (opcional) é chamado quando a pessoa escolhe.
-export function seletorDeCor(valorInicial, aoEscolher = () => {}) {
+// Cores da paleta (16 por padrão) mais "Outra cor". `aoEscolher` (opcional) é chamado quando a pessoa escolhe.
+export function seletorDeCor(valorInicial, aoEscolher = () => {}, paleta = PALETA) {
   let valor = corValida(valorInicial);
   const opcoes = criar('div', { class: 'cor-opcoes' });
   const outra = criar('input', { type: 'color', value: valor.toLowerCase(), 'aria-label': 'Outra cor' });
@@ -60,7 +68,7 @@ export function seletorDeCor(valorInicial, aoEscolher = () => {}) {
     opcoes.querySelectorAll('.cor-opcao').forEach((b) => b.classList.toggle('ativo', b.dataset.cor === valor));
     outra.value = valor.toLowerCase();
   };
-  PALETA.forEach((cor) => {
+  paleta.forEach((cor) => {
     const b = criar('button', { type: 'button', class: 'cor-opcao', 'data-cor': cor, 'aria-label': `Cor ${cor}` });
     b.style.background = cor;
     b.addEventListener('click', () => { valor = cor; marcar(); aoEscolher(valor); });
@@ -182,6 +190,7 @@ export async function restaurarBackup(texto, { estado, store }) {
   for (const t of TABELAS) {
     let linhas = tabelas[t] || [];
     if (t === 'settings' && estado.dados.settings.length) linhas = [];
+    if (t === 'categories') linhas = maesPrimeiro(linhas);
     inseridos[t] = 0;
     for (let i = 0; i < linhas.length; i += LOTE) {
       const criadas = await store.upsert(t, linhas.slice(i, i + LOTE), CONFLITO_BACKUP[t] || 'id');
@@ -195,19 +204,38 @@ export async function restaurarBackup(texto, { estado, store }) {
 export function iniciarAjustes({ estado, store }) {
   const secao = document.querySelector('#tela-ajustes');
 
+  // ---- bloco sem card: o que fazer ao salvar um bloco novo sem card associado
+  const modo = criar('select', { id: 'aj-auto-card-modo' },
+    ...[['perguntar', 'Perguntar ao salvar'], ['sempre', 'Criar sempre'], ['nunca', 'Nunca criar']]
+      .map(([v, t]) => criar('option', { value: v, texto: t })));
+  const listaAuto = criar('select', { id: 'aj-auto-card-lista' });
+  const salvarAuto = criar('button', { type: 'button', class: 'btn btn-principal', id: 'aj-auto-card-salvar', texto: 'Salvar' });
+  const erroAuto = criar('div', { class: 'erro', id: 'aj-auto-card-erro', role: 'alert' });
+  const cartaoAutoCard = criar('div', { class: 'cartao', id: 'aj-auto-card' },
+    criar('h2', { texto: 'Bloco sem card' }),
+    criar('p', { class: 'suave', texto: 'Ao salvar um bloco novo sem card, o app pode criar um card no Quadro para ele. Você continua podendo associar um card que já existe.' }),
+    criar('div', { class: 'linha-campos' },
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Criar card' }), modo),
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Lista do card criado' }), listaAuto)),
+    erroAuto, criar('div', { class: 'linha-botoes' }, salvarAuto));
+  function desenharAutoCard() {
+    const a = estado.ajustes();
+    const listas = [...estado.dados.lists].sort((x, y) => x.position - y.position);
+    listaAuto.replaceChildren(criar('option', { value: '', texto: 'Primeira lista ativa' }),
+      ...listas.map((l) => { const o = criar('option', { value: l.id }); o.textContent = l.name; return o; }));
+    modo.value = a.auto_card || 'perguntar';
+    listaAuto.value = listas.some((l) => l.id === a.auto_card_list_id) ? a.auto_card_list_id : '';
+  }
+  salvarAuto.addEventListener('click', async () => {
+    try {
+      await estado.alterar('settings', null, { auto_card: modo.value, auto_card_list_id: listaAuto.value || null });
+      erroAuto.textContent = '';
+    } catch (err) {
+      erroAuto.textContent = err.message || 'Não foi possível salvar.';
+    }
+  });
+
   // ---- esqueleto fixo da tela
-  const formCat = criar('form', { id: 'aj-cat-form', novalidate: '' });
-  const nomeCat = criar('input', { id: 'aj-cat-nome', type: 'text', placeholder: 'Nome da categoria', autocomplete: 'off' });
-  const corNova = seletorDeCor(PALETA[0]);
-  const erroCat = criar('div', { class: 'erro', id: 'aj-cat-erro', role: 'alert' });
-  formCat.append(
-    criar('label', { class: 'campo' }, criar('span', { texto: 'Nova categoria' }), nomeCat),
-    corNova.el,
-    erroCat,
-    criar('button', { class: 'btn btn-principal', id: 'aj-cat-criar', type: 'submit', texto: 'Criar categoria' }),
-  );
-  const listaCat = criar('div', { id: 'aj-cat-lista' });
-  const arquivadas = criar('div', { id: 'aj-cat-arquivadas' });
 
   const inicio = criar('input', { id: 'aj-inicio', type: 'time' });
   const fim = criar('input', { id: 'aj-fim', type: 'time' });
@@ -245,78 +273,13 @@ export function iniciarAjustes({ estado, store }) {
     criar('p', { class: 'suave', texto: 'Restaure em uma conta vazia ou na mesma conta de onde o backup saiu, e antes de importar o Trello. Restaurar só acrescenta o que está faltando; se o backup não couber nos dados da conta, nada é gravado.' }),
     restaurarIr, resumoBackup);
 
-  const sair = criar('button', { class: 'btn', id: 'aj-sair-btn', type: 'button', texto: 'Sair da conta' });
 
   secao.replaceChildren(
-    criar('div', { class: 'cartao', id: 'aj-categorias' }, criar('h2', { texto: 'Categorias' }), formCat, listaCat,
-      criar('h3', { class: 'sub', texto: 'Arquivadas' }), arquivadas),
     criar('div', { class: 'cartao', id: 'aj-horarios' }, criar('h2', { texto: 'Horários' }), formHor),
+    cartaoAutoCard,
     cartaoImportar,
     cartaoBackup,
-    criar('div', { class: 'cartao', id: 'aj-sair' }, sair),
   );
-
-  // ---- categorias
-  const nomeJaExiste = (nome, exceto = null) => estado.dados.categories
-    .some((c) => c.id !== exceto && c.name.trim().toLowerCase() === nome.toLowerCase());
-
-  // Devolve a mensagem de recusa, ou '' se o nome serve.
-  function validarNome(nome, exceto) {
-    if (!nome) return 'Dê um nome à categoria.';
-    if (nomeJaExiste(nome, exceto)) return 'Já existe uma categoria com esse nome.';
-    return '';
-  }
-
-  async function gravar(acao) {
-    try { await acao(); erroCat.textContent = ''; } catch (err) { erroCat.textContent = err.message || 'Não foi possível salvar.'; }
-  }
-
-  formCat.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const nome = nomeCat.value.trim();
-    erroCat.textContent = validarNome(nome, null);
-    if (erroCat.textContent) return;
-    await gravar(async () => {
-      await estado.criar('categories', { name: nome, color: corNova.valor() });
-      nomeCat.value = '';
-    });
-  });
-
-  function linhaCategoria(cat) {
-    const nome = criar('input', { class: 'cat-nome', type: 'text', value: cat.name, 'aria-label': 'Nome da categoria' });
-    const renomear = async () => {
-      const novo = nome.value.trim();
-      if (novo === cat.name) { erroCat.textContent = ''; return; }
-      erroCat.textContent = validarNome(novo, cat.id);
-      if (erroCat.textContent) return;
-      await gravar(() => estado.alterar('categories', cat.id, { name: novo }));
-    };
-    nome.addEventListener('change', renomear);
-    nome.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); renomear(); } });
-    const cor = seletorDeCor(cat.color, (c) => gravar(() => estado.alterar('categories', cat.id, { color: c })));
-    const bolinha = criar('span', { class: 'cor-bolinha' });
-    bolinha.style.background = cat.color;
-    const arquivar = criar('button', { class: 'btn', type: 'button', 'data-acao': 'arquivar', texto: 'Arquivar' });
-    arquivar.addEventListener('click', () => gravar(() => estado.alterar('categories', cat.id, { archived: true })));
-    return criar('div', { class: 'cat-linha' },
-      criar('div', { class: 'cat-topo' },
-        criar('details', { class: 'cat-cor' }, criar('summary', { 'aria-label': 'Trocar cor' }, bolinha), cor.el),
-        nome, arquivar));
-  }
-
-  function linhaArquivada(cat) {
-    const desarquivar = criar('button', { class: 'btn', type: 'button', 'data-acao': 'desarquivar', texto: 'Desarquivar' });
-    desarquivar.addEventListener('click', () => gravar(() => estado.alterar('categories', cat.id, { archived: false })));
-    return criar('div', { class: 'cat-arquivada' }, chipCategoria(cat), desarquivar);
-  }
-
-  function desenharCategorias() {
-    const ordenadas = [...estado.dados.categories].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-    const ativas = ordenadas.filter((c) => !c.archived);
-    const arquivadasLista = ordenadas.filter((c) => c.archived);
-    listaCat.replaceChildren(...(ativas.length ? ativas.map(linhaCategoria) : [criar('p', { class: 'vazio', texto: 'Nenhuma categoria ainda.' })]));
-    arquivadas.replaceChildren(...(arquivadasLista.length ? arquivadasLista.map(linhaArquivada) : [criar('p', { class: 'suave', texto: 'Nenhuma categoria arquivada.' })]));
-  }
 
   // ---- horários
   function desenharHorarios() {
@@ -347,7 +310,6 @@ export function iniciarAjustes({ estado, store }) {
     }
   });
 
-  sair.addEventListener('click', () => store.signOut());
 
   function mostrarResumo(r) {
     const novo = r.cards + r.itens + r.categorias + r.listas > 0;
@@ -424,8 +386,8 @@ export function iniciarAjustes({ estado, store }) {
   });
 
   function desenhar() {
-    desenharCategorias();
     desenharHorarios();
+    desenharAutoCard();
   }
 
   registrarTela('ajustes', { mostrar: desenhar });

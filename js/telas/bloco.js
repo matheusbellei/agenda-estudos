@@ -1,7 +1,7 @@
 // Blocos do calendário: elemento visual, gravação e (mais abaixo) a folha de criar/editar.
 import { corDoTexto } from './ajustes.js';
+import { emOrdem, nomeCompleto } from '../regras/tags.js';
 import { horaTexto, minutosDe, somaDias, diaDaSemana, DIAS_CURTOS } from '../regras/datas.js';
-import { blocosDoPeriodo } from '../regras/calendario.js';
 import { efeitosDeEstado } from '../regras/fila.js';
 import { moverCard, cardsDaLista, posicaoNoFim } from './quadro.js';
 import { registrarTextoNaoSalvo, pedirDescarte } from './folhas.js';
@@ -59,8 +59,9 @@ export function elementoBloco(bloco, { compacto = false } = {}) {
   const hora = compacto ? horaTexto(bloco.start_min) : `${horaTexto(bloco.start_min)}–${horaTexto(bloco.end_min)}`;
   el.append(
     ...(MARCAS[status] ? [criar('span', { class: 'bloco-marca', 'aria-hidden': 'true', texto: MARCAS[status] })] : []),
-    criar('span', { class: 'bloco-hora', texto: hora }),
-    criar('span', { class: 'bloco-titulo', texto: bloco.title || (bloco.kind === 'study' ? 'Estudo' : 'Compromisso') }),
+    criar('span', { class: 'bloco-cabeca' },
+      criar('span', { class: 'bloco-hora', texto: hora }),
+      criar('span', { class: 'bloco-titulo', texto: bloco.title || (bloco.kind === 'study' ? 'Estudo' : 'Compromisso') })),
   );
   // "O que fiz no lugar": texto abaixo do título no Hoje, só um ícone de nota na Semana.
   const nota = status === 'missed' ? (bloco.instead_note || '').trim() : '';
@@ -73,13 +74,16 @@ export function elementoBloco(bloco, { compacto = false } = {}) {
 
 // Único caminho para mudar um bloco: ocorrência virtual vira linha em `blocks` com o patch aplicado.
 export async function gravarBloco(est, bloco, patch) {
+  // O tipo acompanha o card: com card é estudo, sem card é compromisso.
+  const tipo = (linha) => ('card_id' in linha ? { kind: linha.card_id ? 'study' : 'commitment' } : {});
   if (bloco.virtual) {
-    return est.criar('blocks', {
+    const linha = {
       commitment_id: bloco.commitment_id, date: bloco.date, start_min: bloco.start_min, end_min: bloco.end_min,
-      kind: 'commitment', title: bloco.title, category_id: bloco.category_id, status: 'planned', instead_note: '', ...patch,
-    });
+      card_id: bloco.card_id || null, title: bloco.title, category_id: bloco.category_id, status: 'planned', instead_note: '', ...patch,
+    };
+    return est.criar('blocks', { ...linha, ...tipo(linha) });
   }
-  return est.alterar('blocks', bloco.id, patch);
+  return est.alterar('blocks', bloco.id, { ...patch, ...tipo(patch) });
 }
 
 // Muda o estado do bloco e aplica o efeito no item. O item vai primeiro: se algo falhar, nunca sobra
@@ -143,7 +147,6 @@ function campo(rotulo, input, extra = {}) {
 export function abrirBloco(arg) {
   const novo = Boolean(arg.novo);
   const regra = !novo && arg.commitment_id ? estado.dados.commitments.find((c) => c.id === arg.commitment_id) : null;
-  let tipo = arg.kind || 'commitment';
   let cardId = arg.card_id || null;
   let ocupado = false;
   let tituloAuto = '';
@@ -152,22 +155,28 @@ export function abrirBloco(arg) {
   const titulo = criar('input', { id: 'bloco-titulo', type: 'text', autocomplete: 'off', maxlength: '120' });
   titulo.value = arg.title || '';
   const categoria = criar('select', { id: 'bloco-categoria' }, criar('option', { value: '', texto: 'Sem categoria' }));
-  estado.dados.categories.filter((c) => !c.archived || c.id === arg.category_id)
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-    .forEach((c) => { const o = criar('option', { value: c.id }); o.textContent = c.name; categoria.append(o); });
+  // Tag com subtags vira um grupo (a própria tag e as subtags); tag sem subtag fica solta.
+  {
+    const lista = emOrdem(estado.dados.categories, { incluir: new Set(arg.category_id ? [arg.category_id] : []) });
+    const opcao = (c) => { const o = criar('option', { value: c.id }); o.textContent = c.name; return o; };
+    for (const c of lista) {
+      if (c.parent_id) continue;
+      const filhas = lista.filter((x) => x.parent_id === c.id);
+      if (!filhas.length) { categoria.append(opcao(c)); continue; }
+      const grupo = criar('optgroup');
+      grupo.label = c.name;
+      grupo.append(opcao(c), ...filhas.map(opcao));
+      categoria.append(grupo);
+    }
+    // Subtag cuja mãe está escondida (arquivada) e que este bloco usa.
+    lista.filter((x) => x.parent_id && !lista.some((m) => m.id === x.parent_id))
+      .forEach((x) => { const o = opcao(x); o.textContent = nomeCompleto(estado.dados.categories, x); categoria.append(o); });
+  }
   categoria.value = arg.category_id || '';
   const data = criar('input', { id: 'bloco-data', type: 'date', value: arg.date });
   const inicio = criar('input', { id: 'bloco-inicio', type: 'time', value: textoHora(arg.start_min) });
   const fim = criar('input', { id: 'bloco-fim', type: 'time', value: textoHora(arg.end_min) });
 
-  // tipo (só ao criar)
-  const chipsTipo = [['commitment', 'Compromisso'], ['study', 'Estudo']].map(([v, t]) => {
-    const b = criar('button', { type: 'button', class: 'chip', 'data-tipo': v, texto: t });
-    b.addEventListener('click', () => { tipo = v; atualizarTipo(); });
-    return b;
-  });
-  const linhaTipo = criar('div', { class: 'chips', role: 'group', 'aria-label': 'Tipo do bloco' }, ...chipsTipo);
-  linhaTipo.hidden = !novo;
 
   // estudo: card pela busca de título e, se houver, o item
   const busca = criar('input', { id: 'bloco-card-busca', type: 'search', placeholder: 'Buscar card pelo título', autocomplete: 'off' });
@@ -175,7 +184,32 @@ export function abrirBloco(arg) {
   const escolhido = criar('div', { id: 'bloco-card-escolhido', class: 'card-escolhido' });
   const item = criar('select', { id: 'bloco-item' });
   const campoItem = campo('Item', item);
-  const caixaEstudo = criar('div', { class: 'bloco-estudo' }, campo('Card', busca), opcoes, escolhido, campoItem);
+  // Card que nasce junto com o bloco (Configurações → "Bloco sem card": perguntar, sempre ou nunca).
+  const ajustes = estado.ajustes();
+  const listas = [...estado.dados.lists].sort((a, b) => a.position - b.position);
+  const listaPadrao = listas.find((l) => l.id === ajustes.auto_card_list_id) || listas.find((l) => l.is_active) || listas[0] || null;
+  const modoCard = listaPadrao ? ajustes.auto_card : 'nunca';
+  const criarCard = criar('input', { id: 'bloco-criar-card', type: 'checkbox' });
+  const novoCardTitulo = criar('input', { id: 'bloco-novo-card-titulo', type: 'text', maxlength: '200', autocomplete: 'off' });
+  const novoCardLista = criar('select', { id: 'bloco-novo-card-lista' },
+    ...listas.map((l) => { const o = criar('option', { value: l.id }); o.textContent = l.name; return o; }));
+  if (listaPadrao) novoCardLista.value = listaPadrao.id;
+  let novoCardTituloEditado = false;
+  novoCardTitulo.addEventListener('input', () => { novoCardTituloEditado = true; });
+  const detalhesNovoCard = criar('div', { class: 'bloco-novo-card-campos' }, campo('Título do card', novoCardTitulo), campo('Lista', novoCardLista));
+  const caixaNovoCard = criar('div', { class: 'bloco-novo-card' },
+    criar('label', { class: 'repetir' }, criarCard, criar('span', { texto: 'Criar card para este bloco' })), detalhesNovoCard);
+  function atualizarNovoCard() {
+    caixaNovoCard.hidden = !(novo && !cardId && modoCard === 'perguntar');
+    detalhesNovoCard.hidden = !criarCard.checked;
+    if (!novoCardTituloEditado) novoCardTitulo.value = titulo.value.trim();
+  }
+  criarCard.addEventListener('change', atualizarNovoCard);
+  titulo.addEventListener('input', atualizarNovoCard);
+
+  const tirar = criar('button', { type: 'button', class: 'btn', id: 'bloco-card-tirar', texto: 'Tirar card' });
+  tirar.addEventListener('click', () => { cardId = null; mostrarEscolhido(); atualizarNovoCard(); });
+  const caixaEstudo = criar('div', { class: 'bloco-estudo' }, campo('Card (opcional)', busca), opcoes, escolhido, campoItem, caixaNovoCard);
 
   function mostrarEscolhido() {
     const card = estado.dados.cards.find((c) => c.id === cardId);
@@ -185,7 +219,7 @@ export function abrirBloco(arg) {
     if (!card) return;
     const abrir = criar('button', { type: 'button', class: 'btn', id: 'bloco-card-abrir', texto: 'Abrir card' });
     abrir.addEventListener('click', () => { fecharBloco(); abrirCardFn(card.id); });
-    escolhido.append(criar('span', { class: 'card-escolhido-nome', texto: card.title }), abrir);
+    escolhido.append(criar('span', { class: 'card-escolhido-nome', texto: card.title }), abrir, tirar);
     const itens = estado.dados.items.filter((i) => i.card_id === card.id).sort((a, b) => a.position - b.position);
     if (!itens.length) return;
     item.replaceChildren(criar('option', { value: '', texto: 'Sem item específico' }));
@@ -217,6 +251,7 @@ export function abrirBloco(arg) {
     opcoes.replaceChildren();
     mostrarEscolhido();
     sugerirTitulo();
+    atualizarNovoCard();
   }
 
   busca.addEventListener('input', () => {
@@ -236,7 +271,7 @@ export function abrirBloco(arg) {
   const rotuloRepetir = criar('label', { class: 'repetir' }, repetir, criar('span', { texto: 'Repetir toda semana' }));
   const chipsDias = DIAS_CURTOS.map((nome, i) => {
     const b = criar('button', { type: 'button', class: 'chip dia-rep', 'data-dia': String(i + 1), texto: nome });
-    b.addEventListener('click', () => { if (dias.has(i + 1)) dias.delete(i + 1); else dias.add(i + 1); marcarDias(); avisarSobreposicao(); });
+    b.addEventListener('click', () => { if (dias.has(i + 1)) dias.delete(i + 1); else dias.add(i + 1); marcarDias(); });
     return b;
   });
   const de = criar('input', { id: 'bloco-de', type: 'date', value: regra ? regra.valid_from : arg.date });
@@ -266,7 +301,6 @@ export function abrirBloco(arg) {
   areaEstado.hidden = novo;
 
   const campoData = campo('Data', data);
-  const aviso = criar('div', { id: 'bloco-aviso', class: 'aviso-bloco', role: 'status' });
   const erro = criar('div', { id: 'bloco-erro', class: 'erro', role: 'alert' });
   const salvar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'bloco-salvar', texto: 'Salvar' });
   const cancelar = criar('button', { type: 'button', class: 'btn', id: 'bloco-cancelar', texto: 'Cancelar' });
@@ -276,10 +310,7 @@ export function abrirBloco(arg) {
   const escopo = criar('div', { id: 'bloco-escopo', class: 'bloco-escopo', hidden: '' });
 
   function atualizarTipo() {
-    chipsTipo.forEach((b) => { const on = b.dataset.tipo === tipo; b.classList.toggle('ativo', on); b.setAttribute('aria-pressed', String(on)); });
-    caixaEstudo.hidden = tipo !== 'study';
-    titulo.closest('label').querySelector('span').textContent = tipo === 'study' ? 'Título (opcional)' : 'Título';
-    const podeRepetir = (novo && tipo === 'commitment') || Boolean(regra);
+    const podeRepetir = novo || Boolean(regra);
     rotuloRepetir.hidden = !podeRepetir;
     atualizarRepeticao();
   }
@@ -289,21 +320,8 @@ export function abrirBloco(arg) {
     // Ocorrência de compromisso repetido: a data é a da ocorrência e não muda por aqui.
     campoData.hidden = ligado && novo;
     data.disabled = Boolean(regra);
-    avisarSobreposicao();
   }
 
-  function avisarSobreposicao() {
-    const ini = lerHora(inicio.value);
-    const fm = lerHora(fim.value, true);
-    const dia = repetir.checked && novo ? de.value : data.value;
-    aviso.textContent = '';
-    if (ini == null || fm == null || fm <= ini || !dia) return;
-    const mesmo = (x) => !novo && (arg.virtual ? x.commitment_id === arg.commitment_id && x.date === arg.date : x.id === arg.id);
-    const choca = blocosDoPeriodo(estado.dados.commitments, estado.dados.blocks, dia, dia)
-      .some((x) => !mesmo(x) && x.start_min < fm && x.end_min > ini);
-    if (choca) aviso.textContent = 'Este horário já tem outro compromisso.';
-  }
-  [data, inicio, fim, de].forEach((el) => { el.addEventListener('input', avisarSobreposicao); el.addEventListener('change', avisarSobreposicao); });
   repetir.addEventListener('change', atualizarRepeticao);
 
   function validar() {
@@ -311,8 +329,7 @@ export function abrirBloco(arg) {
     const fm = lerHora(fim.value, true);
     if (ini == null || fm == null) return 'Informe o início e o fim.';
     if (fm <= ini) return 'O fim precisa ser depois do início.';
-    if (tipo === 'study' && !cardId && (novo || arg.card_id)) return 'Escolha o card que será estudado.';
-    if (tipo === 'commitment' && !titulo.value.trim()) return 'Dê um título ao compromisso.';
+    if (!titulo.value.trim() && !cardId) return 'Dê um título ao bloco.';
     const repetindo = repetir.checked && !rotuloRepetir.hidden;
     if (repetindo) {
       if (!dias.size) return 'Escolha ao menos um dia da semana.';
@@ -368,7 +385,7 @@ export function abrirBloco(arg) {
   const valores = () => {
     const card = estado.dados.cards.find((c) => c.id === cardId);
     return {
-      title: titulo.value.trim() || (tipo === 'study' ? card?.title || '' : ''),
+      title: titulo.value.trim() || card?.title || '',
       category_id: categoria.value || null,
       start_min: lerHora(inicio.value),
       end_min: lerHora(fim.value, true),
@@ -386,13 +403,37 @@ export function abrirBloco(arg) {
     erro.textContent = '';
     const v = valores();
     const repetindo = repetir.checked && !rotuloRepetir.hidden;
-    const regraNova = () => ({ ...v, days: [...dias].sort((a, b) => a - b), valid_from: de.value, valid_to: ate.value || null });
-    if (novo && repetindo) { executar(() => estado.criar('commitments', regraNova())); return; }
+    // Com card é estudo (conta no progresso do card); sem card é compromisso.
+    const doCard = () => ({ card_id: cardId, item_id: cardId && !campoItem.hidden ? item.value || null : null, kind: cardId ? 'study' : 'commitment' });
+    const regraNova = () => ({ ...v, card_id: cardId, days: [...dias].sort((a, b) => a - b), valid_from: de.value, valid_to: ate.value || null });
+    const querCard = novo && !cardId && Boolean(listaPadrao) && (modoCard === 'sempre' || (modoCard === 'perguntar' && criarCard.checked));
+    // Cria o card antes do bloco. Se o bloco falhar depois, tentar de novo usa o card já criado.
+    async function garantirCard() {
+      if (!querCard || cardId) return;
+      const listaId = modoCard === 'perguntar' ? novoCardLista.value : listaPadrao.id;
+      const lista = listas.find((l) => l.id === listaId);
+      const irmaos = estado.dados.cards.filter((c) => c.list_id === listaId);
+      const card = await estado.criar('cards', {
+        title: (modoCard === 'perguntar' && novoCardTitulo.value.trim()) || v.title,
+        list_id: listaId,
+        position: irmaos.length ? Math.max(...irmaos.map((c) => c.position)) + 1024 : 1024,
+        ...(lista?.is_done ? { completed_at: new Date().toISOString() } : {}),
+      });
+      cardId = card.id;
+      if (v.category_id) await estado.definirCategorias(card.id, [v.category_id]);
+      mostrarEscolhido();
+      atualizarNovoCard();
+    }
+    if (novo && repetindo) {
+      executar(async () => { await garantirCard(); return estado.criar('commitments', regraNova()); });
+      return;
+    }
     if (novo) {
-      executar(() => estado.criar('blocks', {
-        ...v, date: data.value, kind: tipo,
-        card_id: tipo === 'study' ? cardId : null, item_id: tipo === 'study' ? item.value || null : null, fixed_date: arg.fixed_date || null,
-      }));
+      executar(async () => {
+        await garantirCard();
+        const { kind, ...card } = doCard();
+        return estado.criar('blocks', { ...v, date: data.value, kind, ...card, fixed_date: arg.fixed_date || null });
+      });
       return;
     }
     if (regra) {
@@ -404,14 +445,13 @@ export function abrirBloco(arg) {
           return;
         }
         // Ocorrência virtual sem nenhuma mudança não vira linha gravada.
-        const igual = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k]);
-        if (!(arg.virtual && igual)) await gravarBloco(estado, arg, { ...v, ...nota });
+        const { kind, ...card } = doCard();
+        const igual = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k]) && (arg.card_id || null) === cardId;
+        if (!(arg.virtual && igual)) await gravarBloco(estado, arg, { ...v, ...card, ...nota });
       });
       return;
     }
-    executar(() => estado.alterar('blocks', arg.id, {
-      ...v, date: data.value, ...(tipo === 'study' ? { card_id: cardId, item_id: item.value || null } : {}), ...patchNota(),
-    }));
+    executar(() => estado.alterar('blocks', arg.id, { ...v, date: data.value, ...doCard(), ...patchNota() }));
   });
 
   excluir.addEventListener('click', () => {
@@ -464,10 +504,10 @@ export function abrirBloco(arg) {
   fecharPeloFundo = () => { if (temTextoAberto()) pedirDescarte(painel, fecharBloco); else fecharBloco(); };
   fundo.addEventListener('click', () => fecharPeloFundo());
   const painel = criar('form', { class: 'menu-folha bloco-painel', novalidate: '' },
-    criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado, linhaTipo,
+    criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado,
     campo('Título', titulo), caixaEstudo, campo('Categoria', categoria), campoData,
     criar('div', { class: 'linha-campos' }, campo('Início', inicio), campo('Fim', fim)),
-    rotuloRepetir, painelRepeticao, aviso, erro, botoes, escopo);
+    rotuloRepetir, painelRepeticao, erro, botoes, escopo);
   painel.addEventListener('submit', (e) => e.preventDefault());
   camada.replaceChildren(fundo, painel);
   camada.hidden = false;
@@ -477,8 +517,24 @@ export function abrirBloco(arg) {
   if (arg.title && arg.title === sugestao()) tituloAuto = arg.title;
   else if (novo) sugerirTitulo();
   atualizarTipo();
-  avisarSobreposicao();
-  (tipo === 'study' && !cardId ? busca : titulo).focus();
+  atualizarNovoCard();
+  titulo.focus();
+}
+
+// Blocos com menos de 2 h são só cabeça: qualquer toque abre (um estudo de 1 h é tocado para marcar cumprido).
+const CORPO_MIN = 120;
+
+// Cabeça (hora + título) abre o bloco; tocar no corpo, abaixo da cabeça, chama `aoCorpo(evento)` — usado para
+// criar ou agendar algo naquele horário por cima de um compromisso longo. Enter sempre abre.
+export function ligarCabecaECorpo(el, bloco, { aoAbrir = () => abrirBloco(bloco), aoCorpo }) {
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const cabeca = el.querySelector('.bloco-cabeca');
+    const noCorpo = bloco.end_min - bloco.start_min >= CORPO_MIN && cabeca && e.clientY > cabeca.getBoundingClientRect().bottom
+      && !e.target.closest('.bloco-alca');
+    if (noCorpo) aoCorpo(e, bloco); else aoAbrir();
+  });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === el) aoAbrir(); });
 }
 
 // Clique (e Enter) abre a folha de edição; usado pelas telas Semana e Hoje.

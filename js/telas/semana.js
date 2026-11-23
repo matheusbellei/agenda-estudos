@@ -1,13 +1,15 @@
 // Tela Semana: sete colunas (segunda a domingo) com faixas grandes.
 import { registrarTela } from './casca.js';
-import { criar, elementoBloco, abrirBloco, ligarAbertura, idDoBloco } from './bloco.js';
+import { criar, elementoBloco, abrirBloco, ligarCabecaECorpo, idDoBloco } from './bloco.js';
 import { mostrarDia } from './hoje.js';
 import { diasDaSemana, somaDias, isoDe, horaTexto, rotuloSemana, DIAS_CURTOS } from '../regras/datas.js';
-import { blocosDoPeriodo, faixasDaSemana, limitesDoDia, horariosLivres, colunas } from '../regras/calendario.js';
+import { blocosDoPeriodo, faixasDaSemana, limitesDoDia, horariosLivres, posicionar, inicioMaisUmaHora } from '../regras/calendario.js';
 import { montarFila, selecaoAtual, agendarSelecionada, agendarEntrada, umaHoraLivre, avisarSelecao } from './fila.js';
 
 // Altura de cada faixa da grade: os blocos são desenhados numa camada por cima, proporcionais à duração.
 const ALTURA_FAIXA = 72;
+// Recuo, por nível, de um bloco em cascata (começa depois de outro com que se cruza).
+const RECUO_PX = 14;
 
 export function iniciarSemana({ estado }) {
   const secao = document.querySelector('#tela-semana');
@@ -31,9 +33,28 @@ export function iniciarSemana({ estado }) {
   // Faixa -> { date, slot }: a hora que um toque ou um arrasto de item da fila cria ali.
   const alvos = new WeakMap();
 
+  // Camada de blocos de cada dia -> o que é preciso para achar a hora de um ponto tocado no corpo de um bloco.
+  const infoDoDia = new WeakMap();
+
+  // Hora nova a partir do ponto `y` sobre a camada do dia: fatia do dia (para baixo) e uma hora, até o próximo bloco.
+  // `piso`: início do bloco tocado — o novo nunca começa antes dele.
+  function horaNoPonto(camada, y, piso = 0) {
+    const d = infoDoDia.get(camada);
+    if (!d) return null;
+    const bruto = d.inicio + (y - camada.getBoundingClientRect().top) / d.pxPorMin;
+    const min = Math.max(d.inicio, piso, Math.floor(bruto / d.fatia) * d.fatia);
+    const hora = inicioMaisUmaHora(min, d.doDia, d.fim);
+    return hora && { date: d.date, ...hora };
+  }
+
   function soltarNaFaixa(entrada, x, y) {
     const sob = document.elementFromPoint(x, y);
-    const alvo = sob && !sob.closest('.bloco') ? alvos.get(sob.closest('.faixa')) : null;
+    if (sob?.closest('.bloco')) {
+      const alvo = horaNoPonto(sob.closest('.dia-blocos'), y, Number(sob.closest('.bloco').dataset.inicio) || 0);
+      if (alvo) agendarEntrada(estado, entrada, alvo);
+      return;
+    }
+    const alvo = sob ? alvos.get(sob.closest('.faixa')) : null;
     if (alvo?.slot) agendarEntrada(estado, entrada, { date: alvo.date, ...alvo.slot });
   }
 
@@ -83,15 +104,30 @@ export function iniciarSemana({ estado }) {
         });
         coluna.append(faixa);
       });
-      // Cada bloco é uma peça só, da hora de início à de fim; os que se sobrepõem ficam lado a lado.
+      // Cada bloco é uma peça só, da hora de início à de fim. Sobrepostos: fundo embaixo, lado a lado ou cascata.
       const camada = criar('div', { class: 'dia-blocos', style: `grid-column:${c + 2};grid-row:2 / span ${linhas}` });
-      colunas(doDia).forEach((b) => {
+      infoDoDia.set(camada, { date: iso, inicio, fim, pxPorMin, fatia: a.day_slot_min, doDia });
+      posicionar(doDia).forEach((b) => {
         const el = elementoBloco(b, { compacto: true });
+        if (b.fundo) el.classList.add('bloco-fundo');
+        // Por cima de outro (dentro dele ou em cascata): contorno na cor da página para separar.
+        else if (b.camada >= 1000 || b.recuo > 0) el.classList.add('bloco-sobre');
+        const recuo = b.recuo * RECUO_PX;
+        el.dataset.inicio = String(b.start_min);
         el.style.top = px(b.start_min - inicio);
         el.style.height = px(b.end_min - b.start_min);
-        el.style.left = `calc(${(b.col / b.cols) * 100}% + 2px)`;
-        el.style.width = `calc(${100 / b.cols}% - 4px)`;
-        ligarAbertura(el, doDia.find((x) => idDoBloco(x) === idDoBloco(b)) || b);
+        el.style.left = `calc(${recuo}px + (100% - ${recuo}px) * ${b.indice / b.total} + 2px)`;
+        el.style.width = `calc((100% - ${recuo}px) / ${b.total} - 4px)`;
+        el.style.zIndex = String(b.camada);
+        const original = doDia.find((x) => idDoBloco(x) === idDoBloco(b)) || b;
+        ligarCabecaECorpo(el, original, {
+          aoCorpo: (e) => {
+            const alvo = horaNoPonto(camada, e.clientY, b.start_min);
+            if (!alvo) { if (selecaoAtual()) avisarSelecao('Sem espaço livre neste horário.'); return; }
+            if (selecaoAtual()) agendarSelecionada(estado, alvo);
+            else abrirBloco({ novo: true, ...alvo });
+          },
+        });
         camada.append(el);
       });
       coluna.append(camada);

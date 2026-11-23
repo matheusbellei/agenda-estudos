@@ -27,7 +27,7 @@ class PlanejarBase(CalendarioBase):
         return self.page.locator(f'#fila-{tela} .fila-item[data-card="{card}"]')
 
     def abrir_bloco_de_terca(self):
-        self.page.click(f'.dia[data-data="{TER}"] .bloco')
+        self.page.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca')
         self.folha_aberta()
 
     def folha_fechada(self):
@@ -88,7 +88,6 @@ class TestFila(PlanejarBase):
         p.click(f'.dia[data-data="{TER}"] .faixa[data-inicio="1080"]')
         self.folha_aberta()
         self.assertEqual(p.input_value('#bloco-titulo'), '')
-        self.assertIn('ativo', p.get_attribute('.chip[data-tipo="commitment"]', 'class'))
         self.assertEqual(p.locator('#bloco-card-escolhido:not([hidden])').count(), 0)
         self.assertEqual(self.db()['blocks'], [])
 
@@ -146,11 +145,10 @@ class TestFila(PlanejarBase):
     def test_agendar_pelo_card(self):
         self.semear()
         p = self.page
-        p.click('[data-aba="quadro"]')
+        self.ir('quadro')
         p.click('.cartao-card[data-card="cT"]')
         p.click('#card-agendar')
         self.folha_aberta()
-        self.assertIn('ativo', p.get_attribute('.chip[data-tipo="study"]', 'class'))
         self.assertEqual(p.inner_text('.card-escolhido-nome'), 'T')
         self.assertEqual(p.input_value('#bloco-item'), 'i2')
         self.assertIn('Aula 2', p.inner_text('#bloco-item'))
@@ -275,7 +273,7 @@ class TestEstado(PlanejarBase):
     def test_ocorrencia_de_compromisso_repetido(self):
         self.semear(commitments=[dict(title='Trabalho', days=[1, 3, 5], start_min=540, end_min=720, valid_from=SEG)])
         p = self.page
-        p.click(f'.dia[data-data="{QUA}"] .bloco')
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-cumprido')
         self.folha_fechada()

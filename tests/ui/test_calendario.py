@@ -16,7 +16,7 @@ class CalendarioBase(UITest):
         return {'kind': 'commitment', 'title': 'Aula', **kw}
 
     def ir_para_hoje(self):
-        self.page.click('[data-aba="hoje"]')
+        self.ir('hoje')
         self.page.wait_for_selector('#tela-hoje .linha-do-tempo', state='visible')
 
     def folha_aberta(self):
@@ -104,8 +104,8 @@ class TestSemana(CalendarioBase):
         self.assertEqual(p.locator(f'.dia[data-data="{SEG}"] .faixa[data-inicio="600"] .livre').count(), 0)
         livre = p.locator(f'.dia[data-data="{SEG}"] .faixa[data-inicio="480"] .livre').bounding_box()
         self.assertLessEqual(livre['y'] + livre['height'], bloco['y'] + 0.5)
-        # tocar na peça abre a folha; tocar no livre cria ali
-        p.locator(f'.dia[data-data="{SEG}"] .bloco').click()
+        # tocar na cabeça da peça abre a folha; tocar no livre cria ali
+        p.locator(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca').click()
         self.folha_aberta()
         self.assertEqual(p.input_value('#bloco-titulo'), 'Trabalho')
         p.click('#bloco-cancelar')
@@ -150,7 +150,7 @@ class TestSemana(CalendarioBase):
     def test_editar_so_este_dia(self):
         self.login(); p = self.page
         self.criar_repetido()
-        p.click(f'.dia[data-data="{QUA}"] .bloco')
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.fill('#bloco-inicio', '10:00')
         p.click('#bloco-salvar')
@@ -170,7 +170,7 @@ class TestSemana(CalendarioBase):
     def test_editar_todos_muda_a_regra(self):
         self.login(); p = self.page
         self.criar_repetido()
-        p.click(f'.dia[data-data="{SEX}"] .bloco')
+        p.click(f'.dia[data-data="{SEX}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.fill('#bloco-titulo', 'Plantão')
         p.click('#bloco-salvar')
@@ -182,7 +182,7 @@ class TestSemana(CalendarioBase):
     def test_excluir_so_este_dia(self):
         self.login(); p = self.page
         self.criar_repetido()
-        p.click(f'.dia[data-data="{SEX}"] .bloco')
+        p.click(f'.dia[data-data="{SEX}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir')
         p.click('[data-escopo="dia"]')
@@ -195,7 +195,7 @@ class TestSemana(CalendarioBase):
     def test_excluir_este_e_os_proximos(self):
         self.login(); p = self.page
         self.criar_repetido()
-        p.click(f'.dia[data-data="{QUA}"] .bloco')
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir')
         p.click('[data-escopo="proximos"]')
@@ -207,11 +207,11 @@ class TestSemana(CalendarioBase):
     def test_excluir_todos_apaga_a_regra_e_os_blocos_dela(self):
         self.login(); p = self.page
         self.criar_repetido()
-        p.click(f'.dia[data-data="{QUA}"] .bloco')
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.fill('#bloco-inicio', '10:00'); p.click('#bloco-salvar'); p.click('[data-escopo="dia"]')
         p.wait_for_function("window.__memdb.blocks.length === 1")
-        p.click(f'.dia[data-data="{SEG}"] .bloco')
+        p.click(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir')
         p.click('[data-escopo="todos"]')
@@ -229,25 +229,13 @@ class TestSemana(CalendarioBase):
         self.assertEqual(self.db()['blocks'], [])
         self.assertEqual(p.locator('#folha-bloco:not([hidden])').count(), 1)
 
-    def test_compromisso_sem_titulo_e_recusado(self):
+    def test_bloco_sem_titulo_e_sem_card_e_recusado(self):
         self.login(); p = self.page
         p.click(f'.dia[data-data="{TER}"] .faixa[data-inicio="480"]')
         self.folha_aberta()
         p.click('#bloco-salvar')
-        self.assertEqual(p.inner_text('#bloco-erro'), 'Dê um título ao compromisso.')
+        self.assertEqual(p.inner_text('#bloco-erro'), 'Dê um título ao bloco.')
         self.assertEqual(self.db()['blocks'], [])
-
-    def test_aviso_de_sobreposicao_nao_impede_salvar(self):
-        self.preparar(blocks=[self.bloco(date=TER, start_min=480, end_min=540)])
-        p = self.page
-        p.click(f'.dia[data-data="{TER}"] .faixa[data-inicio="600"]')
-        self.folha_aberta()
-        self.assertEqual(p.inner_text('#bloco-aviso').strip(), '')
-        p.fill('#bloco-titulo', 'Outro'); p.fill('#bloco-inicio', '08:30')
-        p.dispatch_event('#bloco-inicio', 'change')
-        self.assertEqual(p.inner_text('#bloco-aviso'), 'Este horário já tem outro compromisso.')
-        p.click('#bloco-salvar')
-        p.wait_for_function("window.__memdb.blocks.length === 2")
 
     def test_falha_ao_salvar_mantem_a_folha_e_o_texto(self):
         self.login(); p = self.page
@@ -265,14 +253,11 @@ class TestSemana(CalendarioBase):
         p.wait_for_function("window.__memdb.blocks.length === 1")
         self.assertEqual(p.locator('#folha-bloco:not([hidden])').count(), 0)
 
-    def test_estudo_pede_um_card_pela_busca(self):
+    def test_card_pela_busca_da_titulo_e_vira_estudo(self):
         self.preparar(cards=[{'title': 'Francês avançado', 'is_fixed': False}, {'title': 'Cálculo', 'is_fixed': False}])
         p = self.page
         p.click(f'.dia[data-data="{TER}"] .faixa[data-inicio="480"]')
         self.folha_aberta()
-        p.click('[data-tipo="study"]')
-        p.click('#bloco-salvar')
-        self.assertEqual(p.inner_text('#bloco-erro'), 'Escolha o card que será estudado.')
         p.fill('#bloco-card-busca', 'frances')
         p.click('.card-opcao:has-text("Francês avançado")')
         self.assertEqual(p.locator('.card-opcao').count(), 0)
@@ -348,9 +333,10 @@ class TestHoje(CalendarioBase):
         p.click('#dia-prox')
         self.assertEqual(p.locator('.agora-linha').count(), 0)
 
-    def test_blocos_sobrepostos_ficam_lado_a_lado(self):
+    def test_blocos_que_comecam_juntos_ficam_lado_a_lado(self):
+        # início com menos de 30 min de diferença: lado a lado (mais que isso vira cascata, ver test_sobreposicao)
         self.preparar(blocks=[self.bloco(date=SEG, start_min=480, end_min=600, title='Aaa'),
-                              self.bloco(date=SEG, start_min=540, end_min=660, title='Bbb')])
+                              self.bloco(date=SEG, start_min=500, end_min=620, title='Bbb')])
         self.ir_para_hoje(); p = self.page
         linha = p.locator('.linha-do-tempo').bounding_box()
         a = p.locator('#tela-hoje .bloco:has-text("Aaa")').bounding_box()
@@ -483,7 +469,7 @@ class TestCorrecoes(CalendarioBase):
 
     def test_este_e_os_proximos_apaga_blocos_do_dia_em_diante_e_poe_valid_to(self):
         self.regra_com_blocos(); p = self.page
-        p.click(f'.dia[data-data="{QUA}"] .bloco')
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir'); p.click('[data-escopo="proximos"]')
         p.wait_for_function(f"window.__memdb.commitments[0].valid_to === '{TER}'")
@@ -491,7 +477,7 @@ class TestCorrecoes(CalendarioBase):
 
     def test_este_e_os_proximos_no_primeiro_dia_apaga_a_regra_e_os_blocos(self):
         self.regra_com_blocos(); p = self.page
-        p.click(f'.dia[data-data="{SEG}"] .bloco')
+        p.click(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir'); p.click('[data-escopo="proximos"]')
         p.wait_for_function("window.__memdb.commitments.length === 0")
@@ -499,7 +485,7 @@ class TestCorrecoes(CalendarioBase):
 
     def test_este_e_os_proximos_com_falha_na_regra_nao_perde_blocos(self):
         self.regra_com_blocos(); p = self.page
-        p.click(f'.dia[data-data="{QUA}"] .bloco')
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir')
         p.evaluate("window.__memFalhar = 'update'")
@@ -514,7 +500,7 @@ class TestCorrecoes(CalendarioBase):
         self.preparar(blocks=[self.bloco(date=SEG, start_min=480, end_min=540, title='Feito', status='done'),
                               self.bloco(date=TER, start_min=480, end_min=540, title='Plano')])
         p = self.page
-        p.click(f'.dia[data-data="{SEG}"] .bloco')
+        p.click(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir')
         self.assertIn('Este compromisso já foi marcado. Excluir mesmo assim?', p.inner_text('#bloco-escopo'))
@@ -524,7 +510,7 @@ class TestCorrecoes(CalendarioBase):
         p.click('#bloco-excluir'); p.click('[data-escopo="confirmar"]')
         p.wait_for_function("window.__memdb.blocks.length === 1")
         # planejado continua sem confirmação
-        p.click(f'.dia[data-data="{TER}"] .bloco')
+        p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-excluir')
         p.wait_for_function("window.__memdb.blocks.length === 0")
@@ -532,7 +518,7 @@ class TestCorrecoes(CalendarioBase):
     def test_editar_estudo_cujo_card_foi_excluido(self):
         self.preparar(blocks=[self.bloco(date=SEG, start_min=480, end_min=540, title='Cálculo', kind='study', card_id=None)])
         p = self.page
-        p.click(f'.dia[data-data="{SEG}"] .bloco')
+        p.click(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.fill('#bloco-fim', '09:30'); p.click('#bloco-salvar')
         p.wait_for_function("window.__memdb.blocks[0].end_min === 570")
@@ -541,7 +527,7 @@ class TestCorrecoes(CalendarioBase):
     def test_so_este_dia_sem_mudar_nada_nao_grava(self):
         self.preparar(commitments=[{'title': 'Trabalho', 'days': [1], 'start_min': 540, 'end_min': 720, 'valid_from': SEG}])
         p = self.page
-        p.click(f'.dia[data-data="{SEG}"] .bloco')
+        p.click(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.click('#bloco-salvar'); p.click('[data-escopo="dia"]')
         p.wait_for_selector('#folha-bloco', state='hidden')

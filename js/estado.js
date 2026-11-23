@@ -1,7 +1,7 @@
 // Dados em memória + ações que gravam no store e avisam os ouvintes.
 export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings'];
 
-const AJUSTES_PADRAO = { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null };
+const AJUSTES_PADRAO = { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null };
 
 export function criarEstado(store) {
   const dados = Object.fromEntries(TABELAS.map((t) => [t, []]));
@@ -11,12 +11,22 @@ export function criarEstado(store) {
   // Só os ajustes não têm `id`: a chave é o dono.
   const chave = (tabela) => (tabela === 'settings' ? 'owner_id' : 'id');
 
+  // Como no banco: excluir a tag leva as subtags e os vínculos; blocos e fixas ficam sem categoria.
+  function cascataCategoria(id) {
+    const ids = new Set([id, ...dados.categories.filter((c) => c.parent_id === id).map((c) => c.id)]);
+    dados.categories = dados.categories.filter((c) => !ids.has(c.id));
+    dados.card_categories = dados.card_categories.filter((cc) => !ids.has(cc.category_id));
+    dados.blocks = dados.blocks.map((b) => (ids.has(b.category_id) ? { ...b, category_id: null } : b));
+    dados.commitments = dados.commitments.map((c) => (ids.has(c.category_id) ? { ...c, category_id: null } : c));
+  }
+
   function cascataCard(id) {
     const itens = new Set(dados.items.filter((i) => i.card_id === id).map((i) => i.id));
     dados.items = dados.items.filter((i) => i.card_id !== id);
     dados.attachments = dados.attachments.filter((a) => a.card_id !== id);
     dados.occurrences = dados.occurrences.filter((o) => o.card_id !== id);
     dados.card_categories = dados.card_categories.filter((cc) => cc.card_id !== id);
+    dados.commitments = dados.commitments.map((c) => (c.card_id === id ? { ...c, card_id: null } : c));
     dados.blocks = dados.blocks.map((b) => (b.card_id === id || itens.has(b.item_id)
       ? { ...b, card_id: b.card_id === id ? null : b.card_id, item_id: itens.has(b.item_id) ? null : b.item_id }
       : b));
@@ -92,6 +102,7 @@ export function criarEstado(store) {
       if (tabela === 'cards') cascataCard(id);
       if (tabela === 'items') cascataItem(id);
       if (tabela === 'commitments') cascataCompromisso(id);
+      if (tabela === 'categories') cascataCategoria(id);
       avisar();
     },
     // Deixa o card exatamente com as categorias de `ids`.

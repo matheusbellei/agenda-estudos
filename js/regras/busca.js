@@ -53,14 +53,16 @@ function achados(plano, palavras) {
   return lista;
 }
 
-export function buscar(termo, { cards = [], items = [], blocks = [], occurrences = [], card_categories = [] }, { categoria } = {}) {
+// `categoria` filtra pela tag e, se for uma tag mãe, também pelas subtags dela (`categories` monta a família).
+export function buscar(termo, { cards = [], items = [], blocks = [], occurrences = [], card_categories = [] }, { categoria, categories = [] } = {}) {
   const palavras = normalizar(termo).trim().split(/\s+/).filter(Boolean);
   if (normalizar(termo).trim().length < 2) return [];
 
   const cardPorId = new Map(cards.map((c) => [c.id, c]));
-  const passa = (cardId, bloco) => !categoria
-    || card_categories.some((cc) => cc.card_id === cardId && cc.category_id === categoria)
-    || (bloco && bloco.category_id === categoria);
+  const aceitas = categoria ? new Set([categoria, ...categories.filter((c) => c.parent_id === categoria).map((c) => c.id)]) : null;
+  const passa = (cardId, bloco) => !aceitas
+    || card_categories.some((cc) => cc.card_id === cardId && aceitas.has(cc.category_id))
+    || (bloco && aceitas.has(bloco.category_id));
 
   const saida = [];
   const contagem = new Map();

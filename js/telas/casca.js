@@ -1,6 +1,9 @@
 // Casca do app: login, abas e troca de telas.
 const telas = {};
-const ABAS = ['hoje', 'semana', 'quadro', 'fixas', 'busca'];
+// Hoje e Semana são as duas visões da página inicial (item Agenda do menu).
+const AGENDA = ['hoje', 'semana'];
+let ultimaAgenda = 'semana';
+const TITULOS = { hoje: 'Agenda', semana: 'Agenda', quadro: 'Quadro', fixas: 'Fixas', busca: 'Busca', tags: 'Tags', dashboards: 'Dashboards', ajustes: 'Configurações' };
 const $ = (s) => document.querySelector(s);
 
 export function registrarTela(nome, { mostrar }) {
@@ -9,8 +12,23 @@ export function registrarTela(nome, { mostrar }) {
 
 export function irPara(nome) {
   document.querySelectorAll('main > section').forEach((s) => { s.hidden = s.id !== `tela-${nome}`; });
-  document.querySelectorAll('#abas [data-aba]').forEach((b) => b.classList.toggle('ativo', b.dataset.aba === nome));
+  const naAgenda = AGENDA.includes(nome);
+  if (naAgenda) ultimaAgenda = nome;
+  const item = naAgenda ? 'agenda' : nome;
+  document.querySelectorAll('#menu [data-tela]').forEach((b) => b.classList.toggle('ativo', b.dataset.tela === item));
+  const visao = $('#visao');
+  visao.hidden = !naAgenda;
+  visao.querySelectorAll('[data-visao]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.visao === nome)));
+  $('#cabecalho-titulo').textContent = TITULOS[nome] || '';
+  abrirMenu(false);
   if (telas[nome]) telas[nome].mostrar();
+}
+
+function abrirMenu(abrir) {
+  const menu = $('#menu');
+  if (!menu) return;
+  menu.hidden = !abrir;
+  $('#menu-botao').setAttribute('aria-expanded', String(abrir));
 }
 
 function mostrarLogin(mensagem = '') {
@@ -33,8 +51,13 @@ async function entrar(usuario, aoEntrar) {
 }
 
 export async function iniciarCasca({ store, aoEntrar, aoSair }) {
-  ABAS.forEach((a) => $(`[data-aba="${a}"]`).addEventListener('click', () => irPara(a)));
-  $('#menu-ajustes').addEventListener('click', () => irPara('ajustes'));
+  $('#menu-botao').addEventListener('click', (e) => { e.stopPropagation(); abrirMenu($('#menu').hidden); });
+  document.querySelectorAll('#menu [data-tela]').forEach((b) => b.addEventListener('click', () => irPara(b.dataset.tela === 'agenda' ? ultimaAgenda : b.dataset.tela)));
+  document.querySelectorAll('#visao [data-visao]').forEach((b) => b.addEventListener('click', () => irPara(b.dataset.visao)));
+  $('#menu-sair').addEventListener('click', () => { abrirMenu(false); store.signOut(); });
+  // Fecha tocando fora ou com Esc.
+  document.addEventListener('click', (e) => { if (!$('#menu').hidden && !e.target.closest('#cabecalho')) abrirMenu(false); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#menu').hidden) { abrirMenu(false); $('#menu-botao').focus(); } });
 
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();

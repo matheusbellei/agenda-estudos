@@ -14,6 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <link rel="stylesheet" href="vendor/toastui/toastui-editor.min.css">
 <link rel="stylesheet" href="css/estilos.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -42,22 +43,31 @@
 
 <div id="app" hidden>
   <header id="cabecalho">
-    <span id="cabecalho-titulo">Agenda de Estudos</span>
-    <button class="btn-icone" id="menu-ajustes" aria-label="Ajustes" title="Ajustes">&#9881;</button>
+    <button class="btn-icone" id="menu-botao" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><i class="ti ti-menu-2" aria-hidden="true"></i></button>
+    <span id="cabecalho-titulo">Agenda</span>
+    <nav id="menu" aria-label="Telas" hidden>
+      <button data-tela="agenda"><i class="ti ti-calendar-week" aria-hidden="true"></i>Agenda</button>
+      <button data-tela="quadro"><i class="ti ti-layout-kanban" aria-hidden="true"></i>Quadro</button>
+      <button data-tela="fixas"><i class="ti ti-repeat" aria-hidden="true"></i>Fixas</button>
+      <button data-tela="busca"><i class="ti ti-search" aria-hidden="true"></i>Busca</button>
+      <button data-tela="tags"><i class="ti ti-tags" aria-hidden="true"></i>Tags</button>
+      <button data-tela="dashboards"><i class="ti ti-chart-bar" aria-hidden="true"></i>Dashboards</button>
+      <button data-tela="ajustes"><i class="ti ti-settings" aria-hidden="true"></i>Configurações</button>
+      <button id="menu-sair"><i class="ti ti-logout" aria-hidden="true"></i>Sair</button>
+    </nav>
   </header>
-  <nav id="abas" aria-label="Telas">
-    <button data-aba="hoje">Hoje</button>
-    <button data-aba="semana">Semana</button>
-    <button data-aba="quadro">Quadro</button>
-    <button data-aba="fixas">Fixas</button>
-    <button data-aba="busca">Busca</button>
-  </nav>
   <main>
+    <div id="visao" class="visao" role="group" aria-label="Ver a agenda por" hidden>
+      <button type="button" data-visao="hoje" aria-pressed="false">Hoje</button>
+      <button type="button" data-visao="semana" aria-pressed="true">Semana</button>
+    </div>
     <section id="tela-hoje" hidden></section>
     <section id="tela-semana" hidden></section>
     <section id="tela-quadro" hidden></section>
     <section id="tela-fixas" hidden></section>
     <section id="tela-busca" hidden></section>
+    <section id="tela-tags" hidden></section>
+    <section id="tela-dashboards" hidden><div class="cartao vazio">Em breve: horas por tag, metas e sequência de estudos.</div></section>
     <section id="tela-ajustes" hidden></section>
   </main>
 </div>
