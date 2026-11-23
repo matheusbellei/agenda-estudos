@@ -1,6 +1,7 @@
 // Blocos do calendário: elemento visual, gravação e (mais abaixo) a folha de criar/editar.
 import { corDoTexto } from './ajustes.js';
-import { emOrdem, nomeCompleto } from '../regras/tags.js';
+import { emOrdem } from '../regras/tags.js';
+import { criarTagPeloBloco } from './tags.js';
 import { horaTexto, minutosDe, somaDias, diaDaSemana, DIAS_CURTOS } from '../regras/datas.js';
 import { efeitosDeEstado } from '../regras/fila.js';
 import { moverCard, cardsDaLista, posicaoNoFim } from './quadro.js';
@@ -154,25 +155,48 @@ export function abrirBloco(arg) {
 
   const titulo = criar('input', { id: 'bloco-titulo', type: 'text', autocomplete: 'off', maxlength: '120' });
   titulo.value = arg.title || '';
-  const categoria = criar('select', { id: 'bloco-categoria' }, criar('option', { value: '', texto: 'Sem categoria' }));
-  // Tag com subtags vira um grupo (a própria tag e as subtags); tag sem subtag fica solta.
-  {
-    const lista = emOrdem(estado.dados.categories, { incluir: new Set(arg.category_id ? [arg.category_id] : []) });
-    const opcao = (c) => { const o = criar('option', { value: c.id }); o.textContent = c.name; return o; };
-    for (const c of lista) {
-      if (c.parent_id) continue;
-      const filhas = lista.filter((x) => x.parent_id === c.id);
-      if (!filhas.length) { categoria.append(opcao(c)); continue; }
-      const grupo = criar('optgroup');
-      grupo.label = c.name;
-      grupo.append(opcao(c), ...filhas.map(opcao));
-      categoria.append(grupo);
-    }
-    // Subtag cuja mãe está escondida (arquivada) e que este bloco usa.
-    lista.filter((x) => x.parent_id && !lista.some((m) => m.id === x.parent_id))
-      .forEach((x) => { const o = opcao(x); o.textContent = nomeCompleto(estado.dados.categories, x); categoria.append(o); });
+  // Categoria em dois passos, como no controle financeiro: a tag e, se quiser, uma subtag dela.
+  // As duas listas terminam com a opção de criar, que abre a janela da tela Tags por cima do bloco.
+  const NOVA = '__nova__';
+  const tagSel = criar('select', { id: 'bloco-tag' });
+  const subSel = criar('select', { id: 'bloco-subtag' });
+  const campoSub = campo('Subtag', subSel);
+  const catPorId = (id) => estado.dados.categories.find((c) => c.id === id) || null;
+  const inicial = catPorId(arg.category_id);
+  let escolhaTag = inicial ? inicial.parent_id || inicial.id : '';
+  let escolhaSub = inicial?.parent_id ? inicial.id : '';
+  const opcao = (valor, texto) => { const o = criar('option', { value: valor }); o.textContent = texto; return o; };
+  function preencherTags() {
+    const maes = emOrdem(estado.dados.categories, { incluir: new Set([escolhaTag].filter(Boolean)) }).filter((c) => !c.parent_id);
+    tagSel.replaceChildren(opcao('', 'Sem tag'), ...maes.map((c) => opcao(c.id, c.name)), opcao(NOVA, '+ Nova tag…'));
+    tagSel.value = escolhaTag;
   }
-  categoria.value = arg.category_id || '';
+  function preencherSub() {
+    campoSub.hidden = !escolhaTag;
+    if (!escolhaTag) { escolhaSub = ''; return; }
+    const filhas = estado.dados.categories.filter((c) => c.parent_id === escolhaTag && (!c.archived || c.id === escolhaSub))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    subSel.replaceChildren(opcao('', 'Sem subtag'), ...filhas.map((c) => opcao(c.id, c.name)), opcao(NOVA, '+ Nova subtag…'));
+    subSel.value = escolhaSub;
+  }
+  function definirCategoria(id) {
+    const c = catPorId(id);
+    escolhaTag = c ? c.parent_id || c.id : '';
+    escolhaSub = c?.parent_id ? c.id : '';
+    preencherTags(); preencherSub();
+  }
+  const categoriaValor = () => escolhaSub || escolhaTag || null;
+  tagSel.addEventListener('change', () => {
+    if (tagSel.value !== NOVA) { escolhaTag = tagSel.value; escolhaSub = ''; preencherSub(); return; }
+    tagSel.value = escolhaTag;
+    criarTagPeloBloco({ aoCriar: (c) => definirCategoria(c.id), aoCancelar: preencherTags });
+  });
+  subSel.addEventListener('change', () => {
+    if (subSel.value !== NOVA) { escolhaSub = subSel.value; return; }
+    subSel.value = escolhaSub;
+    criarTagPeloBloco({ mae: catPorId(escolhaTag), aoCriar: (c) => definirCategoria(c.id), aoCancelar: preencherSub });
+  });
+  preencherTags(); preencherSub();
   const data = criar('input', { id: 'bloco-data', type: 'date', value: arg.date });
   const inicio = criar('input', { id: 'bloco-inicio', type: 'time', value: textoHora(arg.start_min) });
   const fim = criar('input', { id: 'bloco-fim', type: 'time', value: textoHora(arg.end_min) });
@@ -242,9 +266,9 @@ export function abrirBloco(arg) {
   item.addEventListener('change', sugerirTitulo);
 
   function escolherCard(card) {
-    if (!categoria.value) {
+    if (!categoriaValor()) {
       const cc = estado.dados.card_categories.find((x) => x.card_id === card.id);
-      if (cc && estado.dados.categories.some((c) => c.id === cc.category_id && !c.archived)) categoria.value = cc.category_id;
+      if (cc && estado.dados.categories.some((c) => c.id === cc.category_id && !c.archived)) definirCategoria(cc.category_id);
     }
     cardId = card.id;
     busca.value = '';
@@ -386,7 +410,7 @@ export function abrirBloco(arg) {
     const card = estado.dados.cards.find((c) => c.id === cardId);
     return {
       title: titulo.value.trim() || card?.title || '',
-      category_id: categoria.value || null,
+      category_id: categoriaValor(),
       start_min: lerHora(inicio.value),
       end_min: lerHora(fim.value, true),
     };
@@ -505,7 +529,7 @@ export function abrirBloco(arg) {
   fundo.addEventListener('click', () => fecharPeloFundo());
   const painel = criar('form', { class: 'menu-folha bloco-painel', novalidate: '' },
     criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado,
-    campo('Título', titulo), caixaEstudo, campo('Categoria', categoria), campoData,
+    campo('Título', titulo), caixaEstudo, campo('Tag', tagSel), campoSub, campoData,
     criar('div', { class: 'linha-campos' }, campo('Início', inicio), campo('Fim', fim)),
     rotuloRepetir, painelRepeticao, erro, botoes, escopo);
   painel.addEventListener('submit', (e) => e.preventDefault());

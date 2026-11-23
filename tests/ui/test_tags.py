@@ -137,12 +137,13 @@ class TestSubtagsNasTelas(TagsBase):
         self.ir('quadro')
         self.assertIn('Idiomas › Vocabulário', p.inner_text('.cartao-card[data-card="c1"]'))
 
-    def test_seletor_do_bloco_agrupa_subtags(self):
+    def test_seletor_do_bloco_mostra_subtags_da_tag_escolhida(self):
         self.abrir_tags(**self.SEED); p = self.page
         self.ir('semana')
         p.click('.dia[data-data="2026-11-17"] .faixa[data-inicio="480"]')
         p.wait_for_selector('#folha-bloco:not([hidden])')
-        self.assertEqual(p.locator('#bloco-categoria optgroup[label="Idiomas"] option').count(), 2)
+        p.select_option('#bloco-tag', 'm')
+        self.assertIn('Vocabulário', p.inner_text('#bloco-subtag'))
 
     def test_mae_arquivada_some_dos_filtros_e_chip_continua_no_card(self):
         self.SEED['categories'][0]['archived'] = True

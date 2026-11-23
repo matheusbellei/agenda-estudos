@@ -11,17 +11,32 @@ export const CORES_TAG = [
   '#1B4F72', '#2471A3', '#3498DB', '#5DADE2', '#85C1E9', '#2E86C1', '#154360', '#76D7C4',
   '#4A235A', '#6C3483', '#8E44AD', '#A569BD', '#C39BD3', '#D81B60', '#EC407A', '#F48FB1', '#AD1457', '#F8BBD0',
   '#212121', '#424242', '#616161', '#9E9E9E', '#BDBDBD', '#607D8B', '#90A4AE', '#795548',
+  // tons pastel
+  '#FADBD8', '#F5CBA7', '#FCF3CF', '#D5F5E3', '#D6EAF8', '#E8DAEF', '#FDEDEC', '#E9F7EF', '#EBF5FB', '#F4ECF7', '#FEF9E7', '#F2F3F4',
+  // tons fortes e profundos
+  '#641E16', '#78281F', '#6E2C00', '#7E5109', '#7D6608', '#145A32', '#0B5345', '#0E6251', '#1A5276', '#21618C', '#283747', '#1B2631',
+  '#512E5F', '#4A148C', '#880E4F', '#B71C1C', '#E65100', '#33691E', '#006064', '#0D47A1', '#311B92', '#3E2723', '#263238', '#BF360C',
+  // vivos
+  '#00BCD4', '#009688', '#8BC34A', '#CDDC39', '#FFC107', '#FF5722', '#673AB7', '#3F51B5',
 ];
 
 export const GRUPOS_ICONES = [
-  ['Estudos', ['book', 'books', 'notebook', 'school', 'certificate', 'pencil', 'writing', 'highlight', 'clipboard', 'presentation', 'backpack', 'bookmark']],
-  ['Idiomas', ['language', 'alphabet-latin', 'message-language', 'world', 'flag', 'messages', 'microphone', 'headphones']],
-  ['Exatas e ciência', ['math', 'calculator', 'math-function', 'chart-line', 'atom', 'flask', 'dna', 'microscope', 'planet', 'binary']],
-  ['Tecnologia', ['code', 'terminal-2', 'device-laptop', 'database', 'cpu', 'cloud', 'robot', 'device-mobile']],
-  ['Humanas e artes', ['palette', 'brush', 'music', 'movie', 'camera', 'building-bank', 'scale', 'gavel', 'users', 'brain']],
-  ['Trabalho', ['briefcase', 'chart-bar', 'report-money', 'coin', 'building', 'phone', 'mail', 'calendar', 'clock', 'target']],
-  ['Saúde e rotina', ['heart', 'run', 'barbell', 'yoga', 'apple', 'bed', 'coffee', 'sun', 'moon', 'walk']],
-  ['Outros', ['star', 'bulb', 'rocket', 'puzzle', 'trophy', 'tag', 'pin', 'crown', 'home', 'plant', 'leaf', 'sparkles']],
+  ['Estudos', ['book', 'books', 'book-2', 'notebook', 'school', 'certificate', 'certificate-2', 'pencil', 'writing', 'highlight', 'clipboard', 'clipboard-list', 'clipboard-check', 'presentation', 'backpack', 'bookmark', 'bookmarks', 'notes', 'note', 'file-text', 'library', 'ruler-2', 'eraser', 'paperclip', 'abc']],
+  ['Idiomas', ['language', 'alphabet-latin', 'alphabet-greek', 'alphabet-cyrillic', 'message-language', 'world', 'world-search', 'flag', 'flag-2', 'messages', 'message-circle', 'microphone', 'headphones', 'speakerphone', 'volume', 'ear', 'quote']],
+  ['Exatas', ['math', 'math-function', 'math-symbols', 'math-integral', 'calculator', 'chart-line', 'chart-pie', 'chart-dots', 'function', 'infinity', 'percentage', 'square-root', 'sum', 'divide', 'plus-minus', 'variable', 'triangle', 'hexagon']],
+  ['Ciências', ['atom', 'atom-2', 'flask', 'flask-2', 'dna', 'dna-2', 'microscope', 'planet', 'telescope', 'magnet', 'bolt', 'temperature', 'leaf', 'virus', 'cell', 'biohazard', 'meteor', 'comet']],
+  ['Tecnologia', ['code', 'terminal-2', 'device-laptop', 'device-desktop', 'device-mobile', 'device-tablet', 'database', 'cpu', 'cloud', 'robot', 'brand-python', 'brand-javascript', 'brand-github', 'git-branch', 'api', 'bug', 'server', 'wifi', 'keyboard', 'binary', 'sitemap']],
+  ['Humanas', ['building-bank', 'scale', 'gavel', 'users', 'user', 'brain', 'history', 'world-latitude', 'map', 'map-2', 'compass', 'globe', 'flag-3', 'building-monument']],
+  ['Artes e música', ['palette', 'brush', 'paint', 'music', 'piano', 'microphone-2', 'movie', 'camera', 'photo', 'pencil-star', 'masks-theater', 'color-swatch', 'typography', 'vinyl']],
+  ['Trabalho', ['briefcase', 'briefcase-2', 'chart-bar', 'report-money', 'coin', 'coins', 'cash', 'building', 'building-store', 'phone', 'mail', 'calendar', 'clock', 'target', 'presentation-analytics', 'id-badge-2', 'file-invoice', 'chart-arrows']],
+  ['Vendas e dinheiro', ['pig-money', 'wallet', 'credit-card', 'receipt', 'shopping-cart', 'tag', 'discount', 'trending-up', 'trending-down', 'currency-real', 'moneybag', 'businessplan', 'cash-banknote', 'chart-candle']],
+  ['Saúde e corpo', ['heart', 'heartbeat', 'activity', 'run', 'barbell', 'yoga', 'stretching', 'swimming', 'bike', 'walk', 'apple', 'salad', 'pill', 'stethoscope', 'first-aid-kit', 'dental', 'eye']],
+  ['Rotina e casa', ['bed', 'coffee', 'sun', 'moon', 'sunrise', 'sunset', 'home', 'home-2', 'sofa', 'tools-kitchen-2', 'shopping-bag', 'basket', 'wash', 'clock-hour-4', 'alarm', 'hourglass']],
+  ['Fé e vida', ['heart-handshake', 'building-church', 'candle', 'sparkles', 'star', 'flame', 'feather', 'peace', 'rainbow']],
+  ['Família e pessoas', ['users-group', 'baby-carriage', 'friends', 'man', 'woman', 'mood-smile', 'mood-heart', 'paw', 'dog', 'cat', 'gift', 'cake', 'confetti', 'balloon']],
+  ['Lazer', ['device-gamepad-2', 'puzzle', 'chess', 'dice', 'ticket', 'beach', 'mountain', 'tent', 'plane', 'car', 'bus', 'map-pin', 'camera-selfie', 'ball-football', 'ball-basketball', 'trophy']],
+  ['Natureza', ['plant', 'plant-2', 'tree', 'trees', 'flower', 'seeding', 'cactus', 'mushroom', 'butterfly', 'fish', 'cloud-rain', 'snowflake', 'wind']],
+  ['Outros', ['bulb', 'rocket', 'target-arrow', 'flag-check', 'pin', 'pinned', 'crown', 'anchor', 'key', 'lock', 'shield', 'bell', 'tags', 'circle', 'square', 'check', 'x']],
 ];
 
 function criar(tag, atributos = {}, ...filhos) {
@@ -38,6 +53,12 @@ function criar(tag, atributos = {}, ...filhos) {
 const porNome = (a, b) => (a.archived - b.archived) || a.name.localeCompare(b.name, 'pt-BR');
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
+// Aberta pela tela Tags; o formulário do bloco usa para criar tag ou subtag sem sair dele.
+let abrirFormularioFn = null;
+export function criarTagPeloBloco({ mae = null, aoCriar, aoCancelar } = {}) {
+  if (abrirFormularioFn) abrirFormularioFn({ mae, aoCriar, aoCancelar });
+}
+
 export function iniciarTags({ estado }) {
   const secao = document.querySelector('#tela-tags');
   const nova = criar('button', { type: 'button', class: 'btn btn-principal', id: 'tags-nova' },
@@ -51,8 +72,16 @@ export function iniciarTags({ estado }) {
 
   const janela = criar('div', { id: 'tag-janela', class: 'menu-camada', hidden: '' });
   document.body.append(janela);
-  const fechar = () => { janela.hidden = true; janela.replaceChildren(); document.body.classList.remove('sem-rolagem'); };
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !janela.hidden) fechar(); });
+  // Quem abriu a janela (ex.: o bloco) fica sabendo como ela fechou.
+  let aoFechar = null;
+  const fechar = () => {
+    janela.hidden = true; janela.replaceChildren();
+    // a folha do bloco pode continuar aberta por baixo: ela cuida da própria rolagem
+    if (!document.querySelector('#folha-bloco:not([hidden])')) document.body.classList.remove('sem-rolagem');
+    const f = aoFechar; aoFechar = null; if (f) f();
+  };
+  // Esc fecha só esta janela, não a folha do bloco por baixo.
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !janela.hidden) { e.stopImmediatePropagation(); fechar(); } });
 
   function abrirJanela(titulo, ...conteudo) {
     const fundo = criar('div', { class: 'menu-fundo' });
@@ -66,7 +95,8 @@ export function iniciarTags({ estado }) {
   }
 
   // Criar (tag ou subtag de `mae`) ou editar `tag`.
-  function abrirFormulario({ tag = null, mae = null }) {
+  function abrirFormulario({ tag = null, mae = null, aoCriar = null, aoCancelar = null }) {
+    aoFechar = aoCancelar;
     const parentId = tag ? tag.parent_id || null : mae?.id || null;
     let icone = tag?.icon || mae?.icon || 'tag';
     const nome = criar('input', { id: 'tag-nome', type: 'text', maxlength: '60', autocomplete: 'off', placeholder: mae ? 'Vocabulário' : 'Idiomas' });
@@ -108,7 +138,10 @@ export function iniciarTags({ estado }) {
       try {
         const campos = { name: texto, color: cor.valor(), icon: icone };
         if (tag) await estado.alterar('categories', tag.id, campos);
-        else await estado.criar('categories', { ...campos, parent_id: parentId });
+        else {
+          const criada = await estado.criar('categories', { ...campos, parent_id: parentId });
+          aoFechar = aoCriar ? () => aoCriar(criada) : null;
+        }
         fechar();
       } catch (err) {
         erro.textContent = err.message || 'Não foi possível salvar.';
@@ -204,6 +237,7 @@ export function iniciarTags({ estado }) {
   }
 
   nova.addEventListener('click', () => abrirFormulario({}));
+  abrirFormularioFn = abrirFormulario;
   registrarTela('tags', { mostrar: desenhar });
   estado.aoMudar(() => { if (!secao.hidden) desenhar(); });
 }

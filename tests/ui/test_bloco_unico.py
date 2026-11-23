@@ -36,7 +36,7 @@ class TestBlocoUnico(CalendarioBase):
     def test_perguntar_cria_card_na_lista_escolhida(self):
         self.novo_bloco(lists=LISTAS, categories=[dict(id='cat1', name='Idiomas')]); p = self.page
         p.fill('#bloco-titulo', 'Vocabulário em Espanhol')
-        p.select_option('#bloco-categoria', 'cat1')
+        p.select_option('#bloco-tag', 'cat1')
         p.check('#bloco-criar-card')
         self.assertEqual(p.input_value('#bloco-novo-card-titulo'), 'Vocabulário em Espanhol')
         self.assertEqual(p.input_value('#bloco-novo-card-lista'), 'L1')
