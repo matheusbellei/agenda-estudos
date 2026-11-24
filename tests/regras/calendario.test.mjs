@@ -178,3 +178,10 @@ test('ocorrências: regra com card leva card_id e vira kind study; sem card cont
   const [semCard] = ocorrenciasDeCompromissos([compromisso()], '2026-11-16', '2026-11-16');
   assert.deepEqual([semCard.card_id, semCard.kind], [null, 'commitment']);
 });
+
+test('ocorrências levam o lembrete da fixa', () => {
+  const [o] = ocorrenciasDeCompromissos([compromisso({ lembrete_min: 30 })], '2026-11-16', '2026-11-16');
+  assert.equal(o.lembrete_min, 30);
+  const [p] = ocorrenciasDeCompromissos([compromisso()], '2026-11-16', '2026-11-16');
+  assert.equal(p.lembrete_min, null);
+});

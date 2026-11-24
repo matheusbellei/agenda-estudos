@@ -16,6 +16,7 @@ export function ocorrenciasDeCompromissos(commitments, de, ate) {
         // Sem separação estudo/compromisso na tela: com card é estudo (conta no progresso do card).
         kind: c.card_id ? 'study' : 'commitment',
         card_id: c.card_id || null,
+        lembrete_min: c.lembrete_min ?? null,
         title: c.title,
         category_id: c.category_id,
         status: 'planned',
