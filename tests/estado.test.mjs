@@ -25,17 +25,18 @@ function storeFalso(inicial = {}) {
       return db[t][i];
     },
     async remove(t, id) { f('remove'); db[t] = db[t].filter((l) => l.id !== id); },
+    async removeIds(t, ids) { f('removeIds'); db[t] = db[t].filter((l) => !ids.includes(l.id)); },
     async removeWhere(t, filtro) { f('removeWhere'); db[t] = db[t].filter((l) => !Object.keys(filtro).every((k) => l[k] === filtro[k])); },
   };
 }
 
-test('carregar preenche as 10 chaves de dados', async () => {
+test('carregar preenche as 12 chaves de dados', async () => {
   const e = criarEstado(storeFalso({ cards: [{ id: 'c1' }], categories: [{ id: 'k1' }] }));
   assert.deepEqual(Object.keys(e.dados), TABELAS);
   await e.carregar();
   assert.equal(e.dados.cards.length, 1);
   assert.equal(e.dados.categories.length, 1);
-  assert.equal(TABELAS.length, 10);
+  assert.equal(TABELAS.length, 12);
 });
 
 test('criar acrescenta em dados e avisa o ouvinte uma vez', async () => {
@@ -77,7 +78,12 @@ test('ajustes: padrões sem linha; alterar settings cria a linha e depois atuali
   const store = storeFalso();
   const e = criarEstado(store);
   await e.carregar();
-  assert.deepEqual(e.ajustes(), { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null });
+  assert.deepEqual(e.ajustes(), { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
+    notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
+    notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
+    sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
+    foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
+    revisoes_dias: [7, 30], modelos_com_fixas: false });
   await e.alterar('settings', null, { day_start_min: 480 });
   assert.equal(e.ajustes().day_start_min, 480);
   assert.equal(e.ajustes().day_end_min, 1320);
@@ -223,4 +229,16 @@ test('excluir card tira o card das fixas que apontavam para ele (como o banco fa
   await e.carregar();
   await e.excluir('cards', 'c1');
   assert.deepEqual(e.dados.commitments, [{ id: 'f1', card_id: null }, { id: 'f2', card_id: null }]);
+});
+
+test('trocarBlocos cria tudo num lote e só depois tira os antigos; se criar falha, nada sai', async () => {
+  const s = storeFalso({ blocks: [{ id: 'a', date: '2026-11-23' }, { id: 'b', date: '2026-11-24' }, { id: 'c', date: '2026-11-25' }] });
+  const e = criarEstado(s); await e.carregar();
+  s.falhas.add('insert');
+  await assert.rejects(e.trocarBlocos(['a', 'b'], [{ date: '2026-11-23', title: 'novo' }]));
+  assert.deepEqual(s.db.blocks.map((b) => b.id), ['a', 'b', 'c']);
+  s.falhas.delete('insert');
+  await e.trocarBlocos(['a', 'b'], [{ date: '2026-11-23', title: 'novo' }, { date: '2026-11-24', title: 'novo 2' }]);
+  assert.deepEqual(s.db.blocks.map((b) => b.title || b.id), ['c', 'novo', 'novo 2']);
+  assert.deepEqual(e.dados.blocks.map((b) => b.title || b.id), ['c', 'novo', 'novo 2']);
 });

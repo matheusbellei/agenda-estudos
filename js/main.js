@@ -1,12 +1,21 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
+// Lido assim para um config.js antigo, sem VAPID_PUBLIC_KEY, não quebrar o app.
+import * as config from './config.js';
 import { criarStoreReal } from './armazenamento.js';
 import { criarEstado } from './estado.js';
-import { iniciarCasca } from './telas/casca.js';
+import { iniciarCasca, irPara } from './telas/casca.js';
 import { iniciarAjustes } from './telas/ajustes.js';
 import { iniciarTags } from './telas/tags.js';
+import { iniciarDashboards } from './telas/dashboards.js';
+import { iniciarRevisao } from './telas/revisao.js';
+import { iniciarFoco } from './telas/foco.js';
+import { iniciarDiario } from './telas/diario.js';
 import { iniciarQuadro } from './telas/quadro.js';
 import { iniciarCard, abrirCard } from './telas/card.js';
-import { iniciarBloco } from './telas/bloco.js';
+import { iniciarBloco, abrirBloco } from './telas/bloco.js';
+import { blocosDoPeriodo } from './regras/calendario.js';
+import { refDoBloco } from './regras/lembretes.js';
+import { sincronizar as sincronizarAparelho } from './notificacoes.js';
 import { iniciarSemana } from './telas/semana.js';
 import { iniciarHoje, mostrarDia } from './telas/hoje.js';
 import { iniciarBusca } from './telas/busca.js';
@@ -30,10 +39,14 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
     document.querySelector('#login-entrar').disabled = true;
     return;
   }
-  const store = window.__TEST_STORE__ || criarStoreReal(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const store = window.__TEST_STORE__ || criarStoreReal(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { vapid: config.VAPID_PUBLIC_KEY || '' });
   const estado = criarEstado(store);
   iniciarAjustes({ estado, store });
   iniciarTags({ estado });
+  iniciarDashboards({ estado });
+  iniciarRevisao({ estado });
+  const vigiaFoco = iniciarFoco({ estado, store });
+  iniciarDiario({ estado });
   iniciarQuadro({ estado, abrirCard });
   iniciarCard({ estado, store });
   iniciarBloco({ estado, abrirCard });
@@ -66,6 +79,23 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   document.addEventListener('visibilitychange', voltar);
   window.addEventListener('focus', voltar);
 
+  // Toque na notificação: ./?bloco=<ref>&data=<AAAA-MM-DD> abre o dia no Hoje e o bloco por cima.
+  function abrirDoLink(endereco) {
+    const u = new URL(endereco, location.href);
+    // Aviso da revisão da semana: abre a tela da revisão.
+    // Avisos da revisão da semana e do fim de fase do foco: abrem a tela.
+    const tela = u.searchParams.get('tela');
+    if (tela === 'revisao' || tela === 'foco') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
+    const data = u.searchParams.get('data');
+    const ref = u.searchParams.get('bloco');
+    if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
+    history.replaceState(null, '', location.pathname);
+    mostrarDia(data);
+    const bloco = ref && blocosDoPeriodo(estado.dados.commitments, estado.dados.blocks, data, data).find((b) => refDoBloco(b) === ref);
+    if (bloco) abrirBloco(bloco);
+  }
+  navigator.serviceWorker?.addEventListener?.('message', (e) => { if (dentro && e.data?.tipo === 'abrir') abrirDoLink(e.data.url); });
+
   await iniciarCasca({
     store,
     aoEntrar: async () => {
@@ -73,7 +103,11 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
       ultimoDia = isoDe(new Date());
       await verificarVirada({ estado, hoje: ultimoDia });
       dentro = true;
+      // Depois de a casca mostrar a tela inicial (Semana), para o dia do link não ser sobrescrito.
+      setTimeout(() => abrirDoLink(location.href), 0);
+      vigiaFoco.entrar().catch(() => {});
+      sincronizarAparelho(store).catch(() => {});
     },
-    aoSair: () => { dentro = false; },
+    aoSair: () => { dentro = false; vigiaFoco.sair(); },
   });
 })();

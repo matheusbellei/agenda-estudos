@@ -85,3 +85,17 @@ class TestAjustes(UITest):
         self.assertEqual((r['ruim'], r['falta']), ('rgb(111, 78, 55)', 'rgb(111, 78, 55)'))
         self.assertEqual((r['valor'], r['valor2'], r['ativo']), ('#6F4E37', '#6F4E37', '#6F4E37'))
 
+
+
+class TestAcompanhamentoAjustes(UITest):
+    def test_minimo_da_sequencia_grava(self):
+        self.login(); self.ir('ajustes'); p = self.page
+        self.assertEqual(p.input_value('#aj-sequencia'), '30')
+        p.fill('#aj-sequencia', '45'); p.click('#aj-acomp-salvar')
+        p.wait_for_function("window.__memdb.settings.length === 1 && window.__memdb.settings[0].sequencia_min === 45")
+
+    def test_minimo_fora_da_faixa_da_erro(self):
+        self.login(); self.ir('ajustes'); p = self.page
+        p.fill('#aj-sequencia', '0'); p.click('#aj-acomp-salvar')
+        self.assertEqual(p.inner_text('#aj-acomp-erro'), 'Use de 5 a 600 minutos.')
+        self.assertEqual(self.db()['settings'], [])

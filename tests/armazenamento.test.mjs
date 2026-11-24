@@ -124,3 +124,39 @@ test('get lê uma linha atual pelo id (ou pelo dono em settings) e devolve null 
   assert.deepEqual(ops(client.calls[1]), [['select', '*'], ['eq', 'owner_id', 'u1']]);
   assert.equal(await createStore(fakeClient({ data: [], error: null })).get('cards', 'y'), null);
 });
+
+test('store real: url da função, chave pública e token da sessão (notificações)', async () => {
+  const antes = globalThis.window;
+  const client = fakeClient({ data: [], error: null });
+  client.auth = { ...(client.auth || {}), getSession: async () => ({ data: { session: { access_token: 'tok' } } }) };
+  globalThis.window = { supabase: { createClient: () => client } };
+  try {
+    const { criarStoreReal } = await import('../js/armazenamento.js');
+    const s = criarStoreReal('https://proj.supabase.co', 'sb_publishable_x', { vapid: 'BPUB' });
+    assert.equal(s.urlDaFuncao('lembretes'), 'https://proj.supabase.co/functions/v1/lembretes');
+    assert.equal(s.vapidPublica(), 'BPUB');
+    assert.equal(await s.tokenDeAcesso(), 'tok');
+    assert.equal(criarStoreReal('https://proj.supabase.co', 'k').vapidPublica(), '');
+  } finally {
+    globalThis.window = antes;
+  }
+});
+
+test('list de focos ordena pelo dono (a tabela não tem id)', async () => {
+  const client = fakeClient({ data: [], error: null });
+  await createStore(client).list('focos');
+  assert.deepEqual(ops(client.calls[0]), [['select', '*'], ['order', 'owner_id'], ['range', 0, 999]]);
+});
+
+test('updateWhere filtra por todas as colunas e devolve [] sem erro quando nada casa', async () => {
+  const client = fakeClient({ data: [], error: null });
+  const out = await createStore(client).updateWhere('focos', { owner_id: 'u1', termina_em: '2026-11-24T13:25:00+00:00' }, { estado: 'esperando' });
+  assert.deepEqual(out, []);
+  assert.deepEqual(ops(client.calls[0]), [['update', { estado: 'esperando' }], ['eq', 'owner_id', 'u1'], ['eq', 'termina_em', '2026-11-24T13:25:00+00:00'], ['select']]);
+});
+
+test('removeIds apaga várias linhas numa chamada só', async () => {
+  const client = fakeClient({ data: null, error: null });
+  await createStore(client).removeIds('blocks', ['a', 'b']);
+  assert.deepEqual(ops(client.calls[0]), [['delete'], ['in', 'id', ['a', 'b']]]);
+});

@@ -7,6 +7,7 @@ const DB = 'estudos_test';
 const A = '11111111-1111-1111-1111-111111111111';
 const B = '22222222-2222-2222-2222-222222222222';
 const TABELAS = ['attachments', 'blocks', 'card_categories', 'cards', 'categories', 'commitments', 'items', 'lists', 'occurrences', 'settings'];
+const TABELAS_NOTIF = ['adiamentos', 'focos', 'modelos', 'notificacoes_enviadas', 'push_subscriptions', 'revisoes'];
 
 function psql(db, sql) {
   return execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', db,
@@ -37,9 +38,9 @@ before(() => {
 // Dados de A usados pelos testes seguintes.
 const a = {};
 
-test('as 10 tabelas existem em public com RLS ligado', () => {
+test('as 16 tabelas existem em public com RLS ligado', () => {
   const out = psql(DB, "select tablename||':'||rowsecurity from pg_tables where schemaname='public' order by 1");
-  assert.equal(out, TABELAS.map((t) => `${t}:true`).join('\n'));
+  assert.equal(out, [...TABELAS, ...TABELAS_NOTIF].sort().map((t) => `${t}:true`).join('\n'));
 });
 
 test('usuário A grava categoria, lista, card, item e bloco, e owner_id é preenchido sozinho', () => {
@@ -202,4 +203,190 @@ test('mãe e subtag no mesmo insert (restauração do backup em lote) são aceit
   as(A, `delete from categories where id='${m}'`);
   as(A, `insert into categories(id, name, parent_id) values ('${m}','Lote mãe', null), ('44444444-4444-4444-4444-444444444444','Lote filha','${m}')`);
   assert.equal(psql(DB, `select count(*) from categories where parent_id='${m}'`), '1');
+});
+
+// ---- Notificações (migração de 2026-11-23)
+test('push_subscriptions: cada um vê e apaga só os próprios aparelhos', () => {
+  as(A, `insert into push_subscriptions(endpoint,p256dh,auth,aparelho) values ('https://push.exemplo/a1','k','s','Celular')`);
+  assert.equal(as(B, `select count(*) from push_subscriptions`), '0');
+  as(B, `delete from push_subscriptions`);
+  assert.equal(psql(DB, `select count(*) from push_subscriptions`), '1');
+});
+
+test('push_subscriptions: endpoint repetido é recusado', () => {
+  fails(() => as(A, `insert into push_subscriptions(endpoint,p256dh,auth) values ('https://push.exemplo/a1','k','s')`), /duplicate key/);
+});
+
+test('lembrete_min aceita só os valores da lista, em blocos e fixas', () => {
+  as(A, `insert into blocks(date,start_min,end_min,kind,title,lembrete_min) values ('2026-11-23',600,660,'commitment','x',30)`);
+  fails(() => as(A, `insert into blocks(date,start_min,end_min,kind,title,lembrete_min) values ('2026-11-23',600,660,'commitment','x',7)`), /check constraint/);
+  fails(() => as(A, `insert into commitments(title,days,start_min,end_min,valid_from,lembrete_min) values ('f','{1}',600,660,'2026-11-01',45)`), /check constraint/);
+});
+
+test('settings tem os padrões das notificações', () => {
+  assert.equal(psql(DB, `select notif_antes_min||':'||notif_resumo||':'||notif_resumo_min||':'||notif_pendencias||':'||notif_pendencias_min||':'||notif_silencio||':'||notif_silencio_de||':'||notif_silencio_ate||':'||fuso from settings where owner_id='${A}'`),
+    '10:true:420:true:1290:false:1320:420:America/Sao_Paulo');
+});
+
+test('authenticated não lê nem grava notificacoes_enviadas', () => {
+  fails(() => as(A, `select count(*) from notificacoes_enviadas`), /permission denied/);
+});
+
+test('adiamentos: só do dono', () => {
+  as(A, `insert into adiamentos(ref,data,quando) values ('b1','2026-11-23', now())`);
+  assert.equal(as(B, `select count(*) from adiamentos`), '0');
+});
+
+test('migração de notificações roda 2× sobre o schema da rodada 1', () => {
+  const VELHO = 'estudos_migracao_notif';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', '6af6f46:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psql(VELHO, `insert into auth.users values ('${A}','a@x.com')`);
+  psql(VELHO, `insert into settings(owner_id) values ('${A}')`);
+  psqlFile(VELHO, 'supabase/migracao-2026-11-notificacoes.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-notificacoes.sql');
+  assert.equal(psql(VELHO, `select notif_antes_min from settings`), '10');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.tables where table_name in ('push_subscriptions','notificacoes_enviadas','adiamentos')`), '3');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+// ---- Acompanhamento (migração de 2026-11-24)
+test('colunas de acompanhamento têm os padrões', () => {
+  const c = id(as(A, `insert into categories(name) values ('Padrão acomp') returning id`));
+  assert.equal(psql(DB, `select conta_estudo||':'||coalesce(meta_semanal_min::text,'nulo') from categories where id='${c}'`), 'false:nulo');
+  const k = id(as(A, `insert into cards(title) values ('Card acomp') returning id`));
+  assert.equal(psql(DB, `select coalesce(meta_min::text,'nulo') from cards where id='${k}'`), 'nulo');
+  assert.equal(psql(DB, `select sequencia_min||':'||revisao||':'||revisao_dia||':'||revisao_min from settings where owner_id='${A}'`), '30:true:7:1200');
+});
+
+test('metas zero ou negativas e dia de revisão 8 são rejeitados', () => {
+  fails(() => as(A, `insert into categories(name, meta_semanal_min) values ('x', 0)`), /check constraint/);
+  fails(() => as(A, `insert into cards(title, meta_min) values ('x', -60)`), /check constraint/);
+  fails(() => as(A, `update settings set revisao_dia = 8`), /check constraint/);
+  fails(() => as(A, `update settings set sequencia_min = 4`), /check constraint/);
+  fails(() => as(A, `update settings set sequencia_min = 601`), /check constraint/);
+  as(A, `update settings set sequencia_min = 600`);
+  as(A, `update settings set sequencia_min = 30`);
+  as(A, `insert into categories(name, conta_estudo, meta_semanal_min) values ('Meta ok', true, 600)`);
+});
+
+test('migração de acompanhamento roda 2× sobre o schema das notificações', () => {
+  const VELHO = 'estudos_migracao_acomp';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', 'e3c7919:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psql(VELHO, `insert into auth.users values ('${A}','a@x.com')`);
+  psql(VELHO, `insert into settings(owner_id) values ('${A}')`);
+  psql(VELHO, `insert into categories(owner_id,name) values ('${A}','Antiga')`);
+  psqlFile(VELHO, 'supabase/migracao-2026-11-acompanhamento.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-acompanhamento.sql');
+  assert.equal(psql(VELHO, `select sequencia_min||':'||revisao_dia from settings`), '30:7');
+  assert.equal(psql(VELHO, `select name||':'||conta_estudo from categories`), 'Antiga:false');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.columns where table_name='cards' and column_name='meta_min'`), '1');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+// ---- Modo foco e diário (migração de 2026-11-24)
+test('blocks.diario e padrões do foco', () => {
+  const b = id(as(A, `insert into blocks(date,start_min,end_min,kind,title) values ('2026-11-24',600,660,'study','x') returning id`));
+  assert.equal(psql(DB, `select '['||diario||']' from blocks where id='${b}'`), '[]');
+  assert.equal(psql(DB, `select foco_min||':'||pausa_min||':'||pausa_longa_min||':'||ciclos_longa||':'||foco_som from settings where owner_id='${A}'`), '25:5:15:4:true');
+  fails(() => as(A, `update settings set foco_min = 3`), /check constraint/);
+  fails(() => as(A, `update settings set ciclos_longa = 9`), /check constraint/);
+});
+
+test('focos: uma linha por dono, só do dono', () => {
+  as(A, `insert into focos(fase, estado, termina_em) values ('foco','rodando', now())`);
+  fails(() => as(A, `insert into focos(fase, estado) values ('foco','rodando')`), /duplicate key/);
+  assert.equal(as(B, `select count(*) from focos`), '0');
+  as(B, `update focos set estado='pausado'`);
+  as(B, `delete from focos`);
+  assert.equal(psql(DB, `select estado from focos`), 'rodando');
+  as(A, `update focos set estado='esperando'`);
+  as(A, `delete from focos`);
+  assert.equal(psql(DB, `select count(*) from focos`), '0');
+});
+
+test('focos rejeita fase ou estado desconhecidos', () => {
+  fails(() => as(A, `insert into focos(fase, estado) values ('descanso','rodando')`), /check constraint/);
+  fails(() => as(A, `insert into focos(fase, estado) values ('foco','parado')`), /check constraint/);
+});
+
+test('migração de foco e diário roda 2× sobre o schema da rodada 2', () => {
+  const VELHO = 'estudos_migracao_foco';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', '8fce61f:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psql(VELHO, `insert into auth.users values ('${A}','a@x.com')`);
+  psql(VELHO, `insert into settings(owner_id) values ('${A}')`);
+  psqlFile(VELHO, 'supabase/migracao-2026-11-foco-diario.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-foco-diario.sql');
+  assert.equal(psql(VELHO, `select foco_min||':'||ciclos_longa from settings`), '25:4');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.columns where table_name='blocks' and column_name='diario'`), '1');
+  assert.equal(psql(VELHO, `select rowsecurity from pg_tables where tablename='focos'`), 't');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+// ---- Modelos de semana e revisão espaçada (migração de 2026-11-24)
+test('modelos e revisões: padrões, validação e nome único', () => {
+  assert.equal(psql(DB, `select revisoes_dias::text||':'||modelos_com_fixas from settings where owner_id='${A}'`), '{7,30}:false');
+  for (const v of ["'{}'", "'{0}'", "'{30,7}'", "'{7,7}'", "'{1,2,3,4,5,6,7}'", "'{400}'"]) {
+    fails(() => as(A, `update settings set revisoes_dias = ${v}`), /check constraint/);
+  }
+  as(A, `update settings set revisoes_dias = '{3,10,30}'`);
+  as(A, `insert into modelos(nome, blocos) values ('Semana de prova', '[]')`);
+  fails(() => as(A, `insert into modelos(nome) values ('semana de PROVA')`), /duplicate key/);
+  as(B, `insert into modelos(nome) values ('Semana de prova')`);
+});
+
+test('modelos e revisões: só do dono', () => {
+  const c = id(as(A, `insert into cards(title) values ('Card revisão') returning id`));
+  as(A, `insert into revisoes(card_id, data) values ('${c}', '2026-12-01')`);
+  assert.equal(as(B, `select count(*) from revisoes`), '0');
+  assert.equal(as(B, `select count(*) from modelos where nome = 'Semana de prova' and owner_id = '${A}'`), '0');
+  as(B, `update revisoes set status = 'feita'`);
+  as(B, `delete from revisoes`);
+  assert.equal(psql(DB, `select status from revisoes where card_id='${c}'`), 'pendente');
+  fails(() => as(A, `insert into revisoes(card_id, data, status) values ('${c}', '2026-12-02', 'talvez')`), /check constraint/);
+});
+
+test('apagar o card apaga as revisões e solta o bloco', () => {
+  const c = id(as(A, `insert into cards(title) values ('Card que some') returning id`));
+  const r = id(as(A, `insert into revisoes(card_id, data) values ('${c}', '2026-12-01') returning id`));
+  const b = id(as(A, `insert into blocks(date,start_min,end_min,kind,title,revisao_id) values ('2026-12-01',600,660,'study','Revisão','${r}') returning id`));
+  as(A, `delete from revisoes where id='${r}'`);
+  assert.equal(psql(DB, `select coalesce(revisao_id::text,'nulo') from blocks where id='${b}'`), 'nulo');
+  as(A, `insert into revisoes(card_id, data) values ('${c}', '2026-12-02')`);
+  as(A, `delete from cards where id='${c}'`);
+  assert.equal(psql(DB, `select count(*) from revisoes where card_id='${c}'`), '0');
+});
+
+test('migração de modelos e revisões roda 2× sobre o schema da rodada 3', () => {
+  const VELHO = 'estudos_migracao_modelos';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', 'dd9719b:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psql(VELHO, `insert into auth.users values ('${A}','a@x.com')`);
+  psql(VELHO, `insert into settings(owner_id) values ('${A}')`);
+  psqlFile(VELHO, 'supabase/migracao-2026-11-modelos-revisoes.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-modelos-revisoes.sql');
+  assert.equal(psql(VELHO, `select revisoes_dias::text from settings`), '{7,30}');
+  assert.equal(psql(VELHO, `select count(*) from pg_tables where tablename in ('modelos','revisoes') and rowsecurity`), '2');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+test('revisão não pode passar a apontar para card de outra pessoa', () => {
+  const ca = id(as(A, `insert into cards(title) values ('Card de A rev') returning id`));
+  const cb = id(as(B, `insert into cards(title) values ('Card de B rev') returning id`));
+  const r = id(as(A, `insert into revisoes(card_id, data) values ('${ca}', '2026-12-01') returning id`));
+  fails(() => as(A, `update revisoes set card_id = '${cb}' where id = '${r}'`), /row-level security/);
 });

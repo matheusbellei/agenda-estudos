@@ -1,7 +1,12 @@
 // Dados em memória + ações que gravam no store e avisam os ouvintes.
-export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings'];
+export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'settings'];
 
-const AJUSTES_PADRAO = { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null };
+const AJUSTES_PADRAO = { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
+  notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
+  notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
+  sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
+  foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
+  revisoes_dias: [7, 30], modelos_com_fixas: false };
 
 export function criarEstado(store) {
   const dados = Object.fromEntries(TABELAS.map((t) => [t, []]));
@@ -104,6 +109,18 @@ export function criarEstado(store) {
       if (tabela === 'commitments') cascataCompromisso(id);
       if (tabela === 'categories') cascataCategoria(id);
       avisar();
+    },
+    // Troca blocos de uma vez (aplicar modelo): cria os novos num lote e só depois apaga os antigos numa chamada.
+    // Se criar falhar, nada foi apagado.
+    async trocarBlocos(remover, novos) {
+      const criadas = novos.length ? await store.insert('blocks', novos) : [];
+      dados.blocks.push(...criadas);
+      try {
+        await store.removeIds('blocks', remover);
+        dados.blocks = dados.blocks.filter((b) => !remover.includes(b.id));
+      } finally {
+        avisar(); // se apagar falhar, os novos já estão lá e os antigos continuam: nada se perde
+      }
     },
     // Deixa o card exatamente com as categorias de `ids`.
     async definirCategorias(cardId, ids) {

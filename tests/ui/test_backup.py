@@ -1,7 +1,7 @@
 import json
 from harness import UITest
 
-TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings']
+TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'settings']
 
 
 class BackupBase(UITest):
@@ -20,7 +20,10 @@ class BackupBase(UITest):
         ])
         self.seed('attachments', [{'id': 'an1', 'card_id': 'card1', 'kind': 'link', 'name': 'Site', 'url': 'https://exemplo.test'}])
         self.seed('commitments', [{'id': 'com1', 'title': 'Aula', 'days': [2], 'start_min': 480, 'end_min': 540, 'valid_from': '2026-11-01'}])
-        self.seed('blocks', [{'id': 'blo1', 'date': '2026-11-17', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card1', 'item_id': 'it1', 'title': 'Gramática'}])
+        self.seed('revisoes', [{'id': 'rev1', 'card_id': 'card2', 'data': '2026-11-17', 'status': 'pendente'}])
+        self.seed('blocks', [{'id': 'blo1', 'date': '2026-11-17', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card1', 'item_id': 'it1', 'title': 'Gramática'},
+                             {'id': 'blo2', 'date': '2026-11-18', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card2', 'title': 'Revisão · Flashcards', 'revisao_id': 'rev1'}])
+        self.seed('modelos', [{'id': 'mod1', 'nome': 'Semana de prova', 'blocos': [{'dia': 1, 'start_min': 480, 'end_min': 540, 'kind': 'study', 'title': 'Gramática'}]}])
         self.seed('occurrences', [{'id': 'oco1', 'card_id': 'card2', 'date': '2026-11-09', 'status': 'done'}])
         self.seed('settings', [{'day_start_min': 420}])
         p.reload(); p.wait_for_selector('#app', state='visible')
@@ -45,7 +48,7 @@ class BackupBase(UITest):
 
 
 class TestBackup(BackupBase):
-    def test_exporta_arquivo_com_as_10_tabelas_e_sem_owner_id(self):
+    def test_exporta_arquivo_com_as_12_tabelas_e_sem_owner_id(self):
         self.abrir_com_dados()
         nome, bruto = self.exportar()
         self.assertEqual(nome, 'agenda-estudos-2026-11-16.json')
@@ -229,3 +232,26 @@ class TestRestaurarEmOutraConta(BackupBase):
         self.assertIn('Restaure em uma conta vazia ou na mesma conta de onde o backup saiu', texto)
         self.assertIn('antes de importar o Trello', texto)
         self.assertNotIn('Nada é apagado nem alterado', texto)
+
+
+class TestBackupAntigo(BackupBase):
+    def test_backup_sem_modelos_e_revisoes_restaura(self):
+        self.abrir_com_dados()
+        _, bruto = self.exportar()
+        dados = json.loads(bruto)
+        for t in ('modelos', 'revisoes'): del dados['tabelas'][t]
+        dados['tabelas']['blocks'] = [b for b in dados['tabelas']['blocks'] if not b.get('revisao_id')]
+        self.page.evaluate("(ts) => ts.forEach((t) => { window.__memdb[t].length = 0; })", TABELAS)
+        self.assertTrue(self.restaurar(json.dumps(dados).encode()).startswith('Restaurado:'))
+        self.assertEqual(len(self.db()['cards']), 2)
+
+
+class TestModeloComMesmoNome(BackupBase):
+    def test_modelo_recriado_com_o_mesmo_nome_nao_impede_restaurar(self):
+        self.abrir_com_dados()
+        _, bruto = self.exportar()
+        self.page.evaluate("() => { window.__memdb.modelos[0].id = 'mod-novo'; window.__memdb.cards.splice(1, 1); }")
+        self.assertTrue(self.restaurar(bruto).startswith('Restaurado:'))
+        nomes = sorted(m['nome'] for m in self.db()['modelos'])
+        self.assertEqual(nomes, ['Semana de prova', 'Semana de prova (restaurado)'])
+        self.assertEqual(len(self.db()['cards']), 2)

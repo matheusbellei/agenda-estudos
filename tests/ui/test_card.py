@@ -185,7 +185,7 @@ class TestCard(QuadroBase):
         self.preparar_card(); p = self.page; self.abrir()
         p.fill('#card-titulo', '<img src=x onerror=window.__x=1>'); p.press('#card-titulo', 'Enter')
         self.add_itens('<i>item</i>')
-        self.assertEqual(p.locator('#folha-card i').count(), 0)
+        self.assertEqual(p.locator('#folha-card i:not(.ti)').count(), 0)  # os ícones do app são <i class="ti">
         self.assertEqual(p.evaluate('window.__x'), None)
 
     def test_falha_ao_criar_item_ou_grupo_mantem_o_texto(self):
@@ -228,3 +228,60 @@ class TestCard(QuadroBase):
         p.click('#card-fixa'); p.click('#card-fixa-confirmar')
         p.wait_for_function("window.__memdb.cards[0].is_fixed === true")
         self.assertIsNone(self.db()['cards'][0]['completed_at'])
+
+
+class TestMetaCard(QuadroBase):
+    def preparar_com_blocos(self, meta=None):
+        self.preparar(cards=[{'title': 'Curso de Python', 'lista': 'Backlog', 'position': 1024, **({'meta_min': meta} if meta else {})}])
+        self.cid = self.card_id('Curso de Python')
+        base = {'kind': 'study', 'title': 'Python', 'card_id': self.cid, 'category_id': None, 'item_id': None, 'commitment_id': None,
+                'fixed_date': None, 'instead_note': '', 'lembrete_min': None}
+        self.seed('blocks', [
+            dict(base, date='2026-11-16', start_min=480, end_min=720, status='done', cancelled=False),
+            dict(base, date='2026-11-17', start_min=480, end_min=600, status='planned', cancelled=False),
+            dict(base, date='2026-11-18', start_min=480, end_min=600, status='planned', cancelled=True),
+        ])
+        p = self.page
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
+
+    def abrir(self):
+        p = self.page
+        p.click(f'.cartao-card[data-card="{self.cid}"] .cartao-titulo'); p.wait_for_selector('#folha-card', state='visible')
+
+    def test_definir_meta_grava_e_mostra_planejadas_e_cumpridas(self):
+        self.preparar_com_blocos(); p = self.page
+        self.assertEqual(p.locator('.card-meta-chip').count(), 0)
+        self.abrir()
+        self.assertEqual(p.inner_text('#card-meta-texto'), 'Planejadas 6h · Cumpridas 4h')
+        p.fill('#card-meta-h', '10'); p.dispatch_event('#card-meta-h', 'change')
+        p.wait_for_function(f"window.__memdb.cards.find(c => c.id === '{self.cid}').meta_min === 600")
+        self.assertEqual(p.inner_text('#card-meta-texto'), 'Planejadas 6h · Cumpridas 4h / meta 10h')
+        self.assertTrue(p.is_visible('.card-meta-barra'))
+
+    def test_limpar_meta_grava_nulo(self):
+        self.preparar_com_blocos(meta=600); p = self.page
+        self.assertEqual(p.inner_text(f'.cartao-card[data-card="{self.cid}"] .card-meta-chip'), '4h/10h')
+        self.abrir()
+        self.assertEqual(p.input_value('#card-meta-h'), '10')
+        p.fill('#card-meta-h', ''); p.dispatch_event('#card-meta-h', 'change')
+        p.wait_for_function(f"window.__memdb.cards.find(c => c.id === '{self.cid}').meta_min === null")
+        self.assertTrue(p.is_hidden('.card-meta-barra'))
+
+
+class TestMetaCardFuso(TestMetaCard):
+    # Domingo 22/11 ao meio-dia em São Paulo já é segunda 23/11 em Tóquio: a semana do fuso dos ajustes manda.
+    TODAY = '2026-11-22'
+
+    def test_horas_do_card_usam_o_fuso_dos_ajustes(self):
+        self.preparar(cards=[{'title': 'Curso de Python', 'lista': 'Backlog', 'position': 1024, 'meta_min': 600}])
+        self.cid = self.card_id('Curso de Python')
+        self.seed('settings', [{'fuso': 'Asia/Tokyo'}])
+        self.seed('commitments', [{'id': 'F1', 'title': 'Python', 'category_id': None, 'days': [1], 'start_min': 600, 'end_min': 660,
+                                   'valid_from': '2026-11-09', 'valid_to': None, 'card_id': self.cid, 'lembrete_min': None}])
+        p = self.page
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
+        self.abrir()
+        self.assertEqual(p.inner_text('#card-meta-texto'), 'Planejadas 3h · Cumpridas 0 min / meta 10h')
+
+    test_definir_meta_grava_e_mostra_planejadas_e_cumpridas = None
+    test_limpar_meta_grava_nulo = None

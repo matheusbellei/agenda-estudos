@@ -1,6 +1,6 @@
 // Banco em memória só para testes de interface: mesma interface do store real (js/armazenamento.js).
 (function () {
-  const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings'];
+  const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings', 'push_subscriptions', 'adiamentos', 'focos', 'revisoes', 'modelos'];
   const USERS = [{ id: 'u1', email: 'dono@exemplo.com', password: 'senha123' }];
   const SO_DONO = 'Você só pode alterar os seus próprios dados.';
   // Padrões do banco (supabase/schema.sql) que o app costuma deixar de fora ao criar.
@@ -11,12 +11,14 @@
     items: () => ({ group_name: '', position: 0, done: false, done_at: null, notes: '', trello_id: null }),
     attachments: () => ({ item_id: null, path: null, url: null, trello_id: null }),
     commitments: () => ({ category_id: null, valid_to: null }),
-    blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false }),
+    blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, revisao_id: null, diario: '' }),
     occurrences: () => ({ instead_note: '' }),
+    revisoes: () => ({ status: 'pendente', feita_em: null, criado_em: new Date().toISOString() }),
+    modelos: () => ({ blocos: [], criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }),
     settings: () => ({ day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null }),
   };
   const SINCRONOS = ['currentUser', 'onAuthChange'];
-  const chaveDe = (t) => (t === 'settings' ? 'owner_id' : 'id');
+  const chaveDe = (t) => (t === 'settings' || t === 'focos' ? 'owner_id' : 'id');
 
   const db = JSON.parse(sessionStorage.getItem('memdb') || 'null') || {};
   TABELAS.forEach((t) => { db[t] = db[t] || []; });
@@ -61,7 +63,7 @@
     if (t === 'blocks' && !horarioValido(linha)) throw violaCheck(t);
     if (t === 'commitments' && (!horarioValido(linha) || !(linha.days || []).every((d) => Number.isInteger(d) && d >= 1 && d <= 7))) throw violaCheck(t);
     const igual = (cols) => outras.some((x) => cols.every((c) => x[c] === linha[c]));
-    if (t === 'settings') { if (igual(['owner_id'])) throw duplicada('settings_pkey'); return; }
+    if (t === 'settings' || t === 'focos') { if (igual(['owner_id'])) throw duplicada(`${t}_pkey`); return; }
     if (t === 'card_categories') { if (igual(['card_id', 'category_id'])) throw duplicada('card_categories_pkey'); return; }
     if (igual(['id'])) throw duplicada(`${t}_pkey`);
     if (COM_TRELLO.includes(t) && linha.trello_id != null && igual(['owner_id', 'trello_id'])) throw duplicada(`${t}_owner_id_trello_id_key`);
@@ -69,6 +71,8 @@
     if (t === 'lists' && linha.is_done && outras.some((x) => x.owner_id === linha.owner_id && x.is_done)) throw duplicada('lists_uma_concluida');
     if (t === 'blocks' && linha.commitment_id != null && igual(['commitment_id', 'date'])) throw duplicada('blocks_commitment_id_date_key');
     if (t === 'occurrences' && igual(['card_id', 'date'])) throw duplicada('occurrences_card_id_date_key');
+    if (t === 'modelos' && outras.some((l) => l.owner_id === linha.owner_id
+      && String(l.nome).trim().toLowerCase() === String(linha.nome).trim().toLowerCase())) throw duplicada('modelos_nome_unico');
   }
   // Como uma instrução do Postgres: ou entram todas as linhas, ou nenhuma.
   function checarNovas(t, novas) {
@@ -99,6 +103,9 @@
     },
     async signOut() { user = null; sessionStorage.removeItem('memuser'); avisa(); },
     async restoreSession() { return user; },
+    async tokenDeAcesso() { return user ? 'jwt-teste' : null; },
+    urlDaFuncao(nome) { return 'https://funcao.teste/functions/v1/' + nome; },
+    vapidPublica() { return window.__memSemVapid ? '' : 'BCJ6SqrQrqwQoUJJQxyIycaF8jk9RJp-X_95XEkzXTk1EC5wyX95n8QfsNW00xrjQjppLvXuUI04SY4dikjlO2Y'; },
     currentUser() { return user; },
     onAuthChange(f) { ouvintes.push(f); },
 
@@ -116,7 +123,7 @@
     async insert(t, linhas) {
       const dono = exigeUsuario();
       const novas = (Array.isArray(linhas) ? linhas : [linhas]).map((l) => ({
-        ...PADROES[t]?.(), ...(t === 'settings' || t === 'card_categories' ? {} : { id: uid() }), ...clonar(l), owner_id: dono,
+        ...PADROES[t]?.(), ...(t === 'settings' || t === 'card_categories' || t === 'focos' ? {} : { id: uid() }), ...clonar(l), owner_id: dono,
       }));
       checarNovas(t, novas);
       tabela(t).push(...novas);
@@ -148,6 +155,18 @@
       Object.assign(linha, clonar(patch), { owner_id: dono });
       save();
       return clonar(linha);
+    },
+    async removeIds(t, ids) {
+      const dono = exigeUsuario();
+      db[t] = tabela(t).filter((l) => !(ids.includes(l.id) && l.owner_id === dono));
+      save();
+    },
+    async updateWhere(t, filtro, patch) {
+      const dono = exigeUsuario();
+      const linhas = tabela(t).filter((l) => l.owner_id === dono && Object.entries(filtro).every(([k, v]) => l[k] === v));
+      linhas.forEach((l) => Object.assign(l, clonar(patch), { owner_id: dono }));
+      save();
+      return clonar(linhas);
     },
     async remove(t, id) {
       const dono = exigeUsuario();

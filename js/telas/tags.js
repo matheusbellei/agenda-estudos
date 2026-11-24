@@ -3,6 +3,7 @@
 import { registrarTela } from './casca.js';
 import { seletorDeCor, corDoTexto } from './ajustes.js';
 import { filhasDe, nomeRepetido } from '../regras/tags.js';
+import { formatarHoras } from '../regras/acompanhamento.js';
 
 export const CORES_TAG = [
   '#3B2416', '#6F4E37', '#8C5A3C', '#A0522D', '#C68B59', '#D4A373', '#B5543A', '#9C6644', '#7F5539', '#A68A73', '#E6CCB2', '#5C4033',
@@ -113,6 +114,20 @@ export function iniciarTags({ estado }) {
           });
           return b;
         })))));
+    // Só a tag mãe escolhe se conta como estudo; a subtag segue a mãe.
+    const maeDaTag = parentId ? estado.dados.categories.find((c) => c.id === parentId) : null;
+    const estudo = criar('input', { type: 'checkbox', id: 'tag-estudo' });
+    estudo.checked = !!tag?.conta_estudo;
+    const campoEstudo = parentId
+      ? criar('div', { class: 'suave', id: 'tag-estudo-herdado', texto: `Herdado de ${maeDaTag?.name || 'tag mãe'}: ${maeDaTag?.conta_estudo ? 'conta como estudo' : 'não conta como estudo'}` })
+      : criar('label', { class: 'campo-check' }, estudo, criar('span', { texto: 'Conta como estudo (entra nos Dashboards)' }));
+    const metaAtual = tag?.meta_semanal_min || 0;
+    const metaH = criar('input', { id: 'tag-meta-h', type: 'number', min: '0', max: '168', inputmode: 'numeric', placeholder: 'h' });
+    const metaM = criar('input', { id: 'tag-meta-m', type: 'number', min: '0', max: '59', step: '5', inputmode: 'numeric', placeholder: 'min' });
+    metaH.value = metaAtual ? String(Math.floor(metaAtual / 60)) : '';
+    metaM.value = metaAtual % 60 ? String(metaAtual % 60) : '';
+    const campoMeta = criar('div', { class: 'campo' }, criar('span', { texto: 'Meta por semana (vazio = sem meta)' }),
+      criar('div', { class: 'tag-meta-campos' }, metaH, criar('span', { texto: 'h' }), metaM, criar('span', { texto: 'min' })));
     const erro = criar('div', { class: 'erro', id: 'tag-erro', role: 'alert' });
     const salvar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'tag-salvar', texto: 'Salvar' });
     const cancelar = criar('button', { type: 'button', class: 'btn', id: 'tag-cancelar', texto: 'Cancelar' });
@@ -122,6 +137,7 @@ export function iniciarTags({ estado }) {
       criar('label', { class: 'campo' }, criar('span', { texto: 'Nome' }), nome),
       criar('div', { class: 'campo' }, criar('span', { texto: 'Cor' }), cor.el),
       criar('div', { class: 'campo' }, criar('span', { texto: 'Ícone' }), icones),
+      campoEstudo, campoMeta,
       erro, criar('div', { class: 'linha-botoes' }, salvar, cancelar));
     nome.focus();
 
@@ -134,9 +150,13 @@ export function iniciarTags({ estado }) {
         erro.textContent = parentId ? 'Já existe uma subtag com esse nome nesta tag.' : 'Já existe uma tag com esse nome.';
         return;
       }
+      const h = Number(metaH.value || 0); const m = Number(metaM.value || 0);
+      if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || m < 0) { erro.textContent = 'Meta inválida.'; return; }
+      const meta = Math.round(h * 60 + m);
+      if (meta > 168 * 60) { erro.textContent = 'A meta passa de 168h por semana.'; return; }
       ocupado = true; salvar.disabled = true; erro.textContent = '';
       try {
-        const campos = { name: texto, color: cor.valor(), icon: icone };
+        const campos = { name: texto, color: cor.valor(), icon: icone, meta_semanal_min: meta || null, ...(parentId ? {} : { conta_estudo: estudo.checked }) };
         if (tag) await estado.alterar('categories', tag.id, campos);
         else {
           const criada = await estado.criar('categories', { ...campos, parent_id: parentId });
@@ -212,6 +232,13 @@ export function iniciarTags({ estado }) {
     ];
   }
 
+  function marcas(tag) {
+    const saida = [];
+    if (tag.conta_estudo) saida.push(criar('i', { class: 'ti ti-book tag-estudo', title: 'Conta como estudo', 'aria-label': 'Conta como estudo' }));
+    if (tag.meta_semanal_min) saida.push(criar('span', { class: 'tag-meta', texto: `meta ${formatarHoras(tag.meta_semanal_min)}/sem` }));
+    return saida;
+  }
+
   function desenhar() {
     const todas = estado.dados.categories;
     const maes = todas.filter((c) => !c.parent_id).sort(porNome);
@@ -222,10 +249,10 @@ export function iniciarTags({ estado }) {
     lista.replaceChildren(...maes.map((t) => {
       const subs = todas.filter((c) => c.parent_id === t.id).sort(porNome);
       const bloco = criar('div', { class: `cartao tag-bloco${t.archived ? ' tag-arquivada' : ''}`, 'data-tag': t.id },
-        criar('div', { class: 'tag-topo' }, bolinha(t), criar('span', { class: 'tag-nome', texto: t.name }), ...acoes(t)),
+        criar('div', { class: 'tag-topo' }, bolinha(t), criar('span', { class: 'tag-nome', texto: t.name }), ...marcas(t), ...acoes(t)),
         ...(t.archived ? [criar('div', { class: 'suave', texto: 'Arquivada' })] : []),
         criar('div', { class: 'tag-subs' }, ...subs.map((s) => criar('div', { class: `tag-linha sub-linha${s.archived ? ' tag-arquivada' : ''}`, 'data-tag': s.id },
-          bolinha(s), criar('span', { class: 'tag-nome', texto: s.archived ? `${s.name} (arquivada)` : s.name }), ...acoes(s)))));
+          bolinha(s), criar('span', { class: 'tag-nome', texto: s.archived ? `${s.name} (arquivada)` : s.name }), ...marcas(s), ...acoes(s)))));
       if (!t.archived) {
         const sub = criar('button', { type: 'button', class: 'btn btn-mini tag-nova-subtag', 'aria-label': `Nova subtag em ${t.name}` },
           criar('i', { class: 'ti ti-plus', 'aria-hidden': 'true' }), 'Subtag');

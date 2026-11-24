@@ -156,3 +156,45 @@ class TestSubtagsNasTelas(TagsBase):
         finally:
             self.SEED['categories'][0]['archived'] = False
             self.SEED['categories'][1]['archived'] = False
+
+
+class TestEstudoEMeta(TagsBase):
+    MAE = {'id': 'm1', 'owner_id': 'u1', 'name': 'Idiomas', 'color': '#2471A3', 'icon': 'language', 'parent_id': None, 'archived': False, 'conta_estudo': False, 'meta_semanal_min': None}
+
+    def test_marcar_estudo_e_meta(self):
+        self.nova_tag_com('Exatas', estudo=True, horas='10')
+        c = self.cats()['Exatas']
+        self.assertTrue(c['conta_estudo']); self.assertEqual(c['meta_semanal_min'], 600)
+        linha = self.page.locator('.tag-bloco', has_text='Exatas')
+        self.assertEqual(linha.locator('.tag-estudo').count(), 1)
+        self.assertIn('meta 10h/sem', linha.locator('.tag-meta').inner_text())
+
+    def nova_tag_com(self, nome, estudo=False, horas='', minutos=''):
+        self.abrir_tags(); p = self.page
+        p.click('#tags-nova'); p.wait_for_selector('#tag-janela:not([hidden])')
+        p.fill('#tag-nome', nome)
+        if estudo: p.check('#tag-estudo')
+        p.fill('#tag-meta-h', horas); p.fill('#tag-meta-m', minutos)
+        p.click('#tag-salvar')
+
+    def test_subtag_mostra_herdado_e_nao_tem_checkbox(self):
+        mae = dict(self.MAE, conta_estudo=True)
+        self.abrir_tags(categories=[mae]); p = self.page
+        p.click('.tag-nova-subtag'); p.wait_for_selector('#tag-janela:not([hidden])')
+        self.assertEqual(p.locator('#tag-estudo').count(), 0)
+        self.assertEqual(p.inner_text('#tag-estudo-herdado'), 'Herdado de Idiomas: conta como estudo')
+        p.fill('#tag-nome', 'Espanhol'); p.fill('#tag-meta-h', '3'); p.fill('#tag-meta-m', '30'); p.click('#tag-salvar')
+        self.janela_fechada()
+        self.assertEqual(self.cats()['Espanhol']['meta_semanal_min'], 210)
+
+    def test_apagar_meta_grava_nulo(self):
+        self.abrir_tags(categories=[dict(self.MAE, meta_semanal_min=600)]); p = self.page
+        p.click('.tag-editar >> nth=0'); p.wait_for_selector('#tag-janela:not([hidden])')
+        self.assertEqual(p.input_value('#tag-meta-h'), '10')
+        p.fill('#tag-meta-h', ''); p.click('#tag-salvar'); self.janela_fechada()
+        self.assertIsNone(self.cats()['Idiomas']['meta_semanal_min'])
+
+    def test_meta_acima_de_168h_da_erro(self):
+        self.nova_tag_com('Demais', horas='200')
+        self.assertEqual(self.page.inner_text('#tag-erro'), 'A meta passa de 168h por semana.')
+        self.assertNotIn('Demais', self.cats())

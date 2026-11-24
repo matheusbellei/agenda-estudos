@@ -1,8 +1,9 @@
 // Tela Semana: sete colunas (segunda a domingo) com faixas grandes.
+import { abrirModelos } from './modelos.js';
 import { registrarTela } from './casca.js';
 import { criar, elementoBloco, abrirBloco, ligarCabecaECorpo, idDoBloco } from './bloco.js';
 import { mostrarDia } from './hoje.js';
-import { diasDaSemana, somaDias, isoDe, horaTexto, rotuloSemana, DIAS_CURTOS } from '../regras/datas.js';
+import { diasDaSemana, somaDias, isoDe, horaTexto, rotuloSemana, DIAS_CURTOS, inicioDaSemana } from '../regras/datas.js';
 import { blocosDoPeriodo, faixasDaSemana, limitesDoDia, horariosLivres, posicionar, inicioMaisUmaHora } from '../regras/calendario.js';
 import { montarFila, selecaoAtual, agendarSelecionada, agendarEntrada, umaHoraLivre, avisarSelecao } from './fila.js';
 
@@ -23,7 +24,10 @@ export function iniciarSemana({ estado }) {
   ant.addEventListener('click', () => { referencia = somaDias(referencia, -7); desenhar(); });
   prox.addEventListener('click', () => { referencia = somaDias(referencia, 7); desenhar(); });
   hoje.addEventListener('click', () => { referencia = isoDe(new Date()); desenhar(); });
-  const topo = criar('div', { class: 'cal-topo' }, ant, titulo, hoje, prox);
+  const modelos = criar('button', { type: 'button', class: 'btn', id: 'semana-modelos', 'aria-label': 'Modelos de semana' },
+    criar('i', { class: 'ti ti-template', 'aria-hidden': 'true' }), ' Modelos');
+  modelos.addEventListener('click', () => abrirModelos({ estado, segunda: inicioDaSemana(referencia) }));
+  const topo = criar('div', { class: 'cal-topo' }, ant, titulo, hoje, prox, modelos);
 
   const grade = criar('div', { class: 'semana-grade', id: 'sem-grade' });
   const fila = criar('aside', { id: 'fila-semana', class: 'fila' });

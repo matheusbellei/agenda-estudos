@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Agenda de Estudos</title>
 <meta name="theme-color" content="#3B2416">
+<script>/* tema escuro antes de pintar (escolha guardada neste aparelho) */
+try { if (localStorage.getItem('agenda-tema') === 'escuro') { document.documentElement.dataset.tema = 'escuro'; document.querySelector('meta[name="theme-color"]').content = '#2A1C13'; } } catch (e) {}
+</script>
 <meta name="description" content="Agenda e controle de estudos.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
@@ -52,6 +55,9 @@
       <button data-tela="busca"><i class="ti ti-search" aria-hidden="true"></i>Busca</button>
       <button data-tela="tags"><i class="ti ti-tags" aria-hidden="true"></i>Tags</button>
       <button data-tela="dashboards"><i class="ti ti-chart-bar" aria-hidden="true"></i>Dashboards</button>
+      <button data-tela="revisao"><i class="ti ti-checkup-list" aria-hidden="true"></i>Revisão da semana</button>
+      <button data-tela="foco"><i class="ti ti-hourglass" aria-hidden="true"></i>Modo foco</button>
+      <button data-tela="diario"><i class="ti ti-notebook" aria-hidden="true"></i>Diário</button>
       <button data-tela="ajustes"><i class="ti ti-settings" aria-hidden="true"></i>Configurações</button>
       <button id="menu-sair"><i class="ti ti-logout" aria-hidden="true"></i>Sair</button>
     </nav>
@@ -67,7 +73,10 @@
     <section id="tela-fixas" hidden></section>
     <section id="tela-busca" hidden></section>
     <section id="tela-tags" hidden></section>
-    <section id="tela-dashboards" hidden><div class="cartao vazio">Em breve: horas por tag, metas e sequência de estudos.</div></section>
+    <section id="tela-dashboards" hidden></section>
+    <section id="tela-revisao" hidden></section>
+    <section id="tela-foco" hidden></section>
+    <section id="tela-diario" hidden></section>
     <section id="tela-ajustes" hidden></section>
   </main>
 </div>

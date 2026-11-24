@@ -36,6 +36,7 @@ export function iniciarBusca({ estado, abrirCard, mostrarDia }) {
     if (r.campo === 'titulo') return 'Título';
     if (r.campo === 'notas') return 'Anotações';
     if (r.campo === 'no_lugar') return `No lugar · ${dataCurta(r.ocorrencia_data ?? blocoPorId(r.bloco_id).date)}`;
+    if (r.campo === 'diario') return `Diário · ${dataCurta(blocoPorId(r.bloco_id).date)}`;
     return `Item: ${itemPorId(r.item_id)?.title ?? ''}`;
   }
 
@@ -53,7 +54,7 @@ export function iniciarBusca({ estado, abrirCard, mostrarDia }) {
       trechoComMarca(r));
     el.addEventListener('click', () => {
       if (r.ocorrencia_data) irPara('fixas');
-      else if (r.campo === 'no_lugar') mostrarDia(bloco.date);
+      else if (r.campo === 'no_lugar' || r.campo === 'diario') mostrarDia(bloco.date);
       else abrirCard(r.card_id, r.item_id ? { itemId: r.item_id } : undefined);
     });
     return el;

@@ -4,8 +4,8 @@ const VALIDADE_URL_S = 3600;
 const BUCKET = 'anexos';
 
 // Colunas que identificam a linha quando a tabela não tem `id`.
-const CHAVE = { settings: 'owner_id' };
-const ORDEM_LISTA = { settings: ['owner_id'], card_categories: ['card_id', 'category_id'] };
+const CHAVE = { settings: 'owner_id', focos: 'owner_id' };
+const ORDEM_LISTA = { settings: ['owner_id'], focos: ['owner_id'], card_categories: ['card_id', 'category_id'] };
 
 function traduzErro(erro) {
   const msg = String((erro && erro.message) || erro || '');
@@ -18,7 +18,8 @@ function traduzErro(erro) {
   return 'Algo deu errado: ' + msg;
 }
 
-export function createStore(client) {
+// `url`: endereço do projeto (para chamar a função "lembretes"); `vapid`: chave pública das notificações.
+export function createStore(client, { url = '', vapid = '' } = {}) {
   let usuario = null;
   const erroTraduzido = (e) => Object.assign(new Error(traduzErro(e)), { traduzido: true });
   const checar = ({ data, error }) => { if (error) throw erroTraduzido(error); return data; };
@@ -40,6 +41,13 @@ export function createStore(client) {
       usuario = (data && data.session && data.session.user) || null;
       return usuario;
     }),
+    // Notificações: sessão atual (para a função conferir quem pede), endereço da função e chave pública.
+    async tokenDeAcesso() {
+      const { data } = await client.auth.getSession();
+      return data?.session?.access_token || null;
+    },
+    urlDaFuncao(nome) { return `${url}/functions/v1/${nome}`; },
+    vapidPublica() { return vapid; },
     currentUser() { return usuario; },
     // Só avisa a perda de uma sessão que existia: o evento inicial sem sessão não conta.
     onAuthChange(cb) {
@@ -77,7 +85,14 @@ export function createStore(client) {
       if (!data || data.length === 0) throw erroTraduzido('row-level security');
       return data[0];
     }),
+    // Altera só se todas as colunas do filtro casarem; devolve as linhas alteradas ([] quando nenhuma).
+    updateWhere: (tabela, filtro, patch) => tentar(async () => {
+      let q = client.from(tabela).update(patch);
+      for (const col of Object.keys(filtro)) q = q.eq(col, filtro[col]);
+      return checar(await q.select()) || [];
+    }),
     remove: (tabela, id) => tentar(async () => { checar(await client.from(tabela).delete().eq(CHAVE[tabela] || 'id', id)); }),
+    removeIds: (tabela, ids) => tentar(async () => { if (ids.length) checar(await client.from(tabela).delete().in('id', ids)); }),
     removeWhere: (tabela, filtro) => tentar(async () => {
       let q = client.from(tabela).delete();
       for (const col of Object.keys(filtro)) q = q.eq(col, filtro[col]);
@@ -90,6 +105,7 @@ export function createStore(client) {
   };
 }
 
-export function criarStoreReal(url, chave) {
-  return createStore(window.supabase.createClient(url, chave));
+// `extras.vapid`: chave pública das notificações (js/config.js), entregue ao aparelho ao ativar.
+export function criarStoreReal(url, chave, extras = {}) {
+  return createStore(window.supabase.createClient(url, chave), { url, vapid: extras.vapid || '' });
 }

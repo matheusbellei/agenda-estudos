@@ -125,7 +125,7 @@ class TestMenu(UITest):
         self.assertTrue(p.is_visible('#menu'))
         self.assertEqual(p.get_attribute('#menu-botao', 'aria-expanded'), 'true')
         itens = [t.strip() for t in p.locator('#menu button').all_inner_texts()]
-        self.assertEqual(itens, ['Agenda', 'Quadro', 'Fixas', 'Busca', 'Tags', 'Dashboards', 'Configurações', 'Sair'])
+        self.assertEqual(itens, ['Agenda', 'Quadro', 'Fixas', 'Busca', 'Tags', 'Dashboards', 'Revisão da semana', 'Modo foco', 'Diário', 'Configurações', 'Sair'])
 
     def test_escolher_item_troca_tela_titulo_e_fecha(self):
         self.login(); p = self.page
@@ -145,9 +145,9 @@ class TestMenu(UITest):
         self.assertTrue(p.is_hidden('#menu'))
         self.assertTrue(p.is_visible('#tela-semana'))
 
-    def test_dashboards_em_breve(self):
+    def test_dashboards_sem_tag_de_estudo_convida(self):
         self.login(); self.ir('dashboards')
-        self.assertIn('Em breve: horas por tag, metas e sequência de estudos.', self.page.inner_text('#tela-dashboards'))
+        self.assertIn('Marque quais tags contam como estudo', self.page.inner_text('#tela-dashboards'))
 
     def test_sair_pelo_menu(self):
         self.login(); p = self.page

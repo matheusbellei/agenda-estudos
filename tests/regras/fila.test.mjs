@@ -265,3 +265,15 @@ test('levadasVencidas: bloco cumprido de outra fixa ou de outra data não conta'
   const r = levadasVencidas({ occurrences: [levada('2026-10-12')], blocks: [feito('2026-10-12', 'g'), feito('2026-10-05')], hoje: HOJE });
   assert.equal(r.length, 1);
 });
+
+test('bloco de revisão não tira o card avulso da fila nem conta para a trilha', () => {
+  const d = base({ blocks: [bloco({ card_id: 'A', revisao_id: 'r1' }), bloco({ card_id: 'T', item_id: 'i2', revisao_id: 'r2' })] });
+  const e = paraEncaixar({ ...d, hoje: HOJE });
+  assert.ok(e.some((x) => x.tipo === 'avulso' && x.card_id === 'A'));
+  assert.ok(e.some((x) => x.tipo === 'trilha' && x.card_id === 'T'));
+});
+
+test('efeitosDeEstado ignora bloco de revisão', () => {
+  const d = base();
+  assert.deepEqual(efeitosDeEstado(bloco({ card_id: 'T', item_id: 'i2', revisao_id: 'r1' }), 'done', d), { marcarItem: null, perguntarConcluirCard: false });
+});

@@ -54,7 +54,8 @@ const ultimoBloco = (blocos) =>
 
 export function paraEncaixar({ cards, items, lists, blocks, occurrences, hoje }) {
   const segunda = inicioDaSemana(hoje);
-  const estudo = blocks.filter((b) => b.kind === 'study');
+  // Sessões de revisão (do card inteiro) não contam para a trilha, o avulso nem as fixas.
+  const estudo = blocks.filter((b) => b.kind === 'study' && !b.revisao_id);
   const mesmoAlvo = (b, e) =>
     b.card_id === e.card_id && (b.item_id || null) === e.item_id && (b.fixed_date || null) === e.fixed_date;
   const entrada = (tipo, card_id, item_id, fixed_date) => ({ tipo, card_id, item_id, fixed_date, reagendar: false });
@@ -118,6 +119,7 @@ export function pendenciasDaVirada({ cards, occurrences, blocks, hoje, ultimaVir
 }
 
 export function efeitosDeEstado(bloco, novo, { cards, items }) {
+  if (bloco.revisao_id) return { marcarItem: null, perguntarConcluirCard: false };
   let marcarItem = null;
   if (bloco.item_id) {
     if (novo === 'done') marcarItem = { id: bloco.item_id, done: true };

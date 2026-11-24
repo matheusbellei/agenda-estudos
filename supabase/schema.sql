@@ -245,3 +245,205 @@ begin
       using (bucket_id = 'anexos' and (storage.foldername(name))[1] = (select auth.uid())::text);
   end if;
 end $$;
+
+-- ============ Notificações (o mesmo da migracao-2026-11-notificacoes.sql) ============
+-- Preferências (uma linha por pessoa em settings). Minutos contados a partir de 00:00.
+alter table public.settings add column if not exists notif_antes_min int not null default 10;
+alter table public.settings add column if not exists notif_resumo boolean not null default true;
+alter table public.settings add column if not exists notif_resumo_min int not null default 420;
+alter table public.settings add column if not exists notif_pendencias boolean not null default true;
+alter table public.settings add column if not exists notif_pendencias_min int not null default 1290;
+alter table public.settings add column if not exists notif_silencio boolean not null default false;
+alter table public.settings add column if not exists notif_silencio_de int not null default 1320;
+alter table public.settings add column if not exists notif_silencio_ate int not null default 420;
+alter table public.settings add column if not exists fuso text not null default 'America/Sao_Paulo';
+alter table public.settings drop constraint if exists settings_notif_check;
+alter table public.settings add constraint settings_notif_check check (
+  notif_antes_min in (-1,0,5,10,15,30,60)
+  and notif_resumo_min between 0 and 1439 and notif_pendencias_min between 0 and 1439
+  and notif_silencio_de between 0 and 1439 and notif_silencio_ate between 0 and 1439);
+
+-- Lembrete por bloco e por fixa: null = padrão; -1 = nenhum; 0 = na hora; N = minutos antes.
+alter table public.blocks add column if not exists lembrete_min int;
+alter table public.blocks drop constraint if exists blocks_lembrete_check;
+alter table public.blocks add constraint blocks_lembrete_check check (lembrete_min is null or lembrete_min in (-1,0,5,10,15,30,60));
+alter table public.commitments add column if not exists lembrete_min int;
+alter table public.commitments drop constraint if exists commitments_lembrete_check;
+alter table public.commitments add constraint commitments_lembrete_check check (lembrete_min is null or lembrete_min in (-1,0,5,10,15,30,60));
+
+-- Aparelhos que recebem notificação (uma inscrição de push por navegador).
+create table if not exists public.push_subscriptions (
+  id        uuid primary key default gen_random_uuid(),
+  owner_id  uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  endpoint  text not null unique,
+  p256dh    text not null,
+  auth      text not null,
+  aparelho  text not null default '',
+  criado_em timestamptz not null default now(),
+  ultimo_ok timestamptz
+);
+create index if not exists push_subscriptions_owner_idx on public.push_subscriptions (owner_id);
+
+-- "Adiar 10 min": quando mandar o lembrete de novo.
+create table if not exists public.adiamentos (
+  id       uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  ref      text not null,
+  data     date not null,
+  quando   timestamptz not null
+);
+create index if not exists adiamentos_quando_idx on public.adiamentos (quando);
+
+-- O que já foi enviado (impede repetir). Só a função, com a chave de serviço, mexe aqui.
+create table if not exists public.notificacoes_enviadas (
+  owner_id   uuid not null references auth.users(id) on delete cascade,
+  chave      text not null,
+  enviada_em timestamptz not null default now(),
+  primary key (owner_id, chave)
+);
+
+alter table public.push_subscriptions enable row level security;
+alter table public.adiamentos enable row level security;
+alter table public.notificacoes_enviadas enable row level security;
+revoke all on public.push_subscriptions, public.adiamentos, public.notificacoes_enviadas from anon, authenticated;
+grant select, insert, delete on public.push_subscriptions to authenticated;
+grant select, insert, delete on public.adiamentos to authenticated;
+
+drop policy if exists "ver o meu" on public.push_subscriptions;
+drop policy if exists "criar o meu" on public.push_subscriptions;
+drop policy if exists "apagar o meu" on public.push_subscriptions;
+create policy "ver o meu" on public.push_subscriptions for select to authenticated using (owner_id = (select auth.uid()));
+create policy "criar o meu" on public.push_subscriptions for insert to authenticated with check (owner_id = (select auth.uid()));
+create policy "apagar o meu" on public.push_subscriptions for delete to authenticated using (owner_id = (select auth.uid()));
+drop policy if exists "ver o meu" on public.adiamentos;
+drop policy if exists "criar o meu" on public.adiamentos;
+drop policy if exists "apagar o meu" on public.adiamentos;
+create policy "ver o meu" on public.adiamentos for select to authenticated using (owner_id = (select auth.uid()));
+create policy "criar o meu" on public.adiamentos for insert to authenticated with check (owner_id = (select auth.uid()));
+create policy "apagar o meu" on public.adiamentos for delete to authenticated using (owner_id = (select auth.uid()));
+
+-- ============ Acompanhamento (24/11/2026) ============
+-- Tag que conta como estudo (a subtag segue a mãe) e meta semanal em minutos (null = sem meta).
+alter table public.categories add column if not exists conta_estudo boolean not null default false;
+alter table public.categories add column if not exists meta_semanal_min int;
+alter table public.categories drop constraint if exists categories_meta_check;
+alter table public.categories add constraint categories_meta_check check (meta_semanal_min is null or meta_semanal_min > 0);
+
+-- Meta total de horas do card, em minutos (null = sem meta).
+alter table public.cards add column if not exists meta_min int;
+alter table public.cards drop constraint if exists cards_meta_check;
+alter table public.cards add constraint cards_meta_check check (meta_min is null or meta_min > 0);
+
+-- Sequência: mínimo de estudo cumprido por dia. Revisão da semana: aviso no dia (1 = seg … 7 = dom) e horário.
+alter table public.settings add column if not exists sequencia_min int not null default 30;
+alter table public.settings add column if not exists revisao boolean not null default true;
+alter table public.settings add column if not exists revisao_dia int not null default 7;
+alter table public.settings add column if not exists revisao_min int not null default 1200;
+alter table public.settings drop constraint if exists settings_acompanhamento_check;
+alter table public.settings add constraint settings_acompanhamento_check check (
+  sequencia_min between 5 and 600 and revisao_dia between 1 and 7 and revisao_min between 0 and 1439);
+
+-- ============ Modo foco e diário (24/11/2026) ============
+-- Diário: o que estudou no bloco (texto simples, opcional).
+alter table public.blocks add column if not exists diario text not null default '';
+
+-- Tempos do modo foco (minutos) e som/vibração com o app aberto.
+alter table public.settings add column if not exists foco_min int not null default 25;
+alter table public.settings add column if not exists pausa_min int not null default 5;
+alter table public.settings add column if not exists pausa_longa_min int not null default 15;
+alter table public.settings add column if not exists ciclos_longa int not null default 4;
+alter table public.settings add column if not exists foco_som boolean not null default true;
+alter table public.settings drop constraint if exists settings_foco_check;
+alter table public.settings add constraint settings_foco_check check (
+  foco_min between 5 and 120 and pausa_min between 1 and 60 and pausa_longa_min between 1 and 60 and ciclos_longa between 2 and 8);
+
+-- Foco em andamento: uma linha por pessoa. "termina_em" é quando a fase acaba (a função avisa nessa hora);
+-- pausado guarda os segundos que faltam; esperando = a fase acabou e a próxima não começou.
+create table if not exists public.focos (
+  owner_id      uuid primary key default auth.uid() references auth.users(id) on delete cascade,
+  fase          text not null check (fase in ('foco','pausa','pausa_longa')),
+  ciclo         int not null default 1 check (ciclo >= 1),
+  estado        text not null check (estado in ('rodando','pausado','esperando')),
+  termina_em    timestamptz,
+  restante_s    int check (restante_s is null or restante_s >= 0),
+  bloco_ref     text,
+  bloco_data    date,
+  titulo        text not null default '',
+  atualizado_em timestamptz not null default now()
+);
+alter table public.focos enable row level security;
+revoke all on public.focos from anon, authenticated;
+grant select, insert, update, delete on public.focos to authenticated;
+drop policy if exists "ver o meu" on public.focos;
+drop policy if exists "criar o meu" on public.focos;
+drop policy if exists "alterar o meu" on public.focos;
+drop policy if exists "apagar o meu" on public.focos;
+create policy "ver o meu" on public.focos for select to authenticated using (owner_id = (select auth.uid()));
+create policy "criar o meu" on public.focos for insert to authenticated with check (owner_id = (select auth.uid()));
+create policy "alterar o meu" on public.focos for update to authenticated using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+create policy "apagar o meu" on public.focos for delete to authenticated using (owner_id = (select auth.uid()));
+
+-- ============ Modelos de semana e revisão espaçada (24/11/2026) ============
+-- Modelos de semana: cada um guarda a lista de blocos (dia 1..7, horário, título, card, tag...) dentro da própria linha.
+create table if not exists public.modelos (
+  id            uuid primary key default gen_random_uuid(),
+  owner_id      uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  nome          text not null check (length(trim(nome)) between 1 and 60),
+  blocos        jsonb not null default '[]'::jsonb check (jsonb_typeof(blocos) = 'array'),
+  criado_em     timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+create unique index if not exists modelos_nome_unico on public.modelos (owner_id, lower(trim(nome)));
+
+-- Revisão espaçada: uma linha por data marcada para rever um card. Datas fixas: atrasar uma não move as outras.
+create table if not exists public.revisoes (
+  id        uuid primary key default gen_random_uuid(),
+  owner_id  uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  card_id   uuid not null references public.cards(id) on delete cascade,
+  data      date not null,
+  status    text not null default 'pendente' check (status in ('pendente','feita','cancelada')),
+  feita_em  timestamptz,
+  criado_em timestamptz not null default now()
+);
+create index if not exists revisoes_dono_data on public.revisoes (owner_id, data);
+create index if not exists revisoes_card on public.revisoes (card_id);
+
+-- Bloco que é a sessão de uma revisão (apagar a revisão solta o bloco).
+alter table public.blocks add column if not exists revisao_id uuid references public.revisoes(id) on delete set null;
+
+-- Dias padrão das revisões (contados do dia em que agenda) e se os modelos levam os compromissos fixos.
+alter table public.settings add column if not exists revisoes_dias int[] not null default '{7,30}';
+alter table public.settings add column if not exists modelos_com_fixas boolean not null default false;
+create or replace function public.revisoes_dias_validos(d int[]) returns boolean language sql immutable set search_path = '' as $$
+  select cardinality(d) between 1 and 6
+     and not exists (select 1 from unnest(d) with ordinality as x(v, i)
+                     where v < 1 or v > 365 or (i > 1 and v <= d[i - 1]))
+$$;
+alter table public.settings drop constraint if exists settings_revisoes_check;
+alter table public.settings add constraint settings_revisoes_check check (public.revisoes_dias_validos(revisoes_dias));
+
+do $$
+declare t text;
+begin
+  foreach t in array array['modelos', 'revisoes'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+    execute format('drop policy if exists "ver o meu" on public.%I', t);
+    execute format('drop policy if exists "criar o meu" on public.%I', t);
+    execute format('drop policy if exists "alterar o meu" on public.%I', t);
+    execute format('drop policy if exists "apagar o meu" on public.%I', t);
+    execute format('create policy "ver o meu" on public.%I for select to authenticated using (owner_id = (select auth.uid()))', t);
+    execute format('create policy "criar o meu" on public.%I for insert to authenticated with check (owner_id = (select auth.uid()))', t);
+    execute format('create policy "alterar o meu" on public.%I for update to authenticated using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()))', t);
+    execute format('create policy "apagar o meu" on public.%I for delete to authenticated using (owner_id = (select auth.uid()))', t);
+  end loop;
+end $$;
+
+-- A revisão só pode apontar para um card do próprio dono.
+drop policy if exists "card da revisão é meu" on public.revisoes;
+drop policy if exists "card da revisão continua meu" on public.revisoes;
+create policy "card da revisão é meu" on public.revisoes as restrictive for insert to authenticated
+  with check (exists (select 1 from public.cards c where c.id = card_id and c.owner_id = (select auth.uid())));
+create policy "card da revisão continua meu" on public.revisoes as restrictive for update to authenticated
+  with check (exists (select 1 from public.cards c where c.id = card_id and c.owner_id = (select auth.uid())));

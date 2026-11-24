@@ -5,6 +5,12 @@ import { chipCategoria } from './ajustes.js';
 import { progresso, proximoItem } from '../regras/fila.js';
 import { abrirBloco } from './bloco.js';
 import { isoDe, somaDias } from '../regras/datas.js';
+import { horasDoCard, formatarHoras } from '../regras/acompanhamento.js';
+import { agoraNoFuso } from '../regras/lembretes.js';
+import { registrosDoDiario } from '../regras/diario.js';
+import { itemDoDiario } from './diario.js';
+import { abrirAgendarRevisao, cancelarRevisoes } from './revisoes.js';
+import { textoDasRevisoes } from '../regras/revisoes.js';
 import { caminhosNoMarkdown, comEnderecos, semEnderecos, nomeParaCaminho } from '../regras/anexos.js';
 import { criarEditor, modoVisual } from '../editor.js';
 import { registrarTextoNaoSalvo } from './folhas.js';
@@ -556,6 +562,26 @@ export function iniciarCard({ estado, store }) {
     el.replaceChildren(botao, painel);
   }
 
+  // Registros do diário dos blocos deste card; tocar abre o bloco.
+  function desenharDiario(c) {
+    const registros = registrosDoDiario(estado.dados, { cardId: c.id });
+    nodos.diarioCard.replaceChildren(...(registros.length
+      ? registros.map((r) => itemDoDiario(r, { comData: true, aoAbrir: () => abrirBloco(r.bloco) }))
+      : [criar('p', { class: 'suave', texto: 'Ao marcar um bloco deste card como cumprido, escreva o que estudou: aparece aqui.' })]));
+  }
+
+  function desenharMeta(c) {
+    const meta = c.meta_min || 0;
+    if (document.activeElement !== nodos.metaH && document.activeElement !== nodos.metaM) {
+      nodos.metaH.value = meta ? String(Math.floor(meta / 60)) : '';
+      nodos.metaM.value = meta % 60 ? String(meta % 60) : '';
+    }
+    const h = horasDoCard(c.id, estado.dados, agoraNoFuso(Date.now(), estado.ajustes().fuso).data);
+    nodos.metaTexto.textContent = `Planejadas ${formatarHoras(h.planejado_min)} · Cumpridas ${formatarHoras(h.cumprido_min)}${meta ? ` / meta ${formatarHoras(meta)}` : ''}`;
+    nodos.metaBarra.hidden = !meta;
+    nodos.metaBarraFill.style.width = meta ? `${Math.min(100, Math.round((h.cumprido_min / meta) * 100))}%` : '0%';
+  }
+
   function atualizar() {
     const c = card();
     if (!c) { ocultar(); return; }
@@ -570,6 +596,12 @@ export function iniciarCard({ estado, store }) {
     const chaveFixa = `${c.is_fixed}|${c.fixed_days}|${estado.dados.lists.map((l) => l.id + l.name)}`;
     if (nodos.chaveFixa !== chaveFixa) { nodos.chaveFixa = chaveFixa; desenharFixa(c); }
     nodos.arquivar.textContent = c.archived ? 'Desarquivar' : 'Arquivar';
+    desenharMeta(c);
+    desenharDiario(c);
+    const textoRev = textoDasRevisoes(estado.dados.revisoes, c.id);
+    nodos.revisoesTexto.textContent = textoRev || '';
+    nodos.revisoesTexto.hidden = !textoRev;
+    nodos.revisoesCancelar.hidden = !estado.dados.revisoes.some((r) => r.card_id === c.id && r.status === 'pendente');
     desenharItens();
     desenharAnexos();
   }
@@ -588,6 +620,11 @@ export function iniciarCard({ estado, store }) {
     const blocoLista = criar('label', { class: 'campo' }, criar('span', { texto: 'Lista' }), lista);
     const fixa = criar('div', { id: 'card-estado-fixa' });
     const agendar = criar('button', { type: 'button', class: 'btn', id: 'card-agendar', texto: 'Agendar' });
+    const revisaoBtn = criar('button', { type: 'button', class: 'btn', id: 'card-revisao' }, criar('i', { class: 'ti ti-repeat', 'aria-hidden': 'true' }), ' Agendar revisão');
+    revisaoBtn.addEventListener('click', () => abrirAgendarRevisao(estado, cardId));
+    const revisoesTexto = criar('div', { id: 'card-revisoes-texto', class: 'suave', hidden: '' });
+    const revisoesCancelar = criar('button', { type: 'button', class: 'btn btn-mini', id: 'card-revisoes-cancelar', texto: 'Cancelar as que faltam', hidden: '' });
+    revisoesCancelar.addEventListener('click', () => tentar(() => cancelarRevisoes(estado, cardId)));
     const notas = criar('div', { id: 'card-notas' });
     const itens = criar('div', { id: 'card-itens' });
     const novoGrupoBtn = criar('button', { type: 'button', class: 'btn', id: 'card-novo-grupo', texto: 'Novo grupo' });
@@ -600,6 +637,12 @@ export function iniciarCard({ estado, store }) {
     const erroEl = criar('div', { class: 'erro', id: 'card-erro', role: 'alert' });
     const salvar = criar('span', { id: 'card-salvar', class: 'card-salvar', 'aria-live': 'polite' });
     const anexos = criar('div', { id: 'card-anexos' });
+    const diarioCard = criar('div', { id: 'card-diario', class: 'diario-lista' });
+    const metaH = criar('input', { id: 'card-meta-h', type: 'number', min: '0', max: '9999', inputmode: 'numeric', 'aria-label': 'Meta em horas' });
+    const metaM = criar('input', { id: 'card-meta-m', type: 'number', min: '0', max: '59', step: '5', inputmode: 'numeric', 'aria-label': 'Meta em minutos' });
+    const metaTexto = criar('div', { id: 'card-meta-texto', class: 'suave' });
+    const metaBarraFill = criar('span');
+    const metaBarra = criar('span', { class: 'barra-mini card-meta-barra' }, metaBarraFill);
     const arquivoEntrada = criar('input', { type: 'file', id: 'anexo-arquivo', hidden: '', 'aria-label': 'Arquivo para anexar' });
     const anexarBtn = criar('button', { type: 'button', class: 'btn', id: 'anexo-arquivo-abrir', texto: 'Anexar arquivo' });
     const linkAbrir = criar('button', { type: 'button', class: 'btn', id: 'anexo-link-abrir', texto: 'Adicionar link' });
@@ -613,16 +656,30 @@ export function iniciarCard({ estado, store }) {
         criar('div', { class: 'card-cabecalho-linha' }, fecharBtn, titulo, salvar), progressoCaixa),
       criar('div', { class: 'card-corpo' },
         criar('section', {}, criar('h3', { texto: 'Categorias' }), categorias),
-        criar('section', {}, blocoLista, fixa, agendar),
+        criar('section', {}, blocoLista, fixa, criar('div', { class: 'linha-botoes' }, agendar, revisaoBtn),
+          criar('div', { class: 'card-revisoes' }, revisoesTexto, revisoesCancelar)),
+        criar('section', {}, criar('h3', { texto: 'Meta de horas' }),
+          criar('div', { class: 'tag-meta-campos' }, metaH, criar('span', { texto: 'h' }), metaM, criar('span', { texto: 'min' })),
+          metaTexto, metaBarra),
         criar('section', {}, criar('h3', { texto: 'Anotações' }), notas),
         criar('section', {}, criar('h3', { texto: 'Itens' }), itens, criar('div', { class: 'linha-botoes' }, novoGrupoBtn), grupoForm),
+        criar('section', {}, criar('h3', { texto: 'Diário' }), diarioCard),
         criar('section', {}, criar('h3', { texto: 'Anexos' }), anexos,
           criar('div', { class: 'linha-botoes' }, anexarBtn, linkAbrir), arquivoEntrada, linkForm),
         erroEl,
         criar('div', { class: 'card-acoes' }, arquivar, excluir)));
-    nodos = { titulo, progresso, progressoCaixa, barra, categorias, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos };
+    nodos = { titulo, progresso, progressoCaixa, barra, categorias, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, revisoesTexto, revisoesCancelar };
 
     fecharBtn.addEventListener('click', fechar);
+    // Meta do card em minutos: vazio ou zero = sem meta.
+    const gravarMeta = () => {
+      const total = Math.round(Number(metaH.value || 0) * 60 + Number(metaM.value || 0));
+      if (!Number.isFinite(total) || total < 0) { erro('Meta inválida.'); return; }
+      const novo = total || null;
+      if (novo !== (card().meta_min ?? null)) tentar(() => estado.alterar('cards', cardId, { meta_min: novo }));
+    };
+    metaH.addEventListener('change', gravarMeta);
+    metaM.addEventListener('change', gravarMeta);
     // Abre a folha de bloco de estudo com o card e o próximo item; a hora sugerida é a próxima hora cheia de hoje.
     agendar.addEventListener('click', () => {
       const agora = new Date();

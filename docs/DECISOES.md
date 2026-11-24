@@ -76,3 +76,37 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Revisão final: tocar fora ou Esc pergunta "Descartar o que você escreveu?" quando há texto digitado: título ou "o que fiz no lugar" alterados na folha do bloco, título na nova fixa, título no novo card e, na virada, qualquer resposta escolhida ou nota digitada. Os botões "Cancelar" e "Depois" continuam fechando na hora, por serem escolha explícita. Se errado: um toque a mais para fechar.
 - Revisão final: excluir "Todos" ou "Este e os próximos" de um compromisso repetido com dias marcados como cumprido ou não feito pergunta antes, com a quantidade; confirmando, esses dias são apagados com a regra (não ficam soltos). Se errado: preservar os blocos marcados com `commitment_id = null` antes de apagar a regra.
 - Revisão final: importar o Trello quando o app já tem lista ativa ou de conclusão não marca as listas importadas "Em andamento"/"Concluído"; a marca que já existe continua valendo. Se errado: o usuário troca a marca no menu da lista.
+
+## Notificações (novembro de 2026)
+
+- Push com o app fechado pelo próprio Supabase: Supabase Cron chama a função `lembretes` a cada minuto; nada de serviço externo.
+- A criptografia do Web Push (VAPID + aes128gcm) é feita no projeto, só com Web Crypto, para rodar no Deno sem dependências; testada decifrando a mensagem.
+- `supabase/functions/lembretes/index.ts` é gerado (`npm run gerar-funcao`) e usa as mesmas regras do app (`js/regras/`).
+- Os botões "Cumprido" e "Adiar 10 min" funcionam sem abrir o app, por um link assinado (HMAC) que vale 24 h.
+- O que cai no horário de silêncio é descartado (inclusive a revisão da semana); o silêncio vem desligado e a tela avisa isso, e avisa também quando o horário da revisão cai dentro dele. O tique aceita até 2 min de atraso e nunca repete (tabela `notificacoes_enviadas`).
+
+## Acompanhamento (novembro de 2026)
+
+- Estudo é decidido pela tag: tag marcada "conta como estudo" e as subtags dela. Bloco sem tag não conta; o card não empresta tag ao bloco (evita contar em dobro).
+- Só blocos somam horas. Card fixo marcado sem bloco não tem horário nem tag, então não entra nas horas nem no "não feito".
+- "Não feito" junta os blocos marcados como não feitos e os que já terminaram sem marcar ("sem marcar"); as listas mostram os dois separados. O % cumprido conta só blocos já terminados; o planejado inclui os futuros do período.
+- A sequência é sempre "até hoje", qualquer que seja o período da tela; hoje abaixo do mínimo não quebra a sequência.
+- Metas são semanais; em Mês, Ano e Intervalo aparece a média por semana. A tag mãe soma as horas das subtags.
+- A meta do card conta todos os blocos dele, de qualquer tag; fixa sem data final entra só até o domingo da semana atual.
+- A revisão mostra a semana que contém a véspera do dia escolhido; antes do horário, a semana anterior. "Mandar pendências para a fila" marca os sem marcar como não feitos (a fila já mostra "Reagendar").
+- Gráficos em SVG feitos no próprio app (sem biblioteca), com a paleta café. A função `lembretes` lê a semana e as tags só no minuto do aviso da revisão.
+
+## Modo foco e diário (novembro de 2026)
+
+- O foco em andamento é uma linha da tabela `focos` (uma por pessoa), com a hora em que a fase acaba. O tempo na tela vem sempre dessa hora e do relógio, então fechar ou recarregar o app não perde nada.
+- O aviso do fim de cada fase (foco, pausa e pausa longa) sai pela função `lembretes`, no mesmo tique dos lembretes: pode chegar até 1 min depois com o app fechado. Com o app na tela, só o app toca (bipe e vibração, se ligados); o service worker não mostra o push.
+- O botão "Começar pausa"/"Começar foco" da notificação só vale para a fase que ela anunciou (link assinado com a hora do fim); depois disso não muda nada.
+- A fase seguinte nunca começa sozinha: acabou, fica "esperando" até ele tocar. No horário de silêncio o aviso é descartado, mas a fase fica "esperando" do mesmo jeito.
+- O foco nunca marca bloco: só ao tocar em Parar, com bloco ligado, pergunta se marca como cumprido e oferece o diário. "Focar" com um foco já em andamento não troca o bloco dele.
+- Diário é a coluna `blocks.diario` (texto simples). "Cumprido" abre a caixa do diário e confirma em "Marcar como cumprido", como o "Não feito" faz com o "o que fiz no lugar". Aparece no card, na tela Diário (50 dias por vez) e na Busca. `focos` fica fora do backup; o diário entra.
+
+## Modelos de semana, modo escuro e revisão espaçada (novembro de 2026)
+
+- Modelo = uma linha da tabela `modelos` com a lista de blocos dentro (dia da semana, horário, título, card, tag, lembrete). Aplicar troca os planejados da semana, de hoje em diante; as caixas "Manter os blocos marcados como cumpridos" e "... como não feitos" vêm marcadas e o aviso conta o que sai. Compromissos fixos nunca são apagados nem duplicados; a opção "Modelos incluem os compromissos fixos" só decide se eles entram ao salvar. Blocos de card fixo e de revisão entram no modelo sem esses vínculos.
+- Tema escuro: escolhido à mão em Configurações, guardado no aparelho (`localStorage`), aplicado no `<head>` antes de pintar. Todas as cores do CSS são variáveis; um teste confere contraste ≥ 4,5:1 nos dois temas e que não sobra cor fixa fora delas.
+- Revisão espaçada: "Agendar revisão" no card cria uma linha por data em `revisoes` (padrão 7 e 30 dias, mudável nas Configurações). Datas fixas: atrasar uma não move as outras. A vencida entra em "Para encaixar" com o selo "Revisar"; o bloco criado é do card inteiro (sem item), não mexe na trilha nem pergunta "concluir o card". Cumprido conclui a revisão; voltar o bloco devolve para a fila. Card arquivado tira as revisões da fila; card concluído continua sendo revisado.

@@ -1,11 +1,14 @@
 // Blocos do calendário: elemento visual, gravação e (mais abaixo) a folha de criar/editar.
 import { corDoTexto } from './ajustes.js';
+import { OPCOES_LEMBRETE, textoDoLembrete } from './notificacoes.js';
 import { emOrdem } from '../regras/tags.js';
 import { criarTagPeloBloco } from './tags.js';
 import { horaTexto, minutosDe, somaDias, diaDaSemana, DIAS_CURTOS } from '../regras/datas.js';
 import { efeitosDeEstado } from '../regras/fila.js';
 import { moverCard, cardsDaLista, posicaoNoFim } from './quadro.js';
 import { registrarTextoNaoSalvo, pedirDescarte } from './folhas.js';
+import { focarNoBloco } from './foco.js';
+import { statusDaRevisao } from '../regras/revisoes.js';
 
 let estado = null;
 let abrirCardFn = () => {};
@@ -80,7 +83,8 @@ export async function gravarBloco(est, bloco, patch) {
   if (bloco.virtual) {
     const linha = {
       commitment_id: bloco.commitment_id, date: bloco.date, start_min: bloco.start_min, end_min: bloco.end_min,
-      card_id: bloco.card_id || null, title: bloco.title, category_id: bloco.category_id, status: 'planned', instead_note: '', ...patch,
+      card_id: bloco.card_id || null, title: bloco.title, category_id: bloco.category_id, lembrete_min: bloco.lembrete_min ?? null,
+      status: 'planned', instead_note: '', ...patch,
     };
     return est.criar('blocks', { ...linha, ...tipo(linha) });
   }
@@ -90,7 +94,7 @@ export async function gravarBloco(est, bloco, patch) {
 // Muda o estado do bloco e aplica o efeito no item. O item vai primeiro: se algo falhar, nunca sobra
 // um bloco cumprido cujo item não foi marcado. Se o bloco falhar depois, o item volta como estava.
 // Devolve o card a oferecer para concluir (só em transição real e se existir lista de conclusão).
-export async function mudarEstado(est, bloco, novo, { instead_note = '' } = {}) {
+export async function mudarEstado(est, bloco, novo, { instead_note = '', diario } = {}) {
   const atual = bloco.status || 'planned';
   if (bloco.virtual && novo === 'planned') return { concluirCard: null };
   let concluirCard = null;
@@ -106,7 +110,14 @@ export async function mudarEstado(est, bloco, novo, { instead_note = '' } = {}) 
   }
   try {
     // O texto de "o que fiz no lugar" nunca é apagado por mudança de estado: só é regravado em "não feito".
-    await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim() } : { status: novo });
+    // O diário só é gravado quando vem junto com "cumprido" (pelo foco ou pela folha do bloco).
+    const comDiario = novo === 'done' && typeof diario === 'string' ? { diario: diario.trim() } : {};
+    await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim() } : { status: novo, ...comDiario });
+    // Sessão de revisão: cumprida conclui a revisão; desfazer o cumprido devolve a revisão para a fila.
+    const rev = statusDaRevisao(bloco, novo);
+    if (rev && est.dados.revisoes.some((r) => r.id === bloco.revisao_id && r.status !== 'cancelada')) {
+      await est.alterar('revisoes', bloco.revisao_id, { status: rev, feita_em: rev === 'feita' ? new Date().toISOString() : null });
+    }
   } catch (err) {
     if (desfazer) {
       try { await desfazer(); } catch {
@@ -234,6 +245,8 @@ export function abrirBloco(arg) {
   const tirar = criar('button', { type: 'button', class: 'btn', id: 'bloco-card-tirar', texto: 'Tirar card' });
   tirar.addEventListener('click', () => { cardId = null; mostrarEscolhido(); atualizarNovoCard(); });
   const caixaEstudo = criar('div', { class: 'bloco-estudo' }, campo('Card (opcional)', busca), opcoes, escolhido, campoItem, caixaNovoCard);
+  // Sessão de revisão: é sempre do card da revisão, sem item (trocar o card desligaria a revisão do que foi estudado).
+  if (arg.revisao_id) caixaEstudo.hidden = true;
 
   function mostrarEscolhido() {
     const card = estado.dados.cards.find((c) => c.id === cardId);
@@ -293,6 +306,15 @@ export function abrirBloco(arg) {
   // repetição semanal
   const repetir = criar('input', { id: 'bloco-repetir', type: 'checkbox' });
   const rotuloRepetir = criar('label', { class: 'repetir' }, repetir, criar('span', { texto: 'Repetir toda semana' }));
+  // Lembrete: vazio = o padrão das Configurações → Notificações; senão minutos antes (−1 nenhum, 0 na hora).
+  const lembrete = criar('select', { id: 'bloco-lembrete' },
+    criar('option', { value: '', texto: `Padrão (${textoDoLembrete(estado.ajustes().notif_antes_min).toLowerCase()})` }),
+    ...OPCOES_LEMBRETE.map(([v, t]) => criar('option', { value: String(v), texto: t })));
+  {
+    // Só o do próprio bloco: a ocorrência virtual já chega com o da fixa; um bloco gravado tem o seu.
+    const proprio = arg.lembrete_min ?? null;
+    lembrete.value = proprio === null || proprio === undefined ? '' : String(proprio);
+  }
   const chipsDias = DIAS_CURTOS.map((nome, i) => {
     const b = criar('button', { type: 'button', class: 'chip dia-rep', 'data-dia': String(i + 1), texto: nome });
     b.addEventListener('click', () => { if (dias.has(i + 1)) dias.delete(i + 1); else dias.add(i + 1); marcarDias(); });
@@ -320,8 +342,15 @@ export function abrirBloco(arg) {
   const noLugarOk = criar('button', { type: 'button', class: 'btn btn-principal', id: 'bloco-nao-feito-ok', texto: 'Marcar como não feito' });
   const caixaNoLugar = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-no-lugar-caixa' }, campo('O que fiz no lugar', noLugar), noLugarOk);
   caixaNoLugar.hidden = estadoAtual !== 'missed';
+  // Diário: oferecido ao marcar cumprido (como o "o que fiz no lugar" no não feito) e editável depois.
+  const diario = criar('textarea', { id: 'bloco-diario', rows: '3', placeholder: 'O que você estudou (opcional)' });
+  diario.value = arg.diario || '';
+  const cumpridoOk = criar('button', { type: 'button', class: 'btn btn-principal', id: 'bloco-cumprido-ok', texto: 'Marcar como cumprido' });
+  cumpridoOk.hidden = estadoAtual === 'done';
+  const caixaDiario = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-diario-caixa' }, campo('Diário', diario), cumpridoOk);
+  caixaDiario.hidden = estadoAtual !== 'done';
   const areaEstado = criar('div', { class: 'bloco-area-estado' },
-    criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito, btnPlanejado), caixaNoLugar);
+    criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito, btnPlanejado), caixaNoLugar, caixaDiario);
   areaEstado.hidden = novo;
 
   const campoData = campo('Data', data);
@@ -330,7 +359,11 @@ export function abrirBloco(arg) {
   const cancelar = criar('button', { type: 'button', class: 'btn', id: 'bloco-cancelar', texto: 'Cancelar' });
   const excluir = criar('button', { type: 'button', class: 'btn perigo', id: 'bloco-excluir', texto: 'Excluir' });
   excluir.hidden = novo;
-  const botoes = criar('div', { class: 'linha-botoes' }, salvar, cancelar, excluir);
+  // Modo foco ligado a este bloco (só em bloco que já existe).
+  const focar = criar('button', { type: 'button', class: 'btn', id: 'bloco-focar' }, criar('i', { class: 'ti ti-hourglass', 'aria-hidden': 'true' }), ' Focar');
+  focar.hidden = novo;
+  focar.addEventListener('click', () => { fecharBloco(); focarNoBloco(arg); });
+  const botoes = criar('div', { class: 'linha-botoes' }, salvar, cancelar, focar, excluir);
   const escopo = criar('div', { id: 'bloco-escopo', class: 'bloco-escopo', hidden: '' });
 
   function atualizarTipo() {
@@ -401,16 +434,22 @@ export function abrirBloco(arg) {
 
   // Texto que o usuário escreveu e que ainda não foi gravado (o título sugerido pelo card não conta).
   const notaMudou = () => !caixaNoLugar.hidden && noLugar.value.trim() !== (arg.instead_note || '').trim();
-  temTextoAberto = () => notaMudou()
+  const diarioMudou = () => !caixaDiario.hidden && diario.value.trim() !== (arg.diario || '').trim();
+  temTextoAberto = () => notaMudou() || diarioMudou()
     || (titulo.value.trim() !== (arg.title || '').trim() && titulo.value !== tituloAuto);
   // "Salvar" num bloco já não feito também grava o "o que fiz no lugar" corrigido.
-  const patchNota = () => (arg.status === 'missed' && notaMudou() ? { instead_note: noLugar.value.trim() } : {});
+  // Idem para o diário de um bloco já cumprido.
+  const patchNota = () => ({
+    ...(arg.status === 'missed' && notaMudou() ? { instead_note: noLugar.value.trim() } : {}),
+    ...(arg.status === 'done' && diarioMudou() ? { diario: diario.value.trim() } : {}),
+  });
 
   const valores = () => {
     const card = estado.dados.cards.find((c) => c.id === cardId);
     return {
       title: titulo.value.trim() || card?.title || '',
       category_id: categoriaValor(),
+      lembrete_min: lembrete.value === '' ? null : Number(lembrete.value),
       start_min: lerHora(inicio.value),
       end_min: lerHora(fim.value, true),
     };
@@ -420,6 +459,10 @@ export function abrirBloco(arg) {
     // "O que fiz no lugar" escrito num bloco que ainda não é não feito só se grava pelo botão do estado.
     if (arg.status !== 'missed' && notaMudou()) {
       erro.textContent = 'Para guardar o que você fez no lugar, toque em “Marcar como não feito”, ou apague o texto.';
+      return;
+    }
+    if (arg.status !== 'done' && diarioMudou()) {
+      erro.textContent = 'Para guardar o diário, toque em “Marcar como cumprido”, ou apague o texto.';
       return;
     }
     const problema = validar();
@@ -470,7 +513,7 @@ export function abrirBloco(arg) {
         }
         // Ocorrência virtual sem nenhuma mudança não vira linha gravada.
         const { kind, ...card } = doCard();
-        const igual = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k]) && (arg.card_id || null) === cardId;
+        const igual = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k]) && (arg.card_id || null) === cardId && (arg.lembrete_min ?? null) === v.lembrete_min;
         if (!(arg.virtual && igual)) await gravarBloco(estado, arg, { ...v, ...card, ...nota });
       });
       return;
@@ -507,8 +550,8 @@ export function abrirBloco(arg) {
   cancelar.addEventListener('click', fecharBloco);
 
   // Cumprido e não feito gravam na hora, sem passar pelo Salvar. O card só é oferecido depois de tudo gravado.
-  const aplicarEstado = (valor, nota = '') => executar(async () => {
-    const { concluirCard: card } = await mudarEstado(estado, arg, valor, { instead_note: nota });
+  const aplicarEstado = (valor, nota = '', textoDiario) => executar(async () => {
+    const { concluirCard: card } = await mudarEstado(estado, arg, valor, { instead_note: nota, diario: textoDiario });
     if (!card) return undefined;
     perguntar('Concluir este card?', [['sim', 'Concluir card'], ['nao', 'Agora não']],
       async (esc) => {
@@ -519,9 +562,14 @@ export function abrirBloco(arg) {
       }, { semVoltar: true });
     return MANTER_ABERTA;
   });
-  btnCumprido.addEventListener('click', () => aplicarEstado('done'));
+  btnCumprido.addEventListener('click', () => {
+    // Já cumprido: tocar de novo só confirma (e guarda o diário corrigido, se mudou).
+    if (arg.status === 'done') { aplicarEstado('done', '', diario.value); return; }
+    caixaNoLugar.hidden = true; caixaDiario.hidden = false; diario.focus();
+  });
+  cumpridoOk.addEventListener('click', () => aplicarEstado('done', '', diario.value));
   btnPlanejado.addEventListener('click', () => aplicarEstado('planned'));
-  btnNaoFeito.addEventListener('click', () => { caixaNoLugar.hidden = false; noLugar.focus(); });
+  btnNaoFeito.addEventListener('click', () => { if (arg.status !== 'done') caixaDiario.hidden = true; caixaNoLugar.hidden = false; noLugar.focus(); });
   noLugarOk.addEventListener('click', () => aplicarEstado('missed', noLugar.value));
 
   const fundo = criar('div', { class: 'menu-fundo' });
@@ -531,6 +579,7 @@ export function abrirBloco(arg) {
     criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado,
     campo('Título', titulo), caixaEstudo, campo('Tag', tagSel), campoSub, campoData,
     criar('div', { class: 'linha-campos' }, campo('Início', inicio), campo('Fim', fim)),
+    campo('Lembrete', lembrete),
     rotuloRepetir, painelRepeticao, erro, botoes, escopo);
   painel.addEventListener('submit', (e) => e.preventDefault());
   camada.replaceChildren(fundo, painel);

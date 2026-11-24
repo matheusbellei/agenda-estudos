@@ -69,6 +69,38 @@ Para trocar as chaves de `js/config.js` depois que o código já está no GitHub
 
 Quem instalou antes de novembro de 2026 roda, uma vez e **antes de publicar o código novo no GitHub**, `supabase/migracao-2026-11-subtags.sql` no **SQL Editor** do Supabase (cole o arquivo inteiro e clique em **Run**). Se o código novo for ao ar antes, criar tags, compromissos fixos e salvar "Bloco sem card" dá erro até a migração rodar. Ela acrescenta as subtags e os ícones das tags, o card nos compromissos fixos e a criação automática de card. Pode rodar de novo sem problema, e nada do que já existe é apagado. Quem instalou depois já tem tudo pelo `schema.sql`.
 
+### Rodadas 2, 3 e 4: acompanhamento, modo foco, diário, modelos, modo escuro e revisões (24/11/2026)
+
+Faça nesta ordem (se pular a ordem, telas novas dão erro até as migrações rodarem):
+
+1. No **SQL Editor** do Supabase, rode `supabase/migracao-2026-11-acompanhamento.sql` (cole tudo e clique em **Run**).
+2. Ainda no SQL Editor, rode `supabase/migracao-2026-11-foco-diario.sql`.
+3. Ainda no SQL Editor, rode `supabase/migracao-2026-11-modelos-revisoes.sql`. As três podem rodar de novo sem problema.
+4. Publique o código novo no GitHub (`git add .`, `git commit -m "rodadas 2, 3 e 4"`, `git push`).
+5. Atualize a função dos avisos: em **Edge Functions › lembretes**, abra o código, apague tudo, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy**. O agendamento e os segredos continuam os mesmos. Sem isso, o aviso da revisão da semana e o aviso do fim de cada fase do foco não chegam.
+6. No app, em **Tags**, edite as tags que contam como estudo e marque **Conta como estudo** (e, se quiser, a meta por semana). Em **Configurações › Geral** ficam o tema (claro/escuro), os tempos do modo foco, os dias da revisão espaçada e a opção dos modelos de semana.
+
+O app instalado no celular pode demorar uma abertura para pegar a versão nova; se algo parecer antigo, feche e abra de novo.
+
+## Notificações (lembretes com o app fechado)
+
+O Supabase roda, a cada minuto, a função `lembretes`, que confere a agenda e manda os avisos para os aparelhos onde você ativou. Faça isto uma vez, nesta ordem:
+
+1. **Banco.** No **SQL Editor**, rode o arquivo `supabase/migracao-2026-11-notificacoes.sql` inteiro (antes de publicar o código novo).
+2. **Chaves.** No terminal do VS Code, dentro da pasta do projeto: `node scripts/gerar-chaves-vapid.mjs`. Ele mostra uma chave pública e uma privada. (Também serve `npx web-push generate-vapid-keys`.) Se aparecer "node não é reconhecido", instale o Node.js LTS em nodejs.org e abra o terminal de novo.
+3. **Segredos da função.** No Supabase: **Edge Functions → Secrets**. Crie quatro:
+   - `VAPID_PUBLIC_KEY`: a chave pública;
+   - `VAPID_PRIVATE_KEY`: a chave privada (ela fica só aqui, em nenhum arquivo);
+   - `VAPID_SUBJECT`: `mailto:` seguido do seu e-mail (ex.: `mailto:voce@email.com`);
+   - `LEMBRETES_SEGREDO`: um texto aleatório e longo, que você inventa (ex.: 40 letras e números). Guarde para o passo 5.
+4. **A função.** Em **Edge Functions → Deploy a new function → Via Editor**, dê o nome `lembretes`, apague o exemplo, cole o conteúdo inteiro de `supabase/functions/lembretes/index.ts` e clique em **Deploy**. Depois, nos detalhes da função, **desligue a verificação de JWT** ("Verify JWT"/"Enforce JWT verification"): o agendador se identifica pelo `LEMBRETES_SEGREDO`, e os botões da notificação, por um link assinado.
+5. **Agendamento.** Abra `supabase/agendar-lembretes.sql`, troque os dois textos marcados (a URL do seu projeto e o mesmo `LEMBRETES_SEGREDO`) e rode no **SQL Editor**. Pode rodar de novo quando quiser trocar o segredo.
+6. **App.** Cole a chave **pública** em `js/config.js`, na linha `VAPID_PUBLIC_KEY = '...'`, e publique. No celular, abra o app instalado, vá em **Configurações → Notificações**, toque em **Ativar neste aparelho** e em **Enviar teste**. Repita no computador, se quiser receber lá também.
+
+Se o teste não chegar: confira em **Edge Functions → lembretes → Logs** se houve erro; confira os quatro segredos; e, no celular, se as notificações do app não estão bloqueadas nas configurações do Android. A função não guarda nada além do que está nestas tabelas: `push_subscriptions` (aparelhos), `notificacoes_enviadas` (para não repetir) e `adiamentos`.
+
+Para mudar a função depois: edite `supabase/functions/lembretes/*.js` (ou as regras em `js/regras/`), rode `npm run gerar-funcao` e cole o novo `index.ts` no editor da função.
+
 ## Backup
 
 Em **Ajustes → Backup**, **Exportar backup** baixa um arquivo `agenda-estudos-AAAA-MM-DD.json`. Ele é gerado no seu aparelho e não é enviado a lugar nenhum.

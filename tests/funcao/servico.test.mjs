@@ -1,0 +1,264 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { criarServico, assinarToken } from '../../supabase/functions/lembretes/servico.js';
+
+const SEG = '2026-11-23';
+const em = (hhmm, dia = SEG) => Date.parse(`${dia}T${hhmm}:00-03:00`);
+const ENV = { LEMBRETES_SEGREDO: 'segredo-de-teste', SUPABASE_URL: 'https://proj.supabase.co' };
+const DONO = 'u1';
+
+// Banco falso com os mesmos filtros que a entrada traduz para o PostgREST: valor = igual; {in}, {lt}.
+function bancoFalso(dados) {
+  const t = (n) => (dados[n] ||= []);
+  const casa = (linha, filtros = {}) => Object.entries(filtros).every(([k, v]) => {
+    if (v && typeof v === 'object' && 'in' in v) return v.in.includes(linha[k]);
+    if (v && typeof v === 'object' && 'lt' in v) return linha[k] < v.lt;
+    if (v && typeof v === 'object' && 'gte' in v) return linha[k] >= v.gte && (!('lte' in v) || linha[k] <= v.lte);
+    return linha[k] === v;
+  });
+  const escritas = [];
+  return {
+    dados, escritas,
+    async select(n, f) { return t(n).filter((l) => casa(l, f)).map((l) => ({ ...l })); },
+    async insert(n, linha, { ignorarConflito } = {}) {
+      if (n === 'notificacoes_enviadas' && t(n).some((l) => l.owner_id === linha.owner_id && l.chave === linha.chave)) {
+        if (ignorarConflito) return [];
+        throw new Error('duplicate key');
+      }
+      const nova = { id: `${n}-${t(n).length + 1}`, ...linha };
+      t(n).push(nova); escritas.push(['insert', n, nova]); return [nova];
+    },
+    async update(n, f, campos) { const ls = t(n).filter((l) => casa(l, f)); ls.forEach((l) => Object.assign(l, campos)); escritas.push(['update', n, f, campos]); return ls; },
+    async remove(n, f) { const antes = t(n).length; dados[n] = t(n).filter((l) => !casa(l, f)); escritas.push(['remove', n, f]); return antes - dados[n].length; },
+    async usuarioDoJwt(jwt) { return jwt === 'jwt-bom' ? { id: DONO } : null; },
+  };
+}
+
+const base = () => ({
+  push_subscriptions: [{ id: 's1', owner_id: DONO, endpoint: 'https://push/a', p256dh: 'k', auth: 'a' }, { id: 's2', owner_id: DONO, endpoint: 'https://push/b', p256dh: 'k', auth: 'a' }],
+  settings: [], commitments: [], items: [], cards: [], adiamentos: [], notificacoes_enviadas: [],
+  blocks: [{ id: 'b1', owner_id: DONO, date: SEG, start_min: 1290, end_min: 1380, title: 'Vocabulário', status: 'planned', kind: 'commitment', lembrete_min: null }],
+});
+
+function montar({ dados = base(), instante = em('21:20'), status = {} } = {}) {
+  const banco = bancoFalso(dados);
+  const enviados = [];
+  const enviar = async (sub, payload) => { enviados.push({ endpoint: sub.endpoint, payload }); return { status: status[sub.endpoint] ?? 201 }; };
+  const relogio = { agora: instante };
+  const servico = criarServico({ banco, enviar, agora: () => relogio.agora, env: ENV });
+  return { banco, enviados, servico, relogio };
+}
+
+const tique = (s, segredo = ENV.LEMBRETES_SEGREDO) => s.tratar(new Request('https://proj.supabase.co/functions/v1/lembretes', { method: 'POST', headers: { 'x-lembretes-segredo': segredo } }));
+
+test('tique envia o lembrete das 21:20 aos dois aparelhos, uma vez só em duas chamadas', async () => {
+  const { servico, enviados } = montar();
+  assert.equal((await tique(servico)).status, 200);
+  assert.equal((await tique(servico)).status, 200);
+  assert.deepEqual(enviados.map((e) => e.endpoint), ['https://push/a', 'https://push/b']);
+  const p = enviados[0].payload;
+  assert.deepEqual([p.titulo, p.corpo, p.tag, p.url], ['Vocabulário', 'Começa às 21:30 (em 10 min)', 'antes:b1:2026-11-23:1290', './?bloco=b1&data=2026-11-23']);
+  assert.deepEqual(p.acoes.map((a) => [a.acao, a.titulo]), [['cumprir', 'Cumprido'], ['adiar', 'Adiar 10 min']]);
+  assert.match(p.acoes[0].url, /^https:\/\/proj\.supabase\.co\/functions\/v1\/lembretes\?acao=cumprir&t=/);
+});
+
+test('inscrição recusada com 410 é apagada e a outra continua recebendo', async () => {
+  const { servico, banco, enviados } = montar({ status: { 'https://push/a': 410 } });
+  await tique(servico);
+  assert.deepEqual(banco.dados.push_subscriptions.map((s) => s.id), ['s2']);
+  assert.equal(enviados.length, 2);
+});
+
+test('segredo errado no tique → 401 e nada é enviado', async () => {
+  const { servico, enviados } = montar();
+  assert.equal((await tique(servico, 'errado')).status, 401);
+  assert.equal(enviados.length, 0);
+});
+
+test('sem linha de settings valem os padrões; dono sem aparelho não é consultado', async () => {
+  const dados = base();
+  dados.blocks.push({ id: 'b9', owner_id: 'u2', date: SEG, start_min: 1290, end_min: 1300, title: 'Outro', status: 'planned' });
+  const { servico, enviados } = montar({ dados });
+  await tique(servico);
+  assert.ok(enviados.every((e) => e.payload.titulo === 'Vocabulário'));
+});
+
+const acao = (s, acaoNome, token) => s.tratar(new Request(`https://proj.supabase.co/functions/v1/lembretes?acao=${acaoNome}&t=${encodeURIComponent(token)}`));
+
+test('token alterado ou vencido → 403 sem escrever nada', async () => {
+  const { servico, banco } = montar();
+  const bom = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'b1', data: SEG, acao: 'cumprir', expira: Math.floor(em('21:20') / 1000) + 3600 });
+  const alterado = bom.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+  assert.equal((await acao(servico, 'cumprir', alterado)).status, 403);
+  const vencido = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'b1', data: SEG, acao: 'cumprir', expira: Math.floor(em('21:20') / 1000) - 1 });
+  assert.equal((await acao(servico, 'cumprir', vencido)).status, 403);
+  const outraAcao = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'b1', data: SEG, acao: 'adiar', expira: Math.floor(em('21:20') / 1000) + 3600 });
+  assert.equal((await acao(servico, 'cumprir', outraAcao)).status, 403);
+  assert.deepEqual(banco.escritas, []);
+});
+
+const token = (acaoNome, ref = 'b1', data = SEG) => assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref, data, acao: acaoNome, expira: Math.floor(em('21:20') / 1000) + 3600 });
+
+test('cumprir bloco gravado marca done e o item do card', async () => {
+  const dados = base();
+  Object.assign(dados.blocks[0], { item_id: 'i1', card_id: 'c1', kind: 'study' });
+  dados.items.push({ id: 'i1', owner_id: DONO, card_id: 'c1', done: false });
+  const { servico, banco } = montar({ dados });
+  assert.equal((await acao(servico, 'cumprir', await token('cumprir'))).status, 200);
+  assert.equal(banco.dados.blocks[0].status, 'done');
+  assert.equal(banco.dados.items[0].done, true);
+});
+
+test('cumprir ocorrência virtual cria o bloco done com os dados da fixa', async () => {
+  const dados = base();
+  dados.blocks = [];
+  dados.commitments.push({ id: 'f1', owner_id: DONO, title: 'Leitura', days: [1], start_min: 1290, end_min: 1350, valid_from: '2026-11-01', valid_to: null, category_id: 'k', card_id: null, lembrete_min: 15 });
+  const { servico, banco } = montar({ dados });
+  assert.equal((await acao(servico, 'cumprir', await token('cumprir', 'v:f1'))).status, 200);
+  const [b] = banco.dados.blocks;
+  assert.deepEqual([b.commitment_id, b.date, b.status, b.title, b.start_min, b.category_id, b.lembrete_min, b.kind, b.owner_id],
+    ['f1', SEG, 'done', 'Leitura', 1290, 'k', 15, 'commitment', DONO]);
+});
+
+test('cumprir bloco que não está planejado não muda nada', async () => {
+  const dados = base();
+  dados.blocks[0].status = 'missed';
+  const { servico, banco } = montar({ dados });
+  assert.equal((await acao(servico, 'cumprir', await token('cumprir'))).status, 200);
+  assert.equal(banco.dados.blocks[0].status, 'missed');
+  assert.deepEqual(banco.escritas, []);
+});
+
+test('adiar cria adiamento para daqui a 10 min', async () => {
+  const { servico, banco } = montar();
+  assert.equal((await acao(servico, 'adiar', await token('adiar'))).status, 200);
+  const [a] = banco.dados.adiamentos;
+  assert.deepEqual([a.owner_id, a.ref, a.data, a.quando], [DONO, 'b1', SEG, new Date(em('21:30')).toISOString()]);
+});
+
+test('adiado sai no tique 10 min depois', async () => {
+  const { servico, enviados, relogio } = montar({ instante: em('21:20') });
+  await tique(servico);
+  await acao(servico, 'adiar', await token('adiar'));
+  relogio.agora = em('21:30');
+  await tique(servico);
+  assert.ok(enviados.some((e) => e.payload.corpo === 'Começa às 21:30 (lembrete adiado)'));
+});
+
+const teste = (s, jwt, endpoint, origem = 'https://matheusbellei.github.io') => s.tratar(new Request('https://proj.supabase.co/functions/v1/lembretes?teste=1', {
+  method: 'POST', headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), 'Content-Type': 'application/json', Origin: origem }, body: JSON.stringify({ endpoint }),
+}));
+
+test('teste: sem JWT válido 401; com JWT envia só para o aparelho pedido, com CORS da origem do app', async () => {
+  const { servico, enviados } = montar();
+  assert.equal((await teste(servico, null, 'https://push/a')).status, 401);
+  assert.equal((await teste(servico, 'jwt-ruim', 'https://push/a')).status, 401);
+  const r = await teste(servico, 'jwt-bom', 'https://push/b');
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('access-control-allow-origin'), 'https://matheusbellei.github.io');
+  assert.deepEqual(enviados.map((e) => [e.endpoint, e.payload.titulo]), [['https://push/b', 'Teste']]);
+});
+
+test('CORS: OPTIONS 204 para a origem do app e localhost; origem estranha não é liberada', async () => {
+  const { servico } = montar();
+  const pre = (o) => servico.tratar(new Request('https://proj.supabase.co/functions/v1/lembretes?teste=1', { method: 'OPTIONS', headers: { Origin: o } }));
+  assert.equal((await pre('https://matheusbellei.github.io')).status, 204);
+  assert.equal((await pre('http://localhost:8080')).headers.get('access-control-allow-origin'), 'http://localhost:8080');
+  assert.equal((await pre('https://malicioso.exemplo')).headers.get('access-control-allow-origin'), null);
+});
+
+test('tique apaga enviadas com mais de 14 dias', async () => {
+  const dados = base();
+  dados.notificacoes_enviadas.push({ owner_id: DONO, chave: 'velha', enviada_em: new Date(em('21:20') - 15 * 86400000).toISOString() });
+  const { servico, banco } = montar({ dados });
+  await tique(servico);
+  assert.ok(!banco.dados.notificacoes_enviadas.some((n) => n.chave === 'velha'));
+});
+
+// ---- Revisão da semana
+const DOM = '2026-11-22';
+const comEstudo = () => {
+  const d = base();
+  d.blocks = [
+    { id: 'r1', owner_id: DONO, date: '2026-11-17', start_min: 480, end_min: 1050, title: 'Leitura', status: 'done', kind: 'study', category_id: 'E' },
+    { id: 'r2', owner_id: DONO, date: '2026-11-18', start_min: 480, end_min: 750, title: 'Leitura', status: 'planned', kind: 'study', category_id: 'E' },
+    { id: 'r3', owner_id: DONO, date: '2026-11-18', start_min: 0, end_min: 600, title: 'Trabalho', status: 'done', kind: 'commitment', category_id: 'W' },
+  ];
+  d.categories = [{ id: 'E', owner_id: DONO, name: 'Idiomas', conta_estudo: true, parent_id: null }, { id: 'W', owner_id: DONO, name: 'Trabalho', conta_estudo: false, parent_id: null }];
+  return d;
+};
+
+test('domingo 20:00 envia a revisão da semana com o resumo e o link da tela, uma vez só', async () => {
+  const { servico, enviados } = montar({ dados: comEstudo(), instante: em('20:00', DOM) });
+  await tique(servico); await tique(servico);
+  const revisoes = enviados.filter((e) => e.payload.tag === `revisao:${DOM}`);
+  assert.equal(revisoes.length, 2);
+  const p = revisoes[0].payload;
+  assert.deepEqual([p.titulo, p.corpo, p.url, p.acoes], ['Revisão da semana', 'Semana: 9h30 de 14h de estudo. Toque para revisar.', './?tela=revisao', []]);
+});
+
+test('revisão de semana sem estudo planejado', async () => {
+  const d = base(); d.blocks = []; d.categories = [];
+  const { servico, enviados } = montar({ dados: d, instante: em('20:00', DOM) });
+  await tique(servico);
+  assert.equal(enviados[0].payload.corpo, 'Semana sem estudo planejado. Toque para revisar.');
+});
+
+test('fora do minuto da revisão a função não lê as tags', async () => {
+  const { servico, banco } = montar({ dados: comEstudo(), instante: em('19:00', DOM) });
+  const lidas = [];
+  const sel = banco.select.bind(banco);
+  banco.select = async (n, f) => { lidas.push(n); return sel(n, f); };
+  await tique(servico);
+  assert.ok(!lidas.includes('categories'));
+});
+
+// ---- Modo foco
+const HOJE_FOCO = '2026-11-24';
+const fimFoco = new Date(em('10:25', HOJE_FOCO)).toISOString();
+const comFoco = (extra = {}) => {
+  const d = base(); d.blocks = [];
+  d.focos = [{ owner_id: DONO, fase: 'foco', ciclo: 2, estado: 'rodando', termina_em: fimFoco, restante_s: null, titulo: 'Espanhol', ...extra }];
+  return d;
+};
+
+test('fim do foco envia uma vez com "Começar pausa" e deixa a linha esperando', async () => {
+  const { servico, enviados, banco } = montar({ dados: comFoco(), instante: em('10:25', HOJE_FOCO) });
+  await tique(servico); await tique(servico);
+  assert.equal(enviados.length, 2);
+  const p = enviados[0].payload;
+  assert.deepEqual([p.titulo, p.corpo, p.tag, p.url], ['Espanhol', 'Foco concluído (ciclo 2 de 4). Hora da pausa de 5 min.', `foco:${DONO}:${fimFoco}`, './?tela=foco']);
+  assert.deepEqual(p.acoes.map((a) => [a.acao, a.titulo]), [['proxima', 'Começar pausa']]);
+  assert.equal(banco.dados.focos[0].estado, 'esperando');
+});
+
+test('foco pausado não envia nada', async () => {
+  const { servico, enviados } = montar({ dados: comFoco({ estado: 'pausado', termina_em: null, restante_s: 60 }), instante: em('10:25', HOJE_FOCO) });
+  await tique(servico);
+  assert.equal(enviados.length, 0);
+});
+
+test('ação "proxima" começa a pausa; link velho não muda nada', async () => {
+  const { servico, banco, relogio } = montar({ dados: comFoco({ estado: 'esperando' }), instante: em('10:27', HOJE_FOCO) });
+  const expira = Math.floor(relogio.agora / 1000) + 3600;
+  const velho = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'foco', data: new Date(em('09:00', HOJE_FOCO)).toISOString(), acao: 'proxima', expira });
+  assert.equal((await acao(servico, 'proxima', velho)).status, 200);
+  assert.equal(banco.dados.focos[0].estado, 'esperando');
+  const certo = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'foco', data: fimFoco, acao: 'proxima', expira });
+  assert.equal((await acao(servico, 'proxima', certo)).status, 200);
+  const f = banco.dados.focos[0];
+  assert.deepEqual([f.fase, f.ciclo, f.estado, f.termina_em], ['pausa', 2, 'rodando', new Date(em('10:32', HOJE_FOCO)).toISOString()]);
+});
+
+test('foco pausado entre a leitura do tique e o envio não recebe o aviso antigo', async () => {
+  const { servico, enviados, banco } = montar({ dados: comFoco(), instante: em('10:25', HOJE_FOCO) });
+  const sel = banco.select.bind(banco);
+  let leituras = 0;
+  banco.select = async (n, f) => {
+    if (n === 'focos' && (leituras += 1) > 1) { banco.dados.focos[0] = { ...banco.dados.focos[0], estado: 'pausado', termina_em: null, restante_s: 30 }; }
+    return sel(n, f);
+  };
+  await tique(servico);
+  assert.equal(enviados.length, 0);
+  assert.equal(banco.dados.focos[0].estado, 'pausado');
+});

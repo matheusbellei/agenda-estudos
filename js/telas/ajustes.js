@@ -1,9 +1,12 @@
 // Tela Configurações (id interno "ajustes"): horários do calendário, importação e backup. As tags ficam em telas/tags.js.
 import { registrarTela } from './casca.js';
+import { montarPainelNotificacoes } from './notificacoes.js';
 import { maesPrimeiro } from '../regras/tags.js';
 import { horaTexto, minutosDe, inicioDaSemana, isoDe } from '../regras/datas.js';
 import { planoDeImportacao } from '../regras/trello.js';
 import { TABELAS } from '../estado.js';
+import { validarDias } from '../regras/revisoes.js';
+import { temaAtual, aplicarTema } from '../tema.js';
 
 const PALETA = [
   '#6F4E37', '#C68B59', '#B5543A', '#D9822B', '#C9A227', '#8A9A3B', '#5B7A3A', '#2F7D6D',
@@ -172,11 +175,27 @@ export function backupColide(tabelas, dados) {
     return regras.some((cols) => {
       const chave = (l) => {
         if (MARCAS.includes(cols[0])) return l[cols[0]] ? 'marcada' : null; // só uma lista com cada marca
-        return cols.some((c) => l[c] == null) ? null : JSON.stringify(cols.map((c) => String(l[c])));
+        // Nome de modelo é único sem diferenciar maiúsculas nem espaços nas pontas (índice do banco).
+        const valor = (c) => (c === 'nome' ? String(l[c]).trim().toLowerCase() : String(l[c]));
+        return cols.some((c) => l[c] == null) ? null : JSON.stringify(cols.map(valor));
       };
       const ocupadas = new Set(existentes.map(chave).filter((k) => k !== null));
       return novas.some((l) => { const k = chave(l); return k !== null && ocupadas.has(k); });
     });
+  });
+}
+
+// Modelo do backup com o nome de outro modelo que já existe (recriado depois do backup): entra como "nome (restaurado)".
+export function nomesLivres(linhas, existentes) {
+  const chave = (n) => String(n).trim().toLowerCase();
+  const ids = new Set(existentes.map((m) => m.id));
+  const usados = new Set(existentes.map((m) => chave(m.nome)));
+  return linhas.map((l) => {
+    if (ids.has(l.id) || !usados.has(chave(l.nome))) { usados.add(chave(l.nome)); return l; }
+    let nome = `${String(l.nome).trim()} (restaurado)`;
+    for (let i = 2; usados.has(chave(nome)); i += 1) nome = `${String(l.nome).trim()} (restaurado ${i})`;
+    usados.add(chave(nome));
+    return { ...l, nome };
   });
 }
 
@@ -191,6 +210,7 @@ export async function restaurarBackup(texto, { estado, store }) {
     let linhas = tabelas[t] || [];
     if (t === 'settings' && estado.dados.settings.length) linhas = [];
     if (t === 'categories') linhas = maesPrimeiro(linhas);
+    if (t === 'modelos') linhas = nomesLivres(linhas, estado.dados.modelos);
     inseridos[t] = 0;
     for (let i = 0; i < linhas.length; i += LOTE) {
       const criadas = await store.upsert(t, linhas.slice(i, i + LOTE), CONFLITO_BACKUP[t] || 'id');
@@ -274,12 +294,97 @@ export function iniciarAjustes({ estado, store }) {
     restaurarIr, resumoBackup);
 
 
-  secao.replaceChildren(
+  const sequenciaMin = criar('input', { id: 'aj-sequencia', type: 'number', min: '5', max: '600', step: '5', inputmode: 'numeric' });
+  const erroAcomp = criar('div', { class: 'erro', id: 'aj-acomp-erro', role: 'alert' });
+  const salvarAcomp = criar('button', { class: 'btn btn-principal', id: 'aj-acomp-salvar', type: 'button', texto: 'Salvar' });
+  const cartaoAcomp = criar('div', { class: 'cartao', id: 'aj-acompanhamento' },
+    criar('h2', { texto: 'Acompanhamento' }),
+    criar('label', { class: 'campo' }, criar('span', { texto: 'Sequência: mínimo de estudo por dia (minutos)' }), sequenciaMin),
+    criar('p', { class: 'suave', texto: 'Um dia entra na sequência quando o estudo cumprido chega a esse mínimo.' }),
+    erroAcomp, salvarAcomp);
+  salvarAcomp.addEventListener('click', async () => {
+    const v = Number(sequenciaMin.value);
+    if (!Number.isInteger(v) || v < 5 || v > 600) { erroAcomp.textContent = 'Use de 5 a 600 minutos.'; return; }
+    erroAcomp.textContent = '';
+    try { await estado.alterar('settings', null, { sequencia_min: v }); } catch (err) { erroAcomp.textContent = err.message || 'Não foi possível salvar.'; }
+  });
+
+  const num = (id, min, max) => criar('input', { id, type: 'number', min: String(min), max: String(max), inputmode: 'numeric' });
+  const focoMin = num('aj-foco-min', 5, 120); const pausaMin = num('aj-pausa-min', 1, 60);
+  const pausaLongaMin = num('aj-pausa-longa-min', 1, 60); const ciclosLonga = num('aj-ciclos-longa', 2, 8);
+  const focoSom = criar('input', { type: 'checkbox', id: 'aj-foco-som' });
+  const erroFoco = criar('div', { class: 'erro', id: 'aj-foco-erro', role: 'alert' });
+  const salvarFoco = criar('button', { class: 'btn btn-principal', id: 'aj-foco-salvar', type: 'button', texto: 'Salvar' });
+  const campoN = (rotulo, el) => criar('label', { class: 'campo' }, criar('span', { texto: rotulo }), el);
+  const cartaoFoco = criar('div', { class: 'cartao', id: 'aj-foco' },
+    criar('h2', { texto: 'Modo foco' }),
+    criar('div', { class: 'linha-campos' }, campoN('Foco (min)', focoMin), campoN('Pausa (min)', pausaMin)),
+    criar('div', { class: 'linha-campos' }, campoN('Pausa longa (min)', pausaLongaMin), campoN('Ciclos até a pausa longa', ciclosLonga)),
+    criar('label', { class: 'campo-check' }, focoSom, criar('span', { texto: 'Som e vibração no fim de cada fase (com o app aberto)' })),
+    erroFoco, salvarFoco);
+  salvarFoco.addEventListener('click', async () => {
+    const v = [focoMin, pausaMin, pausaLongaMin, ciclosLonga].map((i) => Number(i.value));
+    const [f, p, l, c] = v;
+    const ok = v.every(Number.isInteger) && f >= 5 && f <= 120 && p >= 1 && p <= 60 && l >= 1 && l <= 60 && c >= 2 && c <= 8;
+    if (!ok) { erroFoco.textContent = 'Foco de 5 a 120 min, pausas de 1 a 60 e de 2 a 8 ciclos.'; return; }
+    erroFoco.textContent = '';
+    try { await estado.alterar('settings', null, { foco_min: f, pausa_min: p, pausa_longa_min: l, ciclos_longa: c, foco_som: focoSom.checked }); }
+    catch (err) { erroFoco.textContent = err.message || 'Não foi possível salvar.'; }
+  });
+
+  const revisoesDias = criar('input', { id: 'aj-revisoes-dias', type: 'text', inputmode: 'numeric', placeholder: '7, 30' });
+  const erroRevisoes = criar('div', { class: 'erro', id: 'aj-revisoes-erro', role: 'alert' });
+  const salvarRevisoes = criar('button', { class: 'btn btn-principal', id: 'aj-revisoes-salvar', type: 'button', texto: 'Salvar' });
+  const cartaoRevisoes = criar('div', { class: 'cartao', id: 'aj-revisoes' },
+    criar('h2', { texto: 'Revisão espaçada' }),
+    criar('label', { class: 'campo' }, criar('span', { texto: 'Dias depois do agendamento (padrão do botão "Agendar revisão")' }), revisoesDias),
+    criar('p', { class: 'suave', texto: 'Números separados por vírgula, do menor para o maior. Ex.: 7, 30 ou 3, 10, 30.' }),
+    erroRevisoes, salvarRevisoes);
+  const tema = criar('select', { id: 'aj-tema' }, criar('option', { value: 'claro', texto: 'Claro' }), criar('option', { value: 'escuro', texto: 'Escuro' }));
+  tema.value = temaAtual();
+  tema.addEventListener('change', () => aplicarTema(tema.value));
+  const cartaoTema = criar('div', { class: 'cartao', id: 'aj-aparencia' }, criar('h2', { texto: 'Aparência' }),
+    criar('label', { class: 'campo' }, criar('span', { texto: 'Tema (vale só neste aparelho)' }), tema));
+  const modelosFixas = criar('input', { type: 'checkbox', id: 'aj-modelos-fixas' });
+  const cartaoModelos = criar('div', { class: 'cartao', id: 'aj-modelos' }, criar('h2', { texto: 'Modelos de semana' }),
+    criar('label', { class: 'campo-check' }, modelosFixas, criar('span', { texto: 'Modelos incluem os compromissos fixos' })),
+    criar('p', { class: 'suave', texto: 'Ao aplicar, um compromisso fixo que já aparece na semana nunca é duplicado.' }));
+  modelosFixas.addEventListener('change', () => estado.alterar('settings', null, { modelos_com_fixas: modelosFixas.checked }).catch(() => {
+    modelosFixas.checked = !modelosFixas.checked;
+  }));
+  salvarRevisoes.addEventListener('click', async () => {
+    const r = validarDias(revisoesDias.value);
+    if (r.erro) { erroRevisoes.textContent = r.erro; return; }
+    erroRevisoes.textContent = '';
+    try { await estado.alterar('settings', null, { revisoes_dias: r.dias }); } catch (err) { erroRevisoes.textContent = err.message || 'Não foi possível salvar.'; }
+  });
+
+  // Duas abas: Geral (horários, bloco sem card, importação e backup) e Notificações.
+  const painelNotif = montarPainelNotificacoes({ estado, store });
+  const geral = criar('div', { id: 'aj-geral', class: 'aj-painel' },
     criar('div', { class: 'cartao', id: 'aj-horarios' }, criar('h2', { texto: 'Horários' }), formHor),
+    cartaoTema,
+    cartaoAcomp,
+    cartaoFoco,
+    cartaoRevisoes,
+    cartaoModelos,
     cartaoAutoCard,
     cartaoImportar,
     cartaoBackup,
   );
+  const abas = criar('div', { id: 'aj-abas', class: 'visao aj-abas', role: 'tablist' },
+    ...[['geral', 'Geral'], ['notificacoes', 'Notificações']].map(([v, t]) => criar('button', { type: 'button', role: 'tab', 'data-aba-ajustes': v, texto: t })));
+  let abaAtual = 'geral';
+  function mostrarAba(nome) {
+    abaAtual = nome;
+    geral.hidden = nome !== 'geral';
+    painelNotif.el.hidden = nome !== 'notificacoes';
+    abas.querySelectorAll('[data-aba-ajustes]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.abaAjustes === nome)));
+    if (nome === 'notificacoes') painelNotif.mostrar();
+  }
+  abas.querySelectorAll('[data-aba-ajustes]').forEach((b) => b.addEventListener('click', () => mostrarAba(b.dataset.abaAjustes)));
+  secao.replaceChildren(abas, geral, painelNotif.el);
+  mostrarAba('geral');
 
   // ---- horários
   function desenharHorarios() {
@@ -288,6 +393,13 @@ export function iniciarAjustes({ estado, store }) {
     fim.value = horaTexto(a.day_end_min);
     faixa.value = String(a.week_slot_min);
     fatia.value = String(a.day_slot_min);
+    if (document.activeElement !== sequenciaMin) sequenciaMin.value = String(a.sequencia_min);
+    modelosFixas.checked = !!a.modelos_com_fixas;
+    if (document.activeElement !== revisoesDias) revisoesDias.value = (a.revisoes_dias || []).join(', ');
+    if (!cartaoFoco.contains(document.activeElement)) {
+      focoMin.value = String(a.foco_min); pausaMin.value = String(a.pausa_min);
+      pausaLongaMin.value = String(a.pausa_longa_min); ciclosLonga.value = String(a.ciclos_longa); focoSom.checked = !!a.foco_som;
+    }
   }
 
   formHor.addEventListener('submit', async (e) => {
@@ -363,7 +475,8 @@ export function iniciarAjustes({ estado, store }) {
   function mostrarRestauracao({ inseridos }) {
     const nomes = { categories: ['categoria', 'categorias'], lists: ['lista', 'listas'], cards: ['card', 'cards'], card_categories: ['vínculo', 'vínculos'],
       items: ['item', 'itens'], attachments: ['anexo', 'anexos'], commitments: ['compromisso', 'compromissos'], blocks: ['bloco', 'blocos'],
-      occurrences: ['ocorrência', 'ocorrências'], settings: ['ajuste', 'ajustes'] };
+      occurrences: ['ocorrência', 'ocorrências'], revisoes: ['revisão', 'revisões'], modelos: ['modelo de semana', 'modelos de semana'],
+      settings: ['ajuste', 'ajustes'] };
     const partes = TABELAS.filter((t) => inseridos[t]).map((t) => plural(inseridos[t], ...nomes[t]));
     resumoBackup.textContent = partes.length ? `Restaurado: ${partes.join(', ')}.` : 'Nada a restaurar: tudo o que está no arquivo já existe no app.';
   }
@@ -390,7 +503,7 @@ export function iniciarAjustes({ estado, store }) {
     desenharAutoCard();
   }
 
-  registrarTela('ajustes', { mostrar: desenhar });
+  registrarTela('ajustes', { mostrar: () => { desenhar(); mostrarAba(abaAtual); } });
   // Um único ouvinte; só redesenha com a tela à vista (aoMudar não tem como remover).
   estado.aoMudar(() => { if (!secao.hidden) desenhar(); });
 }
