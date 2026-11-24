@@ -75,7 +75,7 @@ class TestEscComCardAberto(CalendarioBase):
         p = self.page
         self.ir('quadro'); p.click('.cartao-card[data-card="c1"] .cartao-titulo')
         p.wait_for_selector('#folha-card', state='visible')
-        p.click('#card-agendar'); self.folha_aberta()
+        p.click('#card-sessao'); self.folha_aberta()
         p.keyboard.press('Escape')
         p.wait_for_function("document.querySelector('#folha-bloco').hidden")
         self.assertTrue(p.is_visible('#folha-card'))

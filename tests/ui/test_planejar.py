@@ -147,7 +147,7 @@ class TestFila(PlanejarBase):
         p = self.page
         self.ir('quadro')
         p.click('.cartao-card[data-card="cT"]')
-        p.click('#card-agendar')
+        p.click('#card-sessao')
         self.folha_aberta()
         self.assertEqual(p.inner_text('.card-escolhido-nome'), 'T')
         self.assertEqual(p.input_value('#bloco-item'), 'i2')

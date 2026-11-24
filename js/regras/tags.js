@@ -55,3 +55,33 @@ export function emOrdem(categories, { incluir = new Set() } = {}) {
   saida.push(...categories.filter((c) => c.parent_id && incluir.has(c.id) && !ja.has(c.id)).sort(porNome));
   return saida;
 }
+
+// ---- Tag do card: uma tag e, se quiser, subtags dela.
+// Com subtags marcadas, o card guarda só as subtags; sem subtag, guarda a própria tag.
+// Card antigo com mais de uma família: a primeira na ordem das tags manda; as outras ficam em `outras`.
+export function categoriaDoCard(categories, ids) {
+  const doCard = new Set(ids);
+  const ordem = emOrdem(categories, { incluir: doCard }).filter((c) => doCard.has(c.id));
+  if (!ordem.length) return { tagId: null, subIds: [], outras: [] };
+  const tagId = ordem[0].parent_id || ordem[0].id;
+  const daTag = (c) => (c.parent_id || c.id) === tagId;
+  return {
+    tagId,
+    subIds: ordem.filter((c) => daTag(c) && c.parent_id).map((c) => c.id),
+    outras: ordem.filter((c) => !daTag(c)).map((c) => c.id),
+  };
+}
+
+export function trocarTag(tagId) {
+  return tagId ? [tagId] : [];
+}
+
+export function alternarSubtag(categories, ids, subId) {
+  const mae = maeDe(categories, subId);
+  if (!mae) return [...ids];
+  const { tagId, subIds, outras } = categoriaDoCard(categories, ids);
+  const atuais = tagId === mae.id ? subIds : [];
+  const subs = atuais.includes(subId) ? atuais.filter((x) => x !== subId) : [...atuais, subId];
+  const resto = tagId === mae.id ? outras : ids.filter((x) => x !== mae.id);
+  return [...resto, ...(subs.length ? subs : [mae.id])];
+}

@@ -1,6 +1,7 @@
 // Card aberto numa folha sobre a tela: título, categorias, lista, anotações, itens, anexos e ações.
 import { criar, itensOrdenados, moverCard, posicaoNoFim, trocarPosicoes, cardsDaLista, restaurarCard } from './quadro.js';
-import { emOrdem, nomeCompleto } from '../regras/tags.js';
+import { emOrdem, nomeCompleto, categoriaDoCard, trocarTag, alternarSubtag } from '../regras/tags.js';
+import { criarEscolha, fecharEscolhaAberta } from './escolha.js';
 import { chipCategoria } from './ajustes.js';
 import { progresso, proximoItem } from '../regras/fila.js';
 import { abrirBloco } from './bloco.js';
@@ -270,6 +271,7 @@ export function iniciarCard({ estado, store }) {
   }
 
   function ocultar() {
+    fecharEscolhaAberta();
     pendentes.forEach((p) => clearTimeout(p.timer));
     pendentes.clear();
     notasCard?.destruir();
@@ -489,27 +491,75 @@ export function iniciarCard({ estado, store }) {
   }
 
   // ---- categorias, lista e fixa
-  function desenharCategorias(c) {
-    const doCard = new Set(estado.dados.card_categories.filter((cc) => cc.card_id === c.id).map((cc) => cc.category_id));
-    const cats = emOrdem(estado.dados.categories, { incluir: doCard });
-    const assinatura = cats.map((k) => `${k.id}|${k.name}|${k.color}|${k.icon}|${k.parent_id}`).join(';');
-    if (nodos.assinaturaCats !== assinatura) {
-      nodos.assinaturaCats = assinatura;
-      nodos.categorias.replaceChildren(...cats.map((k) => {
-        const b = criar('button', { type: 'button', class: `cat-toggle${k.parent_id ? ' cat-sub' : ''}`, 'data-cat': k.id }, chipCategoria(k, nomeCompleto(estado.dados.categories, k)));
-        b.addEventListener('click', () => {
-          const atuais = estado.dados.card_categories.filter((cc) => cc.card_id === cardId).map((cc) => cc.category_id);
-          const novas = atuais.includes(k.id) ? atuais.filter((x) => x !== k.id) : [...atuais, k.id];
-          tentar(() => estado.definirCategorias(cardId, novas));
-        });
-        return b;
-      }));
-    }
-    nodos.categorias.querySelectorAll('.cat-toggle').forEach((b) => {
-      const ligado = doCard.has(b.dataset.cat);
-      b.setAttribute('aria-pressed', String(ligado));
-      b.classList.toggle('ligado', ligado);
+  // Uma tag por card e, se quiser, subtags dela (listas clicáveis; ver regras/tags.js).
+  const idsDoCard = () => estado.dados.card_categories.filter((cc) => cc.card_id === cardId).map((cc) => cc.category_id);
+  // Uma gravação de cada vez, e cada uma calcula a partir do estado mais novo: toques rápidos não se anulam.
+  let filaCategorias = Promise.resolve();
+  const gravarCategorias = (calcular) => {
+    const id = cardId;
+    filaCategorias = filaCategorias.then(() => tentar(() => {
+      const atuais = estado.dados.card_categories.filter((cc) => cc.card_id === id).map((cc) => cc.category_id);
+      const novas = calcular(atuais);
+      return novas ? estado.definirCategorias(id, novas) : undefined;
+    })).catch(() => {});
+  };
+
+  function opcoesDeTag() {
+    const ids = idsDoCard();
+    const { tagId } = categoriaDoCard(estado.dados.categories, ids);
+    const tags = emOrdem(estado.dados.categories, { incluir: new Set(tagId ? [tagId] : []) }).filter((k) => !k.parent_id);
+    return [{ id: '', conteudo: criar('span', { class: 'escolha-nada', texto: 'Sem tag' }), selecionada: !tagId },
+      ...tags.map((k) => ({ id: k.id, conteudo: chipCategoria(k), selecionada: k.id === tagId }))];
+  }
+
+  function subtagsDaTag() {
+    const ids = idsDoCard();
+    const { tagId, subIds } = categoriaDoCard(estado.dados.categories, ids);
+    if (!tagId) return { subs: [], marcadas: [] };
+    const subs = emOrdem(estado.dados.categories, { incluir: new Set(subIds) }).filter((k) => k.parent_id === tagId);
+    return { subs, marcadas: subIds };
+  }
+
+  function criarEscolhasDeCategoria() {
+    const tag = criarEscolha({
+      id: 'card-tag', rotulo: 'Tag', chave: 'cat',
+      opcoes: opcoesDeTag,
+      resumo: () => {
+        const { tagId } = categoriaDoCard(estado.dados.categories, idsDoCard());
+        const k = estado.dados.categories.find((x) => x.id === tagId);
+        return k ? chipCategoria(k) : 'Escolher tag';
+      },
+      // A mesma tag de novo não muda nada (nem num card antigo com outras famílias).
+      aoEscolher: (id) => gravarCategorias((atuais) =>
+        ((id || null) === categoriaDoCard(estado.dados.categories, atuais).tagId ? null : trocarTag(id || null))),
     });
+    const sub = criarEscolha({
+      id: 'card-subtags', rotulo: 'Subtags', chave: 'cat', multipla: true,
+      opcoes: () => {
+        const { subs, marcadas } = subtagsDaTag();
+        return subs.map((k) => ({ id: k.id, conteudo: chipCategoria(k), selecionada: marcadas.includes(k.id) }));
+      },
+      resumo: () => {
+        const { subs, marcadas } = subtagsDaTag();
+        const nomes = subs.filter((k) => marcadas.includes(k.id)).map((k) => k.name);
+        return nomes.length ? criar('span', { texto: nomes.join(', ') }) : 'Nenhuma';
+      },
+      aoEscolher: (id) => gravarCategorias((atuais) => alternarSubtag(estado.dados.categories, atuais, id)),
+    });
+    return { tag, sub };
+  }
+
+  function desenharCategorias() {
+    const { outras } = categoriaDoCard(estado.dados.categories, idsDoCard());
+    nodos.escolhaTag.atualizar();
+    nodos.escolhaSub.atualizar();
+    const semSub = !subtagsDaTag().subs.length;
+    if (semSub) nodos.escolhaSub.fechar();
+    nodos.escolhaSub.el.hidden = semSub;
+    const nomes = outras.map((id) => estado.dados.categories.find((k) => k.id === id)).filter(Boolean)
+      .map((k) => nomeCompleto(estado.dados.categories, k));
+    nodos.tagOutras.hidden = !nomes.length;
+    nodos.tagOutras.textContent = nomes.length ? `Também neste card: ${nomes.join(', ')}` : '';
   }
 
   const opcoesDeLista = (select) => select.replaceChildren(...[...estado.dados.lists].sort((a, b) => a.position - b.position)
@@ -544,7 +594,7 @@ export function iniciarCard({ estado, store }) {
         criar('label', { class: 'campo' }, criar('span', { texto: 'Voltar para a lista' }), select), voltar);
       return;
     }
-    const botao = criar('button', { type: 'button', class: 'btn', id: 'card-fixa', texto: 'Tornar fixa' });
+    const botao = criar('button', { type: 'button', class: 'btn', id: 'card-fixa', texto: 'Repetir toda semana' });
     const painel = criar('div', { class: 'painel-fixa', hidden: '' }, criar('p', { class: 'suave', texto: 'Dias da semana (opcional):' }));
     painel.hidden = !painelFixa;
     const grade = criar('div', { class: 'dias-fixa', id: 'card-fixa-dias' }, ...DIAS.map(([n, t]) => {
@@ -564,7 +614,8 @@ export function iniciarCard({ estado, store }) {
     }));
     painel.append(grade, confirmar);
     botao.addEventListener('click', () => { painelFixa = !painelFixa; painel.hidden = !painelFixa; });
-    el.replaceChildren(botao, painel);
+    el.replaceChildren(criar('div', { class: 'agenda-linha' }, botao,
+      criar('p', { class: 'suave', texto: 'Vira um card fixo, nos dias que você escolher.' })), painel);
   }
 
   // Flashcards deste card: estudados só aqui (os baralhos do menu são outra coisa).
@@ -606,7 +657,7 @@ export function iniciarCard({ estado, store }) {
     nodos.progressoCaixa.hidden = !total;
     nodos.progresso.textContent = `${feitos} de ${total}`;
     nodos.barra.style.width = total ? `${Math.round((feitos / total) * 100)}%` : '0%';
-    desenharCategorias(c);
+    desenharCategorias();
     desenharLista(c);
     // O bloco de "fixa" só é refeito quando muda o que ele mostra (não ao digitar em outro lugar).
     const chaveFixa = `${c.is_fixed}|${c.fixed_days}|${estado.dados.lists.map((l) => l.id + l.name)}`;
@@ -632,12 +683,13 @@ export function iniciarCard({ estado, store }) {
     const barra = criar('span');
     const progresso = criar('span', { id: 'card-progresso' });
     const progressoCaixa = criar('div', { class: 'card-progresso' }, progresso, criar('span', { class: 'barra-mini' }, barra));
-    const categorias = criar('div', { class: 'chips', id: 'card-categorias' });
+    const { tag: escolhaTag, sub: escolhaSub } = criarEscolhasDeCategoria();
+    const tagOutras = criar('p', { class: 'suave', id: 'card-tag-outras', hidden: '' });
     const lista = criar('select', { id: 'card-lista', 'aria-label': 'Lista do card' });
     const blocoLista = criar('label', { class: 'campo' }, criar('span', { texto: 'Lista' }), lista);
     const fixa = criar('div', { id: 'card-estado-fixa' });
-    const agendar = criar('button', { type: 'button', class: 'btn', id: 'card-agendar', texto: 'Agendar' });
-    const revisaoBtn = criar('button', { type: 'button', class: 'btn', id: 'card-revisao' }, criar('i', { class: 'ti ti-repeat', 'aria-hidden': 'true' }), ' Agendar revisão');
+    const agendar = criar('button', { type: 'button', class: 'btn', id: 'card-sessao', texto: 'Marcar sessão' });
+    const revisaoBtn = criar('button', { type: 'button', class: 'btn', id: 'card-revisao' }, criar('i', { class: 'ti ti-repeat', 'aria-hidden': 'true' }), ' Revisões espaçadas');
     revisaoBtn.addEventListener('click', () => abrirAgendarRevisao(estado, cardId));
     const revisoesTexto = criar('div', { id: 'card-revisoes-texto', class: 'suave', hidden: '' });
     const revisoesCancelar = criar('button', { type: 'button', class: 'btn btn-mini', id: 'card-revisoes-cancelar', texto: 'Cancelar as que faltam', hidden: '' });
@@ -683,9 +735,14 @@ export function iniciarCard({ estado, store }) {
       criar('header', { class: 'card-cabecalho' },
         criar('div', { class: 'card-cabecalho-linha' }, fecharBtn, titulo, salvar), progressoCaixa),
       criar('div', { class: 'card-corpo' },
-        criar('section', {}, criar('h3', { texto: 'Categorias' }), categorias),
-        criar('section', {}, blocoLista, fixa, criar('div', { class: 'linha-botoes' }, agendar, revisaoBtn),
-          criar('div', { class: 'card-revisoes' }, revisoesTexto, revisoesCancelar)),
+        criar('section', { class: 'card-categoria' }, criar('h3', { texto: 'Categoria' }),
+          criar('div', { class: 'card-escolhas' }, escolhaTag.el, escolhaSub.el), tagOutras),
+        criar('section', {}, blocoLista),
+        criar('section', { id: 'card-na-agenda', class: 'card-na-agenda' }, criar('h3', { texto: 'Na agenda' }),
+          criar('div', { class: 'agenda-linha' }, agendar, criar('p', { class: 'suave', texto: 'Coloca este card num horário da agenda.' })),
+          criar('div', { class: 'agenda-linha' }, revisaoBtn, criar('p', { class: 'suave', texto: 'Marca revisões em datas futuras, como 7 e 30 dias depois.' })),
+          criar('div', { class: 'card-revisoes' }, revisoesTexto, revisoesCancelar),
+          fixa),
         criar('section', {}, criar('h3', { texto: 'Meta de horas' }),
           criar('div', { class: 'tag-meta-campos' }, metaH, criar('span', { texto: 'h' }), metaM, criar('span', { texto: 'min' })),
           metaTexto, metaBarra),
@@ -698,7 +755,7 @@ export function iniciarCard({ estado, store }) {
           criar('div', { class: 'linha-botoes' }, anexarBtn, linkAbrir), arquivoEntrada, linkForm),
         erroEl,
         criar('div', { class: 'card-acoes' }, arquivar, excluir)));
-    nodos = { titulo, progresso, progressoCaixa, barra, categorias, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, revisoesTexto, revisoesCancelar, flashEstudar, flashLista, flashResumo };
+    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, revisoesTexto, revisoesCancelar, flashEstudar, flashLista, flashResumo };
 
     fecharBtn.addEventListener('click', fechar);
     // Meta do card em minutos: vazio ou zero = sem meta.
@@ -805,7 +862,7 @@ export function iniciarCard({ estado, store }) {
   };
 
   document.addEventListener('keydown', (e) => {
-    // Com a folha do bloco aberta por cima (botão "Agendar"), o Esc é só dela.
+    // Com a folha do bloco aberta por cima (botão "Marcar sessão"), o Esc é só dela.
     if (e.key !== 'Escape' || folha.hidden || document.querySelector('#folha-bloco')?.hidden === false) return;
     // Esc num título em edição confirma o título (o `change` grava) em vez de fechar o card.
     if (e.target.matches?.('#card-titulo, .item-titulo')) { e.target.blur(); return; }

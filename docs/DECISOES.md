@@ -119,3 +119,9 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - "Para hoje" = o que a sessão serviria: vencidos até o limite de revisões e novos até o limite de novos, descontando o que já foi feito hoje (lados distintos; refazer um errado não gasta limite).
 - O agendamento fica em `flash_lados` (criado na primeira resposta). Os Dashboards usam `flash_dias`, um resumo por dia (revisados e acertos de primeira), em vez de guardar cada resposta.
 - Formatação curta própria (negrito, itálico, listas), escapando todo o resto: o texto do usuário nunca vira HTML. Sem imagem, áudio nem importação.
+
+## Tag do card e "Na agenda" (novembro de 2026)
+
+- Um card tem uma tag e, se quiser, subtags dela, escolhidas em duas listas clicáveis (Tag; Subtags). Com subtags marcadas, o card guarda só as subtags; sem subtag, guarda a tag. Trocar a tag substitui tudo, sem perguntar. Os dados (`card_categories`) não mudaram.
+- Card antigo com tags de famílias diferentes: os campos mostram a primeira família na ordem das tags e a linha "Também neste card: …" lista as outras, que ficam até a próxima troca de tag.
+- "Agendar", "Agendar revisão" e "Tornar fixa" viraram a seção "Na agenda": Marcar sessão, Revisões espaçadas e Repetir toda semana, cada um com uma linha explicando.

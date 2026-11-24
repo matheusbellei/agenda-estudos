@@ -36,13 +36,13 @@ class TestCard(QuadroBase):
         self.abrir()
         p.fill('#card-titulo', 'Estudar CSS Grid'); p.press('#card-titulo', 'Enter')
         cat = next(x['id'] for x in self.db()['categories'] if x['name'] == 'Programação')
-        p.click(f'#card-categorias [data-cat="{cat}"]')
+        p.click('#card-tag'); p.click(f'#card-tag-lista [data-cat="{cat}"]')
         p.wait_for_function('window.__memdb.card_categories.length === 1')
         self.fechar()
         self.abrir()
         self.assertEqual(p.input_value('#card-titulo'), 'Estudar CSS Grid')
-        self.assertEqual(p.get_attribute(f'#card-categorias [data-cat="{cat}"]', 'aria-pressed'), 'true')
-        p.click(f'#card-categorias [data-cat="{cat}"]')
+        self.assertIn('Programação', p.inner_text('#card-tag'))
+        p.click('#card-tag'); p.click('#card-tag-lista [data-cat=""]')
         p.wait_for_function('window.__memdb.card_categories.length === 0')
 
     def test_trocar_lista_no_card(self):

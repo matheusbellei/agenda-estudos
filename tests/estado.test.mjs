@@ -132,6 +132,16 @@ test('definirCategorias inclui e remove só o que mudou', async () => {
   assert.equal(avisos, 1);
 });
 
+test('definirCategorias: se incluir falhar, as antigas ficam (inclui antes de remover)', async () => {
+  const store = storeFalso({ card_categories: [{ card_id: 'c1', category_id: 'a' }] });
+  store.insert = async () => { throw new Error('Sem conexão'); };
+  const e = criarEstado(store);
+  await e.carregar();
+  await assert.rejects(e.definirCategorias('c1', ['b']));
+  assert.deepEqual(store.db.card_categories.filter((x) => x.card_id === 'c1').map((x) => x.category_id), ['a']);
+  assert.deepEqual(e.dados.card_categories.map((x) => x.category_id), ['a']);
+});
+
 test('excluir item limpa os anexos dele e zera item_id nos blocos', async () => {
   const e = criarEstado(storeFalso({
     cards: [{ id: 'c1' }],

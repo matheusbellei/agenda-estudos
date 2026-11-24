@@ -150,13 +150,14 @@ export function criarEstado(store) {
       const remover = atuais.filter((c) => !querer.includes(c));
       const incluir = querer.filter((c) => !atuais.includes(c));
       try {
-        for (const categoryId of remover) {
-          await store.removeWhere('card_categories', { card_id: cardId, category_id: categoryId });
-          dados.card_categories = dados.card_categories.filter((cc) => !(cc.card_id === cardId && cc.category_id === categoryId));
-        }
+        // Inclui antes de remover: se a rede cair no meio, o card não fica sem categoria.
         if (incluir.length) {
           const criadas = await store.insert('card_categories', incluir.map((c) => ({ card_id: cardId, category_id: c })));
           dados.card_categories.push(...criadas);
+        }
+        for (const categoryId of remover) {
+          await store.removeWhere('card_categories', { card_id: cardId, category_id: categoryId });
+          dados.card_categories = dados.card_categories.filter((cc) => !(cc.card_id === cardId && cc.category_id === categoryId));
         }
       } finally {
         if (remover.length || incluir.length) avisar();
