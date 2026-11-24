@@ -30,13 +30,13 @@ function storeFalso(inicial = {}) {
   };
 }
 
-test('carregar preenche as 12 chaves de dados', async () => {
+test('carregar preenche as 16 chaves de dados', async () => {
   const e = criarEstado(storeFalso({ cards: [{ id: 'c1' }], categories: [{ id: 'k1' }] }));
   assert.deepEqual(Object.keys(e.dados), TABELAS);
   await e.carregar();
   assert.equal(e.dados.cards.length, 1);
   assert.equal(e.dados.categories.length, 1);
-  assert.equal(TABELAS.length, 12);
+  assert.equal(TABELAS.length, 16);
 });
 
 test('criar acrescenta em dados e avisa o ouvinte uma vez', async () => {
@@ -83,7 +83,8 @@ test('ajustes: padrões sem linha; alterar settings cria a linha e depois atuali
     notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
     sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
     foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
-    revisoes_dias: [7, 30], modelos_com_fixas: false });
+    revisoes_dias: [7, 30], modelos_com_fixas: false,
+    flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140 });
   await e.alterar('settings', null, { day_start_min: 480 });
   assert.equal(e.ajustes().day_start_min, 480);
   assert.equal(e.ajustes().day_end_min, 1320);
@@ -241,4 +242,19 @@ test('trocarBlocos cria tudo num lote e só depois tira os antigos; se criar fal
   await e.trocarBlocos(['a', 'b'], [{ date: '2026-11-23', title: 'novo' }, { date: '2026-11-24', title: 'novo 2' }]);
   assert.deepEqual(s.db.blocks.map((b) => b.title || b.id), ['c', 'novo', 'novo 2']);
   assert.deepEqual(e.dados.blocks.map((b) => b.title || b.id), ['c', 'novo', 'novo 2']);
+});
+
+test('excluir card ou baralho apaga flashcards, lados e revisões em memória', async () => {
+  const s = storeFalso({ cards: [{ id: 'k' }], baralhos: [{ id: 'b' }], revisoes: [{ id: 'r', card_id: 'k' }],
+    flashcards: [{ id: 'f1', card_id: 'k' }, { id: 'f2', baralho_id: 'b' }, { id: 'f3', baralho_id: 'x' }],
+    flash_lados: [{ id: 'l1', flashcard_id: 'f1' }, { id: 'l2', flashcard_id: 'f2' }, { id: 'l3', flashcard_id: 'f3' }] });
+  const e = criarEstado(s); await e.carregar();
+  await e.excluir('cards', 'k');
+  assert.deepEqual(e.dados.revisoes, []);
+  assert.deepEqual(e.dados.flashcards.map((f) => f.id), ['f2', 'f3']);
+  await e.excluir('baralhos', 'b');
+  assert.deepEqual(e.dados.flashcards.map((f) => f.id), ['f3']);
+  assert.deepEqual(e.dados.flash_lados.map((l) => l.id), ['l3']);
+  await e.excluir('flashcards', 'f3');
+  assert.deepEqual(e.dados.flash_lados, []);
 });

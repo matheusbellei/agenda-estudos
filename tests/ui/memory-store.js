@@ -1,6 +1,6 @@
 // Banco em memória só para testes de interface: mesma interface do store real (js/armazenamento.js).
 (function () {
-  const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings', 'push_subscriptions', 'adiamentos', 'focos', 'revisoes', 'modelos'];
+  const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings', 'push_subscriptions', 'adiamentos', 'focos', 'revisoes', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias'];
   const USERS = [{ id: 'u1', email: 'dono@exemplo.com', password: 'senha123' }];
   const SO_DONO = 'Você só pode alterar os seus próprios dados.';
   // Padrões do banco (supabase/schema.sql) que o app costuma deixar de fora ao criar.
@@ -14,6 +14,10 @@
     blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, revisao_id: null, diario: '' }),
     occurrences: () => ({ instead_note: '' }),
     revisoes: () => ({ status: 'pendente', feita_em: null, criado_em: new Date().toISOString() }),
+    baralhos: () => ({ fator: 2.5, novos_dia: 20, revisoes_dia: 200, criado_em: new Date().toISOString() }),
+    flashcards: () => ({ baralho_id: null, card_id: null, verso: '', criado_em: new Date().toISOString() }),
+    flash_lados: () => ({ intervalo: 0, vence: null, errado_em: null, introduzido_em: null, revisado_em: null }),
+    flash_dias: () => ({ revisados: 0, acertos: 0 }),
     modelos: () => ({ blocos: [], criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }),
     settings: () => ({ day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null }),
   };
@@ -71,6 +75,10 @@
     if (t === 'lists' && linha.is_done && outras.some((x) => x.owner_id === linha.owner_id && x.is_done)) throw duplicada('lists_uma_concluida');
     if (t === 'blocks' && linha.commitment_id != null && igual(['commitment_id', 'date'])) throw duplicada('blocks_commitment_id_date_key');
     if (t === 'occurrences' && igual(['card_id', 'date'])) throw duplicada('occurrences_card_id_date_key');
+    if (t === 'baralhos' && outras.some((l) => l.owner_id === linha.owner_id
+      && String(l.nome).trim().toLowerCase() === String(linha.nome).trim().toLowerCase())) throw duplicada('baralhos_nome_unico');
+    if (t === 'flash_lados' && igual(['flashcard_id', 'lado'])) throw duplicada('flash_lados_flashcard_id_lado_key');
+    if (t === 'flash_dias' && igual(['owner_id', 'data'])) throw duplicada('flash_dias_owner_id_data_key');
     if (t === 'modelos' && outras.some((l) => l.owner_id === linha.owner_id
       && String(l.nome).trim().toLowerCase() === String(linha.nome).trim().toLowerCase())) throw duplicada('modelos_nome_unico');
   }
@@ -80,12 +88,19 @@
     for (const l of novas) { checarLinha(t, l, vistas); vistas.push(l); }
   }
 
+  function cascataFlash(filtro) {
+    const ids = new Set(db.flashcards.filter(filtro).map((f) => f.id));
+    db.flashcards = db.flashcards.filter((f) => !ids.has(f.id));
+    db.flash_lados = db.flash_lados.filter((l) => !ids.has(l.flashcard_id));
+  }
   function cascataCard(id) {
     const itens = new Set(db.items.filter((i) => i.card_id === id).map((i) => i.id));
     db.items = db.items.filter((i) => i.card_id !== id);
     db.attachments = db.attachments.filter((a) => a.card_id !== id);
     db.occurrences = db.occurrences.filter((o) => o.card_id !== id);
     db.card_categories = db.card_categories.filter((cc) => cc.card_id !== id);
+    db.revisoes = db.revisoes.filter((r) => r.card_id !== id);
+    cascataFlash((f) => f.card_id === id);
     db.commitments.forEach((c) => { if (c.card_id === id) c.card_id = null; });
     db.blocks.forEach((b) => {
       if (b.card_id === id) b.card_id = null;
@@ -156,6 +171,15 @@
       save();
       return clonar(linha);
     },
+    async rpc(nome, args) {
+      const dono = exigeUsuario();
+      if (nome !== 'flash_somar_dia') throw new Error('Função desconhecida: ' + nome);
+      let dia = db.flash_dias.find((d) => d.owner_id === dono && d.data === args.p_data);
+      if (!dia) { dia = { id: uid(), owner_id: dono, data: args.p_data, revisados: 0, acertos: 0 }; db.flash_dias.push(dia); }
+      dia.revisados += 1; dia.acertos += args.p_acerto ? 1 : 0;
+      save();
+      return clonar(dia);
+    },
     async removeIds(t, ids) {
       const dono = exigeUsuario();
       db[t] = tabela(t).filter((l) => !(ids.includes(l.id) && l.owner_id === dono));
@@ -173,6 +197,8 @@
       const antes = tabela(t).length;
       db[t] = tabela(t).filter((l) => !(l[chaveDe(t)] === id && l.owner_id === dono));
       if (t === 'cards' && db[t].length < antes) cascataCard(id);
+      if (t === 'baralhos' && db[t].length < antes) cascataFlash((f) => f.baralho_id === id);
+      if (t === 'flashcards' && db[t].length < antes) db.flash_lados = db.flash_lados.filter((l) => l.flashcard_id !== id);
       if (t === 'categories' && db[t].length < antes) {
         // como no banco: subtags vão junto; vínculos somem; blocos e fixas ficam sem categoria
         const ids = new Set([id, ...db.categories.filter((c) => c.parent_id === id).map((c) => c.id)]);

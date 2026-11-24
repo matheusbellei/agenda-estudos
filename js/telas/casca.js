@@ -3,7 +3,7 @@ const telas = {};
 // Hoje e Semana são as duas visões da página inicial (item Agenda do menu).
 const AGENDA = ['hoje', 'semana'];
 let ultimaAgenda = 'semana';
-const TITULOS = { hoje: 'Agenda', semana: 'Agenda', quadro: 'Quadro', fixas: 'Fixas', busca: 'Busca', tags: 'Tags', dashboards: 'Dashboards', revisao: 'Revisão da semana', foco: 'Modo foco', diario: 'Diário', ajustes: 'Configurações' };
+const TITULOS = { hoje: 'Agenda', semana: 'Agenda', quadro: 'Quadro', fixas: 'Fixas', busca: 'Busca', tags: 'Tags', dashboards: 'Dashboards', revisao: 'Revisão da semana', foco: 'Modo foco', diario: 'Diário', flashcards: 'Flashcards', 'flash-sessao': 'Estudar flashcards', ajustes: 'Configurações' };
 const $ = (s) => document.querySelector(s);
 
 export function registrarTela(nome, { mostrar }) {

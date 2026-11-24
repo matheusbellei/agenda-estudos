@@ -110,3 +110,14 @@ class TestDashboards(UITest):
         p.fill('#dash-de', '2015-01-01'); p.dispatch_event('#dash-de', 'change')
         self.assertEqual(p.inner_text('#dash-erro'), 'Escolha um intervalo de até 5 anos.')
         self.assertEqual(p.inner_text('#dash-rotulo'), antes)
+
+    def test_flashcards_no_periodo(self):
+        cats, blocks = self.dados()
+        self.login()
+        self.seed('categories', cats); self.seed('blocks', blocks)
+        self.seed('flash_dias', [{'id': 'd1', 'data': '2026-11-16', 'revisados': 10, 'acertos': 8}, {'id': 'd2', 'data': '2026-11-17', 'revisados': 5, 'acertos': 4}])
+        p = self.page; p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('dashboards')
+        self.assertEqual(p.inner_text('#dash-flash-acerto'), '80% de acerto · 15 revisados')
+        self.assertEqual(p.locator('#dash-flash-serie .g-cumprido').count(), 7)
+        p.click('#dash-anterior')
+        self.assertIn('Nenhum flashcard revisado neste período.', p.inner_text('#dash-flash'))

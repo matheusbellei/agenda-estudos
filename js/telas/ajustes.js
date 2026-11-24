@@ -163,6 +163,7 @@ const NAO_SOMA = 'Este backup não pode ser somado aos dados que já estão nest
 const UNICAS = {
   categories: [['trello_id']], lists: [['trello_id'], ['is_active'], ['is_done']], cards: [['trello_id']],
   items: [['trello_id']], attachments: [['trello_id']], blocks: [['commitment_id', 'date']], occurrences: [['card_id', 'date']],
+  flash_lados: [['flashcard_id', 'lado']], flash_dias: [['data']],
 };
 const MARCAS = ['is_active', 'is_done'];
 
@@ -211,6 +212,7 @@ export async function restaurarBackup(texto, { estado, store }) {
     if (t === 'settings' && estado.dados.settings.length) linhas = [];
     if (t === 'categories') linhas = maesPrimeiro(linhas);
     if (t === 'modelos') linhas = nomesLivres(linhas, estado.dados.modelos);
+    if (t === 'baralhos') linhas = nomesLivres(linhas, estado.dados.baralhos);
     inseridos[t] = 0;
     for (let i = 0; i < linhas.length; i += LOTE) {
       const criadas = await store.upsert(t, linhas.slice(i, i + LOTE), CONFLITO_BACKUP[t] || 'id');
@@ -345,6 +347,26 @@ export function iniciarAjustes({ estado, store }) {
   tema.addEventListener('change', () => aplicarTema(tema.value));
   const cartaoTema = criar('div', { class: 'cartao', id: 'aj-aparencia' }, criar('h2', { texto: 'Aparência' }),
     criar('label', { class: 'campo' }, criar('span', { texto: 'Tema (vale só neste aparelho)' }), tema));
+  const fcNovos = criar('input', { id: 'aj-flash-card-novos', type: 'number', min: '0', max: '999', inputmode: 'numeric' });
+  const fcRevisoes = criar('input', { id: 'aj-flash-card-revisoes', type: 'number', min: '0', max: '9999', inputmode: 'numeric' });
+  const fcFator = criar('input', { id: 'aj-flash-card-fator', type: 'number', min: '1.3', max: '5', step: '0.1', inputmode: 'decimal' });
+  const erroFlash = criar('div', { class: 'erro', id: 'aj-flash-erro', role: 'alert' });
+  const salvarFlash = criar('button', { class: 'btn btn-principal', id: 'aj-flash-salvar', type: 'button', texto: 'Salvar' });
+  const cartaoFlash = criar('div', { class: 'cartao', id: 'aj-flash' }, criar('h2', { texto: 'Flashcards dos cards' }),
+    criar('p', { class: 'suave', texto: 'Limites por dia e fator de cada card (os baralhos do menu têm os seus próprios).' }),
+    criar('div', { class: 'linha-campos' },
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Novos por dia' }), fcNovos),
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Revisões por dia' }), fcRevisoes),
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Fator' }), fcFator)),
+    erroFlash, salvarFlash);
+  salvarFlash.addEventListener('click', async () => {
+    const n = Number(fcNovos.value); const r = Number(fcRevisoes.value); const f = Number(fcFator.value);
+    const ok = Number.isInteger(n) && n >= 0 && n <= 999 && Number.isInteger(r) && r >= 0 && r <= 9999 && f >= 1.3 && f <= 5;
+    if (!ok) { erroFlash.textContent = 'Use de 0 a 999 novos, de 0 a 9999 revisões e um fator de 1,3 a 5.'; return; }
+    erroFlash.textContent = '';
+    try { await estado.alterar('settings', null, { flash_card_novos_dia: n, flash_card_revisoes_dia: r, flash_card_fator: Math.round(f * 10) / 10 }); }
+    catch (err) { erroFlash.textContent = err.message || 'Não foi possível salvar.'; }
+  });
   const modelosFixas = criar('input', { type: 'checkbox', id: 'aj-modelos-fixas' });
   const cartaoModelos = criar('div', { class: 'cartao', id: 'aj-modelos' }, criar('h2', { texto: 'Modelos de semana' }),
     criar('label', { class: 'campo-check' }, modelosFixas, criar('span', { texto: 'Modelos incluem os compromissos fixos' })),
@@ -368,6 +390,7 @@ export function iniciarAjustes({ estado, store }) {
     cartaoFoco,
     cartaoRevisoes,
     cartaoModelos,
+    cartaoFlash,
     cartaoAutoCard,
     cartaoImportar,
     cartaoBackup,
@@ -395,6 +418,9 @@ export function iniciarAjustes({ estado, store }) {
     fatia.value = String(a.day_slot_min);
     if (document.activeElement !== sequenciaMin) sequenciaMin.value = String(a.sequencia_min);
     modelosFixas.checked = !!a.modelos_com_fixas;
+    if (!cartaoFlash.contains(document.activeElement)) {
+      fcNovos.value = String(a.flash_card_novos_dia); fcRevisoes.value = String(a.flash_card_revisoes_dia); fcFator.value = String(Number(a.flash_card_fator));
+    }
     if (document.activeElement !== revisoesDias) revisoesDias.value = (a.revisoes_dias || []).join(', ');
     if (!cartaoFoco.contains(document.activeElement)) {
       focoMin.value = String(a.foco_min); pausaMin.value = String(a.pausa_min);
@@ -476,6 +502,8 @@ export function iniciarAjustes({ estado, store }) {
     const nomes = { categories: ['categoria', 'categorias'], lists: ['lista', 'listas'], cards: ['card', 'cards'], card_categories: ['vínculo', 'vínculos'],
       items: ['item', 'itens'], attachments: ['anexo', 'anexos'], commitments: ['compromisso', 'compromissos'], blocks: ['bloco', 'blocos'],
       occurrences: ['ocorrência', 'ocorrências'], revisoes: ['revisão', 'revisões'], modelos: ['modelo de semana', 'modelos de semana'],
+      baralhos: ['baralho', 'baralhos'], flashcards: ['flashcard', 'flashcards'], flash_lados: ['lado de flashcard', 'lados de flashcard'],
+      flash_dias: ['dia de flashcards', 'dias de flashcards'],
       settings: ['ajuste', 'ajustes'] };
     const partes = TABELAS.filter((t) => inseridos[t]).map((t) => plural(inseridos[t], ...nomes[t]));
     resumoBackup.textContent = partes.length ? `Restaurado: ${partes.join(', ')}.` : 'Nada a restaurar: tudo o que está no arquivo já existe no app.';

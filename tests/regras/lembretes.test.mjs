@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agoraNoFuso, emSilencio, devidos, refDoBloco, revisaoVence } from '../../js/regras/lembretes.js';
+import { agoraNoFuso, emSilencio, devidos, refDoBloco, revisaoVence, flashVence } from '../../js/regras/lembretes.js';
 
 const FUSO = 'America/Sao_Paulo';
 // 2026-11-23 é segunda; São Paulo = UTC-3 (sem horário de verão).
@@ -123,4 +123,17 @@ test('revisaoVence: domingo 20:00 e 20:01; não na segunda, nem enviada, nem em 
   assert.equal(rev('20:00', '2026-11-22', { notif_silencio: true, notif_silencio_de: 1140, notif_silencio_ate: 420 }), null);
   assert.equal(rev('20:00', '2026-11-22', { revisao: false }), null);
   assert.deepEqual(rev('09:00', '2026-11-23', { revisao_dia: 1, revisao_min: 540 }), { chave: 'revisao:2026-11-23', data: '2026-11-23' });
+});
+
+// ---- Aviso dos flashcards do dia (19:00 por padrão)
+const FL = { ...PADRAO, flash_aviso: true, flash_aviso_min: 1140 };
+const fl = (hhmm, ajustes = {}, enviadas = new Set()) => flashVence({ instanteMs: em(hhmm, '2026-11-24'), fuso: FUSO, ajustes: { ...FL, ...ajustes }, enviadas });
+
+test('flashVence: 19:00 e 19:01; nada desligado, enviado, em silêncio ou fora da hora', () => {
+  assert.deepEqual(fl('19:00'), { chave: 'flash:2026-11-24', data: '2026-11-24' });
+  assert.ok(fl('19:01'));
+  assert.equal(fl('19:03'), null);
+  assert.equal(fl('19:00', { flash_aviso: false }), null);
+  assert.equal(fl('19:00', {}, new Set(['flash:2026-11-24'])), null);
+  assert.equal(fl('19:00', { notif_silencio: true, notif_silencio_de: 1080, notif_silencio_ate: 420 }), null);
 });

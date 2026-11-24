@@ -153,6 +153,74 @@ function revisaoVence({ instanteMs, fuso, ajustes, enviadas = /* @__PURE__ */ ne
   if (enviadas.has(chave) || emSilencio(ajustes.revisao_min, ajustes)) return null;
   return { chave, data };
 }
+function flashVence({ instanteMs, fuso, ajustes, enviadas = /* @__PURE__ */ new Set() }) {
+  if (!ajustes.flash_aviso) return null;
+  const { data, minuto } = agoraNoFuso(instanteMs, fuso);
+  const chave = `flash:${data}`;
+  if (!vence(ajustes.flash_aviso_min, minuto) || enviadas.has(chave) || emSilencio(ajustes.flash_aviso_min, ajustes)) return null;
+  return { chave, data };
+}
+
+// js/regras/flash.js
+function ladosDoTipo(tipo) {
+  return tipo === "invertido" ? ["frente", "verso"] : ["frente"];
+}
+function limitesDe(flashcard, { baralhos, ajustes }) {
+  if (flashcard.baralho_id) {
+    const b = baralhos.find((x) => x.id === flashcard.baralho_id) || {};
+    return { novos: b.novos_dia ?? 20, revisoes: b.revisoes_dia ?? 200, fator: Number(b.fator ?? 2.5) };
+  }
+  return { novos: ajustes.flash_card_novos_dia, revisoes: ajustes.flash_card_revisoes_dia, fator: Number(ajustes.flash_card_fator) };
+}
+var porCriacao = (a, b) => String(a.flashcard.criado_em || "").localeCompare(String(b.flashcard.criado_em || ""));
+function filaDaSessao({ flashcards, lados, hoje, limites }) {
+  const daqui = new Set(flashcards.map((f) => f.id));
+  const meus = lados.filter((l) => daqui.has(l.flashcard_id));
+  const novosHoje = meus.filter((l) => l.introduzido_em === hoje).length;
+  const revisadosHoje = meus.filter((l) => l.revisado_em === hoje && l.introduzido_em !== hoje).length;
+  const revisoes = [];
+  const novos = [];
+  const errados = [];
+  for (const flashcard of flashcards) {
+    for (const nome of ladosDoTipo(flashcard.tipo)) {
+      const l = meus.find((x) => x.flashcard_id === flashcard.id && x.lado === nome);
+      const item = { flashcard, lado: nome, registro: l || null };
+      if (!l || !l.vence && !l.introduzido_em) novos.push(item);
+      else if (l.vence && l.vence <= hoje) (l.errado_em === hoje ? errados : revisoes).push(item);
+    }
+  }
+  revisoes.sort((a, b) => a.registro.vence.localeCompare(b.registro.vence) || porCriacao(a, b));
+  novos.sort(porCriacao);
+  return [
+    ...revisoes.slice(0, Math.max(0, limites.revisoes - revisadosHoje)),
+    ...novos.slice(0, Math.max(0, limites.novos - novosHoje)),
+    ...errados
+  ];
+}
+function paraHoje({ baralhos = [], cards = [], flashcards = [], flash_lados: lados = [] }, hoje, ajustes) {
+  const grupos = /* @__PURE__ */ new Map();
+  const arquivados = new Set(cards.filter((c) => c.archived).map((c) => c.id));
+  for (const f of flashcards) {
+    if (f.card_id && arquivados.has(f.card_id)) continue;
+    const chave = f.baralho_id ? `b:${f.baralho_id}` : `c:${f.card_id}`;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(f);
+  }
+  const porBaralho = /* @__PURE__ */ new Map();
+  const porCard = /* @__PURE__ */ new Map();
+  let total = 0;
+  for (const [chave, lista] of grupos) {
+    const fila = filaDaSessao({ flashcards: lista, lados, hoje, limites: limitesDe(lista[0], { baralhos, ajustes }) });
+    const novos = fila.filter((x) => !x.registro || !x.registro.vence && !x.registro.introduzido_em).length;
+    const contagem = { novos, revisar: fila.length - novos };
+    (chave.startsWith("b:") ? porBaralho : porCard).set(chave.slice(2), contagem);
+    total += fila.length;
+  }
+  return { total, porBaralho, porCard };
+}
+function textoDoAvisoFlash(n) {
+  return `Você tem ${n} ${n === 1 ? "flashcard" : "flashcards"} para hoje.`;
+}
 
 // js/regras/acompanhamento.js
 var duracao = (b) => b.end_min - b.start_min;
@@ -359,7 +427,12 @@ var PADROES = {
   ciclos_longa: 4,
   foco_som: true,
   revisoes_dias: [7, 30],
-  modelos_com_fixas: false
+  modelos_com_fixas: false,
+  flash_card_novos_dia: 20,
+  flash_card_revisoes_dia: 200,
+  flash_card_fator: 2.5,
+  flash_aviso: true,
+  flash_aviso_min: 1140
 };
 var ORIGENS = [/^https:\/\/matheusbellei\.github\.io$/, /^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/];
 var TITULO_ACAO = { cumprir: "Cumprido", adiar: "Adiar 10 min", proxima: "Próxima fase" };
@@ -464,6 +537,17 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
           url: "./?tela=revisao",
           corpo: textoDaRevisao({ categories, commitments, blocks: semana }, segunda, agoraLocal)
         });
+      }
+      const avisoFlash = flashVence({ instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
+      if (avisoFlash) {
+        const [baralhos, cards, flashcards, flash_lados] = await Promise.all([
+          banco2.select("baralhos", { owner_id: dono }),
+          banco2.select("cards", { owner_id: dono }),
+          banco2.select("flashcards", { owner_id: dono }),
+          banco2.select("flash_lados", { owner_id: dono })
+        ]);
+        const { total: total2 } = paraHoje({ baralhos, cards, flashcards, flash_lados }, avisoFlash.data, ajustes);
+        if (total2 > 0) lista.push({ ...avisoFlash, tipo: "flash", titulo: "Flashcards", corpo: textoDoAvisoFlash(total2), acoes: [], url: "./?tela=flashcards" });
       }
       const foco = focos.find((f) => f.owner_id === dono);
       const fimDoFoco = focoNoTique({ foco, instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });

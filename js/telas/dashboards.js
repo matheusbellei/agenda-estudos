@@ -8,6 +8,7 @@ import {
   mapaNaoFeito, horasPorTag, corDaMeta, formatarHoras, semanasDoPeriodo, sequenciaDosDados, intervaloValido,
 } from '../regras/acompanhamento.js';
 import { graficoBarras, graficoMapa } from './graficos.js';
+import { serieFlash, acertoDoPeriodo } from '../regras/flash.js';
 
 function criar(tag, atributos = {}, ...filhos) {
   const el = document.createElement(tag);
@@ -111,7 +112,11 @@ export function iniciarDashboards({ estado }) {
   irTags.addEventListener('click', () => irPara('tags'));
   const vazio = criar('div', { class: 'cartao vazio', id: 'dash-vazio' },
     criar('p', { texto: 'Marque quais tags contam como estudo para ver as horas, as metas e a sequência.' }), irTags);
-  secao.replaceChildren(seletor, navegacao, datas, erro, vazio, conteudo);
+  const flashAcerto = criar('p', { id: 'dash-flash-acerto', class: 'dash-flash-acerto' });
+  const flashSerie = criar('div', { id: 'dash-flash-serie' });
+  const flash = criar('div', { class: 'cartao', id: 'dash-flash' }, criar('h3', { texto: 'Flashcards' }), flashAcerto, flashSerie,
+    criar('div', { class: 'dash-legenda' }, criar('span', { class: 'leg-cumprido', texto: 'Acertos de primeira' }), criar('span', { class: 'leg-planejado', texto: 'Revisados' })));
+  secao.replaceChildren(seletor, navegacao, datas, erro, vazio, conteudo, flash);
 
   function atual(agora) {
     if (tipo === 'intervalo') return periodo('intervalo', agora.data, intervalo);
@@ -131,6 +136,7 @@ export function iniciarDashboards({ estado }) {
     if (livre) { de.value = intervalo.de; ate.value = intervalo.ate; }
     erro.textContent = '';
 
+    desenharFlash(p);
     const temEstudo = tagsDeEstudo(estado.dados.categories).size > 0;
     vazio.hidden = temEstudo; conteudo.hidden = !temEstudo;
     if (!temEstudo) return;
@@ -162,6 +168,24 @@ export function iniciarDashboards({ estado }) {
     serieEl.innerHTML = graficoBarras(barras, `${tituloSerie.textContent}: barra clara planejado, verde cumprido`);
     mapa.innerHTML = graficoMapa(mapaNaoFeito(estudo, agora), 'Não feito por dia da semana e horário');
     lista.replaceChildren(...itensNaoFeitos(estado, estudo, agora));
+  }
+
+  // Flashcards revisados (cartões distintos no dia) e acerto de primeira, no mesmo período e grão das horas.
+  function desenharFlash(p) {
+    const dias = estado.dados.flash_dias || [];
+    const pct = acertoDoPeriodo(dias, p.de, p.ate);
+    if (pct === null) {
+      flashAcerto.textContent = '';
+      flashSerie.replaceChildren(criar('p', { class: 'suave', texto: 'Nenhum flashcard revisado neste período.' }));
+      return;
+    }
+    const total = dias.filter((x) => x.data >= p.de && x.data <= p.ate).reduce((s2, x) => s2 + x.revisados, 0);
+    flashAcerto.textContent = `${pct}% de acerto · ${total} ${total === 1 ? 'revisado' : 'revisados'}`;
+    const grao = tipo === 'semana' ? 'dia' : tipo === 'mes' ? 'semana' : tipo === 'ano' ? 'mes' : graoDoIntervalo(p.de, p.ate);
+    const barras = serieFlash(dias, p.de, p.ate, grao).map((x) => ({ planejado_min: x.revisados, cumprido_min: x.acertos,
+      rotulo: grao === 'mes' ? MESES[Number(x.inicio.slice(5, 7)) - 1].slice(0, 3) : grao === 'semana' ? dm(x.inicio)
+        : tipo === 'semana' ? INICIAIS[diaDaSemana(x.inicio) - 1] : String(Number(x.inicio.slice(8))) }));
+    flashSerie.innerHTML = graficoBarras(barras, 'Flashcards revisados por período: barra clara revisados, verde acertos de primeira');
   }
 
   seletor.addEventListener('click', (e) => {

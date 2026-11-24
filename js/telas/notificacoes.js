@@ -55,6 +55,9 @@ export function montarPainelNotificacoes({ estado, store }) {
   const silDe = hora('notif-silencio-de');
   const silAte = hora('notif-silencio-ate');
   const camposSilencio = criar('div', { class: 'linha-campos' }, campo('De', silDe), campo('Até', silAte));
+  const flash = caixa('notif-flash', 'Flashcards do dia');
+  const flashHora = hora('notif-flash-hora');
+  const camposFlash = criar('div', { class: 'linha-campos' }, campo('Horário', flashHora));
   const revisao = caixa('notif-revisao', 'Revisão da semana');
   const revisaoDia = criar('select', { id: 'notif-revisao-dia' },
     ...['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((t, i) => criar('option', { value: String(i + 1), texto: t })));
@@ -80,11 +83,13 @@ export function montarPainelNotificacoes({ estado, store }) {
         criar('p', { class: 'suave', texto: 'O que tem no dia, numa notificação.' })),
       pend.el, criar('div', { class: 'notif-sub' }, campo('Horário das pendências', pendHora),
         criar('p', { class: 'suave', texto: 'Blocos do dia já terminados e ainda sem marcar como cumprido ou não feito.' })),
+      flash.el, criar('div', { class: 'notif-sub' }, camposFlash,
+        criar('p', { class: 'suave', texto: 'Quantos flashcards há para hoje (baralhos e cards), se houver algum.' })),
       revisao.el, criar('div', { class: 'notif-sub' }, camposRevisao,
         criar('p', { class: 'suave', texto: 'As horas da semana e um toque para abrir a revisão.' }),
         revisaoNoSilencio),
       silencio.el,
-      criar('p', { class: 'notif-aviso', id: 'notif-silencio-aviso', texto: 'Com o silêncio ligado, você não recebe nenhum aviso nesse intervalo — nem lembretes, nem resumo, nem pendências, nem a revisão da semana. O que cair nele é descartado, não chega depois.' }),
+      criar('p', { class: 'notif-aviso', id: 'notif-silencio-aviso', texto: 'Com o silêncio ligado, você não recebe nenhum aviso nesse intervalo — nem lembretes, nem resumo, nem pendências, nem a revisão da semana, nem os flashcards do dia, nem o fim de fase do foco. O que cair nele é descartado, não chega depois.' }),
       criar('div', { class: 'notif-sub' }, camposSilencio),
       erroPrefs, msgPrefs, criar('div', { class: 'linha-botoes' }, salvar)));
 
@@ -96,6 +101,7 @@ export function montarPainelNotificacoes({ estado, store }) {
     antes.value = String(a.notif_antes_min);
     resumo.c.checked = a.notif_resumo; resumoHora.value = horaTexto(a.notif_resumo_min);
     pend.c.checked = a.notif_pendencias; pendHora.value = horaTexto(a.notif_pendencias_min);
+    flash.c.checked = a.flash_aviso; flashHora.value = horaTexto(a.flash_aviso_min);
     revisao.c.checked = a.revisao; revisaoDia.value = String(a.revisao_dia); revisaoHora.value = horaTexto(a.revisao_min);
     silencio.c.checked = a.notif_silencio; silDe.value = horaTexto(a.notif_silencio_de); silAte.value = horaTexto(a.notif_silencio_ate);
     atualizarVisibilidade();
@@ -105,13 +111,14 @@ export function montarPainelNotificacoes({ estado, store }) {
     pendHora.closest('.notif-sub').hidden = !pend.c.checked;
     camposSilencio.closest('.notif-sub').hidden = !silencio.c.checked;
     camposRevisao.closest('.notif-sub').hidden = !revisao.c.checked;
+    camposFlash.closest('.notif-sub').hidden = !flash.c.checked;
     const rev = minutosDe(revisaoHora.value || '');
     const de = minutosDe(silDe.value || ''); const ate = minutosDe(silAte.value || '');
     revisaoNoSilencio.hidden = !(revisao.c.checked && silencio.c.checked && [rev, de, ate].every(Number.isFinite)
       && emSilencio(rev, { notif_silencio: true, notif_silencio_de: de, notif_silencio_ate: ate }));
   }
   [revisaoHora, silDe, silAte].forEach((i) => { i.addEventListener('input', atualizarVisibilidade); i.addEventListener('change', atualizarVisibilidade); });
-  [resumo.c, pend.c, silencio.c, revisao.c].forEach((c) => c.addEventListener('change', atualizarVisibilidade));
+  [resumo.c, pend.c, silencio.c, revisao.c, flash.c].forEach((c) => c.addEventListener('change', atualizarVisibilidade));
 
   async function desenharAparelho() {
     let linhas = [];
@@ -143,16 +150,17 @@ export function montarPainelNotificacoes({ estado, store }) {
 
   salvar.addEventListener('click', async () => {
     erroPrefs.textContent = ''; msgPrefs.textContent = '';
-    const mins = [resumoHora, pendHora, silDe, silAte, revisaoHora].map((i) => minutosDe(i.value));
+    const mins = [resumoHora, pendHora, silDe, silAte, revisaoHora, flashHora].map((i) => minutosDe(i.value));
     if (mins.some((m) => m === null || m === undefined || Number.isNaN(m) || m >= 1440)) { erroPrefs.textContent = 'Preencha os horários no formato 00:00.'; return; }
-    const [rMin, pMin, de, ate, revMin] = mins;
+    const [rMin, pMin, de, ate, revMin, flashMin] = mins;
     if (silencio.c.checked && de === ate) { erroPrefs.textContent = 'O silêncio precisa de horários de início e fim diferentes.'; return; }
     salvar.disabled = true;
     try {
       await estado.alterar('settings', null, {
         notif_antes_min: Number(antes.value), notif_resumo: resumo.c.checked, notif_resumo_min: rMin,
         notif_pendencias: pend.c.checked, notif_pendencias_min: pMin, notif_silencio: silencio.c.checked,
-        notif_silencio_de: de, notif_silencio_ate: ate, revisao: revisao.c.checked, revisao_dia: Number(revisaoDia.value), revisao_min: revMin, fuso: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo',
+        notif_silencio_de: de, notif_silencio_ate: ate, revisao: revisao.c.checked, revisao_dia: Number(revisaoDia.value), revisao_min: revMin,
+        flash_aviso: flash.c.checked, flash_aviso_min: flashMin, fuso: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo',
       });
       msgPrefs.textContent = 'Salvo.';
     } catch (err) {

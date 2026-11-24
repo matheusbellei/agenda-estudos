@@ -82,6 +82,15 @@ Faça nesta ordem (se pular a ordem, telas novas dão erro até as migrações r
 
 O app instalado no celular pode demorar uma abertura para pegar a versão nova; se algo parecer antigo, feche e abra de novo.
 
+### Rodada 5: flashcards (24/11/2026)
+
+**Antes:** publique as rodadas 2, 3 e 4 (seção acima). Depois, nesta ordem:
+
+1. No **SQL Editor** do Supabase, rode `supabase/migracao-2026-11-flashcards.sql` (pode rodar de novo sem problema).
+2. Publique o código novo no GitHub (`git add .`, `git commit -m "rodada 5: flashcards"`, `git push`).
+3. Atualize a função dos avisos: em **Edge Functions › lembretes**, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy** (sem isso, o aviso "flashcards para hoje" não chega).
+4. No app: **☰ › Flashcards** para criar baralhos; os flashcards de cada card ficam no próprio card. O horário do aviso fica em **Configurações › Notificações**.
+
 ## Notificações (lembretes com o app fechado)
 
 O Supabase roda, a cada minuto, a função `lembretes`, que confere a agenda e manda os avisos para os aparelhos onde você ativou. Faça isto uma vez, nesta ordem:

@@ -99,3 +99,15 @@ class TestAcompanhamentoAjustes(UITest):
         p.fill('#aj-sequencia', '0'); p.click('#aj-acomp-salvar')
         self.assertEqual(p.inner_text('#aj-acomp-erro'), 'Use de 5 a 600 minutos.')
         self.assertEqual(self.db()['settings'], [])
+
+
+class TestFlashAjustes(UITest):
+    def test_padroes_dos_flashcards_dos_cards(self):
+        self.login(); self.ir('ajustes'); p = self.page
+        self.assertEqual((p.input_value('#aj-flash-card-novos'), p.input_value('#aj-flash-card-revisoes'), p.input_value('#aj-flash-card-fator')), ('20', '200', '2.5'))
+        p.fill('#aj-flash-card-fator', '6'); p.click('#aj-flash-salvar')
+        self.assertEqual(p.inner_text('#aj-flash-erro'), 'Use de 0 a 999 novos, de 0 a 9999 revisões e um fator de 1,3 a 5.')
+        p.fill('#aj-flash-card-fator', '2'); p.fill('#aj-flash-card-novos', '10'); p.fill('#aj-flash-card-revisoes', '100'); p.click('#aj-flash-salvar')
+        p.wait_for_function("window.__memdb.settings.length === 1 && window.__memdb.settings[0].flash_card_novos_dia === 10")
+        s = self.db()['settings'][0]
+        self.assertEqual((s['flash_card_revisoes_dia'], float(s['flash_card_fator'])), (100, 2.0))

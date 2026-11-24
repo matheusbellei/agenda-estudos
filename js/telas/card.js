@@ -11,6 +11,11 @@ import { registrosDoDiario } from '../regras/diario.js';
 import { itemDoDiario } from './diario.js';
 import { abrirAgendarRevisao, cancelarRevisoes } from './revisoes.js';
 import { textoDasRevisoes } from '../regras/revisoes.js';
+import { abrirFormularioFlash, itemDeFlash } from './flashcards.js';
+import { estudar } from './flash-sessao.js';
+import { irPara as irParaTela } from './casca.js';
+import { paraHoje } from '../regras/flash.js';
+import { hojeDoApp } from './revisoes.js';
 import { caminhosNoMarkdown, comEnderecos, semEnderecos, nomeParaCaminho } from '../regras/anexos.js';
 import { criarEditor, modoVisual } from '../editor.js';
 import { registrarTextoNaoSalvo } from './folhas.js';
@@ -562,6 +567,17 @@ export function iniciarCard({ estado, store }) {
     el.replaceChildren(botao, painel);
   }
 
+  // Flashcards deste card: estudados só aqui (os baralhos do menu são outra coisa).
+  function desenharFlash(c) {
+    const fs = estado.dados.flashcards.filter((f) => f.card_id === c.id).sort((x, y) => String(y.criado_em).localeCompare(String(x.criado_em)));
+    const hoje = paraHoje(estado.dados, hojeDoApp(estado), estado.ajustes()).porCard.get(c.id) || { novos: 0, revisar: 0 };
+    const n = hoje.novos + hoje.revisar;
+    nodos.flashEstudar.textContent = `Estudar (${n})`;
+    nodos.flashEstudar.disabled = !n;
+    nodos.flashResumo.textContent = fs.length ? `${fs.length} ${fs.length === 1 ? 'flashcard' : 'flashcards'}` : 'Crie perguntas e respostas sobre este card para estudar com repetição espaçada.';
+    nodos.flashLista.replaceChildren(...fs.map((f) => itemDeFlash(estado, f)));
+  }
+
   // Registros do diário dos blocos deste card; tocar abre o bloco.
   function desenharDiario(c) {
     const registros = registrosDoDiario(estado.dados, { cardId: c.id });
@@ -598,6 +614,7 @@ export function iniciarCard({ estado, store }) {
     nodos.arquivar.textContent = c.archived ? 'Desarquivar' : 'Arquivar';
     desenharMeta(c);
     desenharDiario(c);
+    desenharFlash(c);
     const textoRev = textoDasRevisoes(estado.dados.revisoes, c.id);
     nodos.revisoesTexto.textContent = textoRev || '';
     nodos.revisoesTexto.hidden = !textoRev;
@@ -638,6 +655,17 @@ export function iniciarCard({ estado, store }) {
     const salvar = criar('span', { id: 'card-salvar', class: 'card-salvar', 'aria-live': 'polite' });
     const anexos = criar('div', { id: 'card-anexos' });
     const diarioCard = criar('div', { id: 'card-diario', class: 'diario-lista' });
+    const flashEstudar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'card-flash-estudar' });
+    // Ao sair da sessão, volta para este card (por cima do Quadro).
+    flashEstudar.addEventListener('click', async () => {
+      const id = cardId; // fechar() limpa o card aberto
+      await fechar();
+      estudar({ cardId: id }, () => { irParaTela('quadro'); abrirCard(id); });
+    });
+    const flashAdicionar = criar('button', { type: 'button', class: 'btn', id: 'card-flash-adicionar' }, criar('i', { class: 'ti ti-plus', 'aria-hidden': 'true' }), ' Adicionar');
+    flashAdicionar.addEventListener('click', () => abrirFormularioFlash(estado, { cardId }));
+    const flashLista = criar('div', { class: 'flash-lista' });
+    const flashResumo = criar('p', { class: 'suave' });
     const metaH = criar('input', { id: 'card-meta-h', type: 'number', min: '0', max: '9999', inputmode: 'numeric', 'aria-label': 'Meta em horas' });
     const metaM = criar('input', { id: 'card-meta-m', type: 'number', min: '0', max: '59', step: '5', inputmode: 'numeric', 'aria-label': 'Meta em minutos' });
     const metaTexto = criar('div', { id: 'card-meta-texto', class: 'suave' });
@@ -663,12 +691,14 @@ export function iniciarCard({ estado, store }) {
           metaTexto, metaBarra),
         criar('section', {}, criar('h3', { texto: 'Anotações' }), notas),
         criar('section', {}, criar('h3', { texto: 'Itens' }), itens, criar('div', { class: 'linha-botoes' }, novoGrupoBtn), grupoForm),
+        criar('section', { id: 'card-flash' }, criar('h3', { texto: 'Flashcards' }), flashResumo,
+          criar('div', { class: 'linha-botoes' }, flashEstudar, flashAdicionar), flashLista),
         criar('section', {}, criar('h3', { texto: 'Diário' }), diarioCard),
         criar('section', {}, criar('h3', { texto: 'Anexos' }), anexos,
           criar('div', { class: 'linha-botoes' }, anexarBtn, linkAbrir), arquivoEntrada, linkForm),
         erroEl,
         criar('div', { class: 'card-acoes' }, arquivar, excluir)));
-    nodos = { titulo, progresso, progressoCaixa, barra, categorias, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, revisoesTexto, revisoesCancelar };
+    nodos = { titulo, progresso, progressoCaixa, barra, categorias, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, revisoesTexto, revisoesCancelar, flashEstudar, flashLista, flashResumo };
 
     fecharBtn.addEventListener('click', fechar);
     // Meta do card em minutos: vazio ou zero = sem meta.

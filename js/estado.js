@@ -1,12 +1,13 @@
 // Dados em memória + ações que gravam no store e avisam os ouvintes.
-export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'settings'];
+export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings'];
 
 const AJUSTES_PADRAO = { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
   notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
   notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
   sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
   foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
-  revisoes_dias: [7, 30], modelos_com_fixas: false };
+  revisoes_dias: [7, 30], modelos_com_fixas: false,
+  flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140 };
 
 export function criarEstado(store) {
   const dados = Object.fromEntries(TABELAS.map((t) => [t, []]));
@@ -32,9 +33,19 @@ export function criarEstado(store) {
     dados.occurrences = dados.occurrences.filter((o) => o.card_id !== id);
     dados.card_categories = dados.card_categories.filter((cc) => cc.card_id !== id);
     dados.commitments = dados.commitments.map((c) => (c.card_id === id ? { ...c, card_id: null } : c));
+    dados.revisoes = dados.revisoes.filter((r) => r.card_id !== id);
+    cascataFlashcards((f) => f.card_id === id);
     dados.blocks = dados.blocks.map((b) => (b.card_id === id || itens.has(b.item_id)
       ? { ...b, card_id: b.card_id === id ? null : b.card_id, item_id: itens.has(b.item_id) ? null : b.item_id }
       : b));
+  }
+
+  // Espelha o banco: flashcards (do card, do baralho ou um só) levam os lados junto.
+  function cascataFlashcards(filtro) {
+    const ids = new Set(dados.flashcards.filter(filtro).map((f) => f.id));
+    if (!ids.size) return;
+    dados.flashcards = dados.flashcards.filter((f) => !ids.has(f.id));
+    dados.flash_lados = dados.flash_lados.filter((l) => !ids.has(l.flashcard_id));
   }
 
   // Espelha o banco: anexos do item somem e blocos que apontavam para ele ficam sem item.
@@ -108,7 +119,17 @@ export function criarEstado(store) {
       if (tabela === 'items') cascataItem(id);
       if (tabela === 'commitments') cascataCompromisso(id);
       if (tabela === 'categories') cascataCategoria(id);
+      if (tabela === 'baralhos') cascataFlashcards((f) => f.baralho_id === id);
+      if (tabela === 'flashcards') dados.flash_lados = dados.flash_lados.filter((l) => l.flashcard_id !== id);
       avisar();
+    },
+    // Soma uma resposta no resumo do dia dos flashcards (no banco, de forma atômica).
+    async somarDiaFlash(data, acertou) {
+      const linha = await store.rpc('flash_somar_dia', { p_data: data, p_acerto: acertou ? 1 : 0 });
+      const salvo = Array.isArray(linha) ? linha[0] : linha;
+      dados.flash_dias = [...dados.flash_dias.filter((d) => d.data !== data), salvo];
+      avisar();
+      return salvo;
     },
     // Troca blocos de uma vez (aplicar modelo): cria os novos num lote e só depois apaga os antigos numa chamada.
     // Se criar falhar, nada foi apagado.

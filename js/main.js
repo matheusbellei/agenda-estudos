@@ -10,6 +10,8 @@ import { iniciarDashboards } from './telas/dashboards.js';
 import { iniciarRevisao } from './telas/revisao.js';
 import { iniciarFoco } from './telas/foco.js';
 import { iniciarDiario } from './telas/diario.js';
+import { iniciarFlashcards } from './telas/flashcards.js';
+import { iniciarSessao } from './telas/flash-sessao.js';
 import { iniciarQuadro } from './telas/quadro.js';
 import { iniciarCard, abrirCard } from './telas/card.js';
 import { iniciarBloco, abrirBloco } from './telas/bloco.js';
@@ -47,6 +49,8 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   iniciarRevisao({ estado });
   const vigiaFoco = iniciarFoco({ estado, store });
   iniciarDiario({ estado });
+  iniciarFlashcards({ estado });
+  iniciarSessao({ estado });
   iniciarQuadro({ estado, abrirCard });
   iniciarCard({ estado, store });
   iniciarBloco({ estado, abrirCard });
@@ -85,7 +89,7 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
     // Aviso da revisão da semana: abre a tela da revisão.
     // Avisos da revisão da semana e do fim de fase do foco: abrem a tela.
     const tela = u.searchParams.get('tela');
-    if (tela === 'revisao' || tela === 'foco') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
+    if (tela === 'revisao' || tela === 'foco' || tela === 'flashcards') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
     const data = u.searchParams.get('data');
     const ref = u.searchParams.get('bloco');
     if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return;

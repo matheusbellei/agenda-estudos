@@ -262,3 +262,35 @@ test('foco pausado entre a leitura do tique e o envio não recebe o aviso antigo
   assert.equal(enviados.length, 0);
   assert.equal(banco.dados.focos[0].estado, 'pausado');
 });
+
+// ---- Aviso dos flashcards do dia
+const DIA_FLASH = '2026-11-24';
+const comFlash = (n) => {
+  const d = base(); d.blocks = [];
+  d.baralhos = [{ id: 'B', owner_id: DONO, novos_dia: 20, revisoes_dia: 200, fator: 2.5 }];
+  d.flashcards = Array.from({ length: n }, (_, i) => ({ id: `f${i}`, owner_id: DONO, baralho_id: i % 2 ? 'B' : null, card_id: i % 2 ? null : 'K', tipo: 'basico', frente: 'x', verso: 'y', criado_em: '2026-11-01T00:00:00Z' }));
+  d.flash_lados = [];
+  return d;
+};
+
+test('às 19:00 avisa quantos flashcards há para hoje (baralhos e cards), uma vez', async () => {
+  const { servico, enviados } = montar({ dados: comFlash(3), instante: em('19:00', DIA_FLASH) });
+  await tique(servico); await tique(servico);
+  const avisos = enviados.filter((e) => e.payload.tag === `flash:${DIA_FLASH}`);
+  assert.equal(avisos.length, 2);
+  assert.deepEqual([avisos[0].payload.titulo, avisos[0].payload.corpo, avisos[0].payload.url], ['Flashcards', 'Você tem 3 flashcards para hoje.', './?tela=flashcards']);
+});
+
+test('sem flashcards para hoje não avisa', async () => {
+  const { servico, enviados } = montar({ dados: comFlash(0), instante: em('19:00', DIA_FLASH) });
+  await tique(servico);
+  assert.equal(enviados.length, 0);
+});
+
+test('fora do minuto do aviso a função não lê os flashcards', async () => {
+  const { servico, banco } = montar({ dados: comFlash(3), instante: em('18:00', DIA_FLASH) });
+  const lidas = []; const sel = banco.select.bind(banco);
+  banco.select = async (n, f) => { lidas.push(n); return sel(n, f); };
+  await tique(servico);
+  assert.ok(!lidas.includes('flashcards'));
+});

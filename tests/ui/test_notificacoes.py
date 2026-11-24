@@ -210,3 +210,14 @@ class TestAvisoRevisao(NotifBase):
         self.assertTrue(p.is_visible('#notif-revisao-no-silencio'))
         p.fill('#notif-revisao-hora', '18:00'); p.dispatch_event('#notif-revisao-hora', 'input')
         self.assertTrue(p.is_hidden('#notif-revisao-no-silencio'))
+
+
+class TestAvisoFlash(NotifBase):
+    def test_flashcards_do_dia_grava_liga_e_horario(self):
+        self.abrir(); p = self.page
+        self.assertTrue(p.is_checked('#notif-flash'))
+        self.assertEqual(p.input_value('#notif-flash-hora'), '19:00')
+        p.fill('#notif-flash-hora', '07:30'); p.uncheck('#notif-flash')
+        p.click('#notif-salvar')
+        p.wait_for_function("window.__memdb.settings.length === 1 && window.__memdb.settings[0].flash_aviso === false")
+        self.assertEqual(self.db()['settings'][0]['flash_aviso_min'], 450)

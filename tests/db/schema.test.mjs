@@ -7,7 +7,7 @@ const DB = 'estudos_test';
 const A = '11111111-1111-1111-1111-111111111111';
 const B = '22222222-2222-2222-2222-222222222222';
 const TABELAS = ['attachments', 'blocks', 'card_categories', 'cards', 'categories', 'commitments', 'items', 'lists', 'occurrences', 'settings'];
-const TABELAS_NOTIF = ['adiamentos', 'focos', 'modelos', 'notificacoes_enviadas', 'push_subscriptions', 'revisoes'];
+const TABELAS_NOTIF = ['adiamentos', 'baralhos', 'flash_dias', 'flash_lados', 'flashcards', 'focos', 'modelos', 'notificacoes_enviadas', 'push_subscriptions', 'revisoes'];
 
 function psql(db, sql) {
   return execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', db,
@@ -38,7 +38,7 @@ before(() => {
 // Dados de A usados pelos testes seguintes.
 const a = {};
 
-test('as 16 tabelas existem em public com RLS ligado', () => {
+test('as 20 tabelas existem em public com RLS ligado', () => {
   const out = psql(DB, "select tablename||':'||rowsecurity from pg_tables where schemaname='public' order by 1");
   assert.equal(out, [...TABELAS, ...TABELAS_NOTIF].sort().map((t) => `${t}:true`).join('\n'));
 });
@@ -389,4 +389,71 @@ test('revisão não pode passar a apontar para card de outra pessoa', () => {
   const cb = id(as(B, `insert into cards(title) values ('Card de B rev') returning id`));
   const r = id(as(A, `insert into revisoes(card_id, data) values ('${ca}', '2026-12-01') returning id`));
   fails(() => as(A, `update revisoes set card_id = '${cb}' where id = '${r}'`), /row-level security/);
+});
+
+// ---- Flashcards (migração de 2026-11-24)
+test('flashcards: padrões e validações', () => {
+  assert.equal(psql(DB, `select flash_card_novos_dia||':'||flash_card_revisoes_dia||':'||flash_card_fator||':'||flash_aviso||':'||flash_aviso_min from settings where owner_id='${A}'`), '20:200:2.5:true:1140');
+  const bar = id(as(A, `insert into baralhos(nome) values ('Vocabulário') returning id`));
+  assert.equal(psql(DB, `select fator||':'||novos_dia||':'||revisoes_dia from baralhos where id='${bar}'`), '2.5:20:200');
+  fails(() => as(A, `insert into baralhos(nome) values ('vocabulário ')`), /duplicate key/);
+  fails(() => as(A, `insert into baralhos(nome, fator) values ('X', 1.2)`), /check constraint/);
+  fails(() => as(A, `insert into baralhos(nome, novos_dia) values ('Y', -1)`), /check constraint/);
+  fails(() => as(A, `insert into flashcards(tipo, frente) values ('basico', 'sem dono')`), /check constraint/);
+  const card = id(as(A, `insert into cards(title) values ('Card flash') returning id`));
+  fails(() => as(A, `insert into flashcards(baralho_id, card_id, tipo, frente) values ('${bar}', '${card}', 'basico', 'dois')`), /check constraint/);
+  fails(() => as(A, `insert into flashcards(baralho_id, tipo, frente) values ('${bar}', 'talvez', 'x')`), /check constraint/);
+  const f = id(as(A, `insert into flashcards(baralho_id, tipo, frente, verso) values ('${bar}', 'invertido', 'perro', 'cachorro') returning id`));
+  as(A, `insert into flash_lados(flashcard_id, lado) values ('${f}', 'frente')`);
+  fails(() => as(A, `insert into flash_lados(flashcard_id, lado) values ('${f}', 'frente')`), /duplicate key/);
+  as(A, `insert into flash_dias(data, revisados, acertos) values ('2026-11-24', 3, 2)`);
+  fails(() => as(A, `insert into flash_dias(data) values ('2026-11-24')`), /duplicate key/);
+});
+
+test('flashcards: só do dono e sem apontar para coisa de outro', () => {
+  const barA = id(as(A, `insert into baralhos(nome) values ('De A') returning id`));
+  const cardA = id(as(A, `insert into cards(title) values ('Card de A flash') returning id`));
+  const fA = id(as(A, `insert into flashcards(baralho_id, tipo, frente) values ('${barA}', 'basico', 'pergunta de A') returning id`));
+  for (const t of ['baralhos', 'flashcards', 'flash_lados', 'flash_dias']) assert.equal(as(B, `select count(*) from ${t} where owner_id = '${A}'`), '0');
+  fails(() => as(B, `insert into flashcards(baralho_id, tipo, frente) values ('${barA}', 'basico', 'intrusa')`), /row-level security/);
+  fails(() => as(B, `insert into flashcards(card_id, tipo, frente) values ('${cardA}', 'basico', 'intrusa')`), /row-level security/);
+  fails(() => as(B, `insert into flash_lados(flashcard_id, lado) values ('${fA}', 'frente')`), /row-level security/);
+  const barB = id(as(B, `insert into baralhos(nome) values ('De B') returning id`));
+  fails(() => as(A, `update flashcards set baralho_id = '${barB}' where id = '${fA}'`), /row-level security/);
+});
+
+test('apagar baralho ou card apaga os flashcards e os lados', () => {
+  const bar = id(as(A, `insert into baralhos(nome) values ('Some') returning id`));
+  const f = id(as(A, `insert into flashcards(baralho_id, tipo, frente) values ('${bar}', 'basico', 'x') returning id`));
+  as(A, `insert into flash_lados(flashcard_id, lado) values ('${f}', 'frente')`);
+  as(A, `delete from baralhos where id = '${bar}'`);
+  assert.equal(psql(DB, `select count(*) from flash_lados where flashcard_id = '${f}'`), '0');
+  const card = id(as(A, `insert into cards(title) values ('Card some') returning id`));
+  const g = id(as(A, `insert into flashcards(card_id, tipo, frente) values ('${card}', 'basico', 'y') returning id`));
+  as(A, `delete from cards where id = '${card}'`);
+  assert.equal(psql(DB, `select count(*) from flashcards where id = '${g}'`), '0');
+});
+
+test('migração de flashcards roda 2× sobre o schema da rodada 4', () => {
+  const VELHO = 'estudos_migracao_flash';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', '1c272c4:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psql(VELHO, `insert into auth.users values ('${A}','a@x.com')`);
+  psql(VELHO, `insert into settings(owner_id) values ('${A}')`);
+  psqlFile(VELHO, 'supabase/migracao-2026-11-flashcards.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-flashcards.sql');
+  assert.equal(psql(VELHO, `select flash_aviso_min from settings`), '1140');
+  assert.equal(psql(VELHO, `select count(*) from pg_tables where tablename in ('baralhos','flashcards','flash_lados','flash_dias') and rowsecurity`), '4');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+test('flash_somar_dia soma de forma atômica e só no dono', () => {
+  as(A, `select public.flash_somar_dia('2026-12-02', 1)`);
+  as(A, `select public.flash_somar_dia('2026-12-02', 0)`);
+  as(B, `select public.flash_somar_dia('2026-12-02', 1)`);
+  assert.equal(psql(DB, `select revisados||':'||acertos from flash_dias where owner_id='${A}' and data='2026-12-02'`), '2:1');
+  assert.equal(psql(DB, `select revisados||':'||acertos from flash_dias where owner_id='${B}' and data='2026-12-02'`), '1:1');
 });

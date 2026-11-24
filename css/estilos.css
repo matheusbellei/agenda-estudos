@@ -612,3 +612,42 @@ body.escolhendo-horario .faixa .livre, body.escolhendo-horario .linha-do-tempo .
 .modelo-info { flex: 1; display: grid; }
 .modelo-contagem { font-weight: 600; }
 #modelo-nome { flex: 1; min-width: 0; background: var(--espuma); border: 1px solid var(--borda-campo); border-radius: 10px; padding: 9px 12px; }
+
+/* ===== Flashcards ===== */
+#tela-flashcards, #tela-flash-sessao { display: grid; gap: 10px; }
+#menu .menu-contador { margin-left: auto; background: var(--caramelo); color: var(--barra); border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 20px; }
+.baralho-item { display: flex; align-items: center; gap: 10px; }
+.baralho-info { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.baralho-nome { background: none; border: 0; padding: 0; text-align: left; font: inherit; font-weight: 600; font-size: 16px; color: var(--espresso); cursor: pointer; }
+.baralho-contagem { font-size: 13px; color: var(--mocha); }
+.baralho-tela { display: grid; gap: 10px; }
+.baralho-ajustes summary { cursor: pointer; font-weight: 600; }
+#flash-busca { flex: 1; min-width: 0; background: var(--espuma); border: 1px solid var(--borda-campo); border-radius: 10px; padding: 9px 12px; }
+.flash-lista { display: grid; gap: 4px; margin-top: 8px; }
+.flash-item { display: flex; align-items: flex-start; gap: 6px; border-top: 1px solid var(--linha); padding-top: 8px; }
+.flash-corpo { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.flash-texto p { margin: 0; }
+.flash-tipo { font-size: 12px; }
+.flash-previa { background: var(--creme); border: 1px solid var(--linha); border-radius: 10px; padding: 8px 12px; }
+.flash-previa hr { border: 0; border-top: 1px dashed var(--linha); }
+.flash-previa p { margin: 4px 0; }
+#flash-frente, #flash-verso { font-family: var(--fonte); }
+.sessao-topo { display: flex; align-items: center; gap: 10px; }
+.sessao-titulo { flex: 1; font-size: 18px; }
+.sessao-cartao { display: grid; gap: 14px; padding: 22px 16px; min-height: 260px; align-content: start; }
+.sessao-texto { font-size: 20px; line-height: 1.45; }
+.sessao-texto p { margin: 0 0 6px; }
+.sessao-texto mark, .flash-previa mark { background: rgba(var(--caramelo-rgb), .35); color: inherit; border-radius: 4px; padding: 0 3px; }
+.sessao-resposta { border-top: 1px dashed var(--linha); padding-top: 12px; display: grid; gap: 6px; }
+.sessao-grande { padding: 14px; font-size: 16px; justify-content: center; }
+.sessao-botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sessao-errei { border-color: var(--nao-feito); color: var(--nao-feito-texto); background: var(--rosa-claro); }
+.sessao-acertei { border-color: var(--cumprido); color: var(--cumprido-texto); background: var(--verde-claro); }
+.sessao-digitar { display: flex; gap: 8px; }
+.sessao-digitar input { flex: 1; min-width: 0; background: var(--espuma); border: 1px solid var(--borda-campo); border-radius: 10px; padding: 10px 12px; font-size: 16px; }
+.sessao-resultado { display: grid; gap: 4px; }
+.sessao-certo { color: var(--cumprido-texto); } .sessao-errado { color: var(--nao-feito-texto); }
+.sessao-diferenca { background: var(--rosa-claro); color: var(--nao-feito-texto); text-decoration: underline; min-width: 6px; display: inline-block; }
+.sessao-fim { text-align: center; display: grid; gap: 8px; justify-items: center; }
+.sessao-resumo { font-size: 18px; font-weight: 600; }
+.flash-card-item { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--linha); padding-top: 8px; margin-top: 8px; }

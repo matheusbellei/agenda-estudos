@@ -4,7 +4,8 @@
 //   GET   ?acao=cumprir|adiar&t=<token>    → botões da notificação (o token prova quem pediu)
 //   POST  ?teste=1 (Authorization: Bearer <sessão>) → notificação de teste para um aparelho
 import { blocosDoPeriodo, ocorrenciasDeCompromissos } from '../../../js/regras/calendario.js';
-import { devidos, agoraNoFuso, refDoBloco, revisaoVence } from '../../../js/regras/lembretes.js';
+import { devidos, agoraNoFuso, refDoBloco, revisaoVence, flashVence } from '../../../js/regras/lembretes.js';
+import { paraHoje, textoDoAvisoFlash } from '../../../js/regras/flash.js';
 import { semanaDaRevisao, textoDaRevisao } from '../../../js/regras/acompanhamento.js';
 import { focoNoTique, proximaFase, iniciarFase } from '../../../js/regras/foco.js';
 import { efeitosDeEstado } from '../../../js/regras/fila.js';
@@ -17,6 +18,7 @@ export const PADROES = {
   sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
   foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
   revisoes_dias: [7, 30], modelos_com_fixas: false,
+  flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140,
 };
 const ORIGENS = [/^https:\/\/matheusbellei\.github\.io$/, /^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/];
 const TITULO_ACAO = { cumprir: 'Cumprido', adiar: 'Adiar 10 min', proxima: 'Próxima fase' };
@@ -115,6 +117,16 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
         ]);
         lista.push({ ...revisao, tipo: 'revisao', titulo: 'Revisão da semana', acoes: [], url: './?tela=revisao',
           corpo: textoDaRevisao({ categories, commitments, blocks: semana }, segunda, agoraLocal) });
+      }
+      // Flashcards do dia: só neste minuto a função lê baralhos, flashcards e lados.
+      const avisoFlash = flashVence({ instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
+      if (avisoFlash) {
+        const [baralhos, cards, flashcards, flash_lados] = await Promise.all([
+          banco.select('baralhos', { owner_id: dono }), banco.select('cards', { owner_id: dono }),
+          banco.select('flashcards', { owner_id: dono }), banco.select('flash_lados', { owner_id: dono }),
+        ]);
+        const { total } = paraHoje({ baralhos, cards, flashcards, flash_lados }, avisoFlash.data, ajustes);
+        if (total > 0) lista.push({ ...avisoFlash, tipo: 'flash', titulo: 'Flashcards', corpo: textoDoAvisoFlash(total), acoes: [], url: './?tela=flashcards' });
       }
       // Modo foco: a fase que acabou vira aviso (uma vez) e a linha passa a "esperando".
       const foco = focos.find((f) => f.owner_id === dono);

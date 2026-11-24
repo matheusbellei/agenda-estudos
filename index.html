@@ -58,6 +58,7 @@ try { if (localStorage.getItem('agenda-tema') === 'escuro') { document.documentE
       <button data-tela="revisao"><i class="ti ti-checkup-list" aria-hidden="true"></i>Revisão da semana</button>
       <button data-tela="foco"><i class="ti ti-hourglass" aria-hidden="true"></i>Modo foco</button>
       <button data-tela="diario"><i class="ti ti-notebook" aria-hidden="true"></i>Diário</button>
+      <button data-tela="flashcards"><i class="ti ti-cards" aria-hidden="true"></i>Flashcards<span class="menu-contador" id="menu-flash-contador" hidden></span></button>
       <button data-tela="ajustes"><i class="ti ti-settings" aria-hidden="true"></i>Configurações</button>
       <button id="menu-sair"><i class="ti ti-logout" aria-hidden="true"></i>Sair</button>
     </nav>
@@ -77,6 +78,8 @@ try { if (localStorage.getItem('agenda-tema') === 'escuro') { document.documentE
     <section id="tela-revisao" hidden></section>
     <section id="tela-foco" hidden></section>
     <section id="tela-diario" hidden></section>
+    <section id="tela-flashcards" hidden></section>
+    <section id="tela-flash-sessao" hidden></section>
     <section id="tela-ajustes" hidden></section>
   </main>
 </div>

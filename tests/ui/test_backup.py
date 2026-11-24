@@ -1,7 +1,7 @@
 import json
 from harness import UITest
 
-TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'settings']
+TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings']
 
 
 class BackupBase(UITest):
@@ -23,6 +23,10 @@ class BackupBase(UITest):
         self.seed('revisoes', [{'id': 'rev1', 'card_id': 'card2', 'data': '2026-11-17', 'status': 'pendente'}])
         self.seed('blocks', [{'id': 'blo1', 'date': '2026-11-17', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card1', 'item_id': 'it1', 'title': 'Gramática'},
                              {'id': 'blo2', 'date': '2026-11-18', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card2', 'title': 'Revisão · Flashcards', 'revisao_id': 'rev1'}])
+        self.seed('baralhos', [{'id': 'bar1', 'nome': 'Vocabulário'}])
+        self.seed('flashcards', [{'id': 'fla1', 'baralho_id': 'bar1', 'tipo': 'basico', 'frente': 'perro', 'verso': 'cachorro'}])
+        self.seed('flash_lados', [{'id': 'lad1', 'flashcard_id': 'fla1', 'lado': 'frente', 'intervalo': 1, 'vence': '2026-11-17'}])
+        self.seed('flash_dias', [{'id': 'dia1', 'data': '2026-11-16', 'revisados': 1, 'acertos': 1}])
         self.seed('modelos', [{'id': 'mod1', 'nome': 'Semana de prova', 'blocos': [{'dia': 1, 'start_min': 480, 'end_min': 540, 'kind': 'study', 'title': 'Gramática'}]}])
         self.seed('occurrences', [{'id': 'oco1', 'card_id': 'card2', 'date': '2026-11-09', 'status': 'done'}])
         self.seed('settings', [{'day_start_min': 420}])
@@ -48,7 +52,7 @@ class BackupBase(UITest):
 
 
 class TestBackup(BackupBase):
-    def test_exporta_arquivo_com_as_12_tabelas_e_sem_owner_id(self):
+    def test_exporta_arquivo_com_as_16_tabelas_e_sem_owner_id(self):
         self.abrir_com_dados()
         nome, bruto = self.exportar()
         self.assertEqual(nome, 'agenda-estudos-2026-11-16.json')

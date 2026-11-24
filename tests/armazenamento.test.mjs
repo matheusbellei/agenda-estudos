@@ -160,3 +160,11 @@ test('removeIds apaga várias linhas numa chamada só', async () => {
   await createStore(client).removeIds('blocks', ['a', 'b']);
   assert.deepEqual(ops(client.calls[0]), [['delete'], ['in', 'id', ['a', 'b']]]);
 });
+
+test('rpc chama a função do banco e devolve os dados', async () => {
+  const chamadas = [];
+  const client = { ...fakeClient(), rpc: async (nome, args) => { chamadas.push([nome, args]); return { data: { revisados: 1 }, error: null }; } };
+  const out = await createStore(client).rpc('flash_somar_dia', { p_data: '2026-11-24', p_acerto: 1 });
+  assert.deepEqual(out, { revisados: 1 });
+  assert.deepEqual(chamadas, [['flash_somar_dia', { p_data: '2026-11-24', p_acerto: 1 }]]);
+});

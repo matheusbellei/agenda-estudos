@@ -92,6 +92,8 @@ export function createStore(client, { url = '', vapid = '' } = {}) {
       return checar(await q.select()) || [];
     }),
     remove: (tabela, id) => tentar(async () => { checar(await client.from(tabela).delete().eq(CHAVE[tabela] || 'id', id)); }),
+    // Função do banco (ex.: soma atômica do resumo diário dos flashcards).
+    rpc: (nome, args) => tentar(async () => checar(await client.rpc(nome, args))),
     removeIds: (tabela, ids) => tentar(async () => { if (ids.length) checar(await client.from(tabela).delete().in('id', ids)); }),
     removeWhere: (tabela, filtro) => tentar(async () => {
       let q = client.from(tabela).delete();

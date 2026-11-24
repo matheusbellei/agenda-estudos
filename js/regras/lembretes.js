@@ -86,3 +86,12 @@ export function revisaoVence({ instanteMs, fuso, ajustes, enviadas = new Set() }
   if (enviadas.has(chave) || emSilencio(ajustes.revisao_min, ajustes)) return null;
   return { chave, data };
 }
+
+// Aviso dos flashcards do dia: no horário escolhido, uma vez por dia, fora do silêncio (se houver algo, decide o serviço).
+export function flashVence({ instanteMs, fuso, ajustes, enviadas = new Set() }) {
+  if (!ajustes.flash_aviso) return null;
+  const { data, minuto } = agoraNoFuso(instanteMs, fuso);
+  const chave = `flash:${data}`;
+  if (!vence(ajustes.flash_aviso_min, minuto) || enviadas.has(chave) || emSilencio(ajustes.flash_aviso_min, ajustes)) return null;
+  return { chave, data };
+}

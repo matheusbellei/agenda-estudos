@@ -110,3 +110,12 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Modelo = uma linha da tabela `modelos` com a lista de blocos dentro (dia da semana, horário, título, card, tag, lembrete). Aplicar troca os planejados da semana, de hoje em diante; as caixas "Manter os blocos marcados como cumpridos" e "... como não feitos" vêm marcadas e o aviso conta o que sai. Compromissos fixos nunca são apagados nem duplicados; a opção "Modelos incluem os compromissos fixos" só decide se eles entram ao salvar. Blocos de card fixo e de revisão entram no modelo sem esses vínculos.
 - Tema escuro: escolhido à mão em Configurações, guardado no aparelho (`localStorage`), aplicado no `<head>` antes de pintar. Todas as cores do CSS são variáveis; um teste confere contraste ≥ 4,5:1 nos dois temas e que não sobra cor fixa fora delas.
 - Revisão espaçada: "Agendar revisão" no card cria uma linha por data em `revisoes` (padrão 7 e 30 dias, mudável nas Configurações). Datas fixas: atrasar uma não move as outras. A vencida entra em "Para encaixar" com o selo "Revisar"; o bloco criado é do card inteiro (sem item), não mexe na trilha nem pergunta "concluir o card". Cumprido conclui a revisão; voltar o bloco devolve para a fila. Card arquivado tira as revisões da fila; card concluído continua sendo revisado.
+
+## Flashcards (novembro de 2026)
+
+- Dois botões (Errei/Acertei). Novo acertado → volta em 1 dia; depois, intervalo × fator (padrão 2,5; por baralho). Errou → volta no fim da mesma sessão e o intervalo recomeça (o acerto seguinte dá 1 dia).
+- Baralhos do menu e flashcards dos cards são separados: os do card só se estudam no card, com os limites e o fator de Configurações. Aviso diário, contador do menu e Dashboards somam os dois.
+- Tipos: frente e verso, invertido (dois lados com agendamento próprio), lacuna `{{ }}` (todas escondidas de uma vez) e digitar (acerto só se idêntico, com acentos; só os espaços das pontas são ignorados).
+- "Para hoje" = o que a sessão serviria: vencidos até o limite de revisões e novos até o limite de novos, descontando o que já foi feito hoje (lados distintos; refazer um errado não gasta limite).
+- O agendamento fica em `flash_lados` (criado na primeira resposta). Os Dashboards usam `flash_dias`, um resumo por dia (revisados e acertos de primeira), em vez de guardar cada resposta.
+- Formatação curta própria (negrito, itálico, listas), escapando todo o resto: o texto do usuário nunca vira HTML. Sem imagem, áudio nem importação.
