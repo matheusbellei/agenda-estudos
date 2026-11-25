@@ -125,3 +125,13 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Um card tem uma tag e, se quiser, subtags dela, escolhidas em duas listas clicáveis (Tag; Subtags). Com subtags marcadas, o card guarda só as subtags; sem subtag, guarda a tag. Trocar a tag substitui tudo, sem perguntar. Os dados (`card_categories`) não mudaram.
 - Card antigo com tags de famílias diferentes: os campos mostram a primeira família na ordem das tags e a linha "Também neste card: …" lista as outras, que ficam até a próxima troca de tag.
 - "Agendar", "Agendar revisão" e "Tornar fixa" viraram a seção "Na agenda": Marcar sessão, Revisões espaçadas e Repetir toda semana, cada um com uma linha explicando.
+
+## Ajustes de 24/11/2026
+
+- Card: uma tag e no máximo uma subtag. O card guarda a subtag (se houver) ou a tag; cards antigos com mais de uma mostram a primeira e listam as outras em "Também neste card" até a próxima escolha. O bloco criado a partir do card já vem com essa tag/subtag (tag arquivada não vem).
+- Flashcards: frente e verso usam o editor das Anotações só com Negrito, Itálico e Lista; a formatação própria aceita a saída dele (escapes `\*`, listas com `* `). Prévia só na lacuna. A resposta do tipo "digitar" é uma linha simples.
+- Arquivo como no Trello: painel à direita com busca e grupos por quando foi arquivado (`cards.archived_at`, gravado pelo app ao arquivar e apagado ao restaurar). Os arquivados antes disso ficam em "Sem data".
+- Excluir card tem a mesma pergunta e o mesmo efeito na tela do card, no menu ⋯ e no Arquivo (apaga os blocos planejados de hoje em diante).
+- Agenda = Semana. O dia abre tocando no nome do dia e tem o botão "Semana" para voltar. Padrão do dia: meia-noite a meia-noite (fim 00:00 = 24:00).
+- Cumprido e Não feito gravam o estado na hora e a folha fica aberta; "Por que não fez?" (`blocks.motivo`), "O que fez no lugar?" e o Diário gravam sozinhos ao sair do campo e ao fechar a folha.
+- Grupos de baralhos: baralho com `e_grupo` e `pai_id` (vários níveis). Estudar o grupo junta os baralhos de dentro, cada um com os próprios limites, revisões antes dos novos. Excluir um grupo sobe o que estava dentro. Aberto/fechado fica no aparelho.

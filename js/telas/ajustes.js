@@ -2,6 +2,7 @@
 import { registrarTela } from './casca.js';
 import { montarPainelNotificacoes } from './notificacoes.js';
 import { maesPrimeiro } from '../regras/tags.js';
+import { paisPrimeiro } from '../regras/baralhos.js';
 import { horaTexto, minutosDe, inicioDaSemana, isoDe } from '../regras/datas.js';
 import { planoDeImportacao } from '../regras/trello.js';
 import { TABELAS } from '../estado.js';
@@ -212,7 +213,7 @@ export async function restaurarBackup(texto, { estado, store }) {
     if (t === 'settings' && estado.dados.settings.length) linhas = [];
     if (t === 'categories') linhas = maesPrimeiro(linhas);
     if (t === 'modelos') linhas = nomesLivres(linhas, estado.dados.modelos);
-    if (t === 'baralhos') linhas = nomesLivres(linhas, estado.dados.baralhos);
+    if (t === 'baralhos') linhas = paisPrimeiro(nomesLivres(linhas, estado.dados.baralhos));
     inseridos[t] = 0;
     for (let i = 0; i < linhas.length; i += LOTE) {
       const criadas = await store.upsert(t, linhas.slice(i, i + LOTE), CONFLITO_BACKUP[t] || 'id');
@@ -260,7 +261,7 @@ export function iniciarAjustes({ estado, store }) {
   // ---- esqueleto fixo da tela
 
   const inicio = criar('input', { id: 'aj-inicio', type: 'time' });
-  const fim = criar('input', { id: 'aj-fim', type: 'time' });
+  const fim = criar('input', { id: 'aj-fim', type: 'time', title: '00:00 = meia-noite (o dia inteiro)' });
   const faixa = criar('select', { id: 'aj-faixa-semana' }, ...[60, 120, 180, 240].map((m) => criar('option', { value: m, texto: `${m / 60} h` })));
   const fatia = criar('select', { id: 'aj-fatia-dia' }, ...[15, 30, 60].map((m) => criar('option', { value: m, texto: `${m} min` })));
   const erroHor = criar('div', { class: 'erro', id: 'aj-horarios-erro', role: 'alert' });
@@ -413,7 +414,8 @@ export function iniciarAjustes({ estado, store }) {
   function desenharHorarios() {
     const a = estado.ajustes();
     inicio.value = horaTexto(a.day_start_min);
-    fim.value = horaTexto(a.day_end_min);
+    // O campo de hora não aceita 24:00: o fim à meia-noite aparece como 00:00.
+    fim.value = horaTexto(a.day_end_min % 1440);
     faixa.value = String(a.week_slot_min);
     fatia.value = String(a.day_slot_min);
     if (document.activeElement !== sequenciaMin) sequenciaMin.value = String(a.sequencia_min);
@@ -431,7 +433,8 @@ export function iniciarAjustes({ estado, store }) {
   formHor.addEventListener('submit', async (e) => {
     e.preventDefault();
     const ini = minutosDe(inicio.value || '');
-    const fi = minutosDe(fim.value || '');
+    const fiBruto = minutosDe(fim.value || '');
+    const fi = fiBruto === 0 ? 1440 : fiBruto; // fim 00:00 = meia-noite do fim do dia
     const faixaMin = Number(faixa.value);
     if (Number.isNaN(ini) || Number.isNaN(fi)) { erroHor.textContent = 'Informe o início e o fim do dia.'; return; }
     if (fi - ini < faixaMin) {

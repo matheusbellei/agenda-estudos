@@ -93,6 +93,15 @@ O app instalado no celular pode demorar uma abertura para pegar a versão nova; 
 
 Nesta mesma atualização, o card ganhou os campos **Tag** e **Subtags** (listas clicáveis, uma tag por card) e a seção **Na agenda** (Marcar sessão, Revisões espaçadas e Repetir toda semana). Isso não precisa de nada no Supabase.
 
+### Ajustes de 24/11/2026: card, Arquivo, agenda, Cumprido/Não feito e grupos de baralhos
+
+1. No **SQL Editor** do Supabase, rode `supabase/migracao-2026-11-ajustes.sql` (pode rodar de novo sem problema). Se aparecer a janela de aviso, use o botão verde.
+2. Publique o código novo no GitHub (`git add -A`, `git commit -m "ajustes de 24/11"`, `git push`).
+3. Não precisa mexer na função `lembretes`.
+4. Quer o dia inteiro na agenda? Em **Configurações**, ponha início **00:00** e fim **00:00** e salve (fim 00:00 = meia-noite).
+
+O que muda: uma subtag por card e a tag do card já vem no bloco; editor com negrito, itálico e lista nos flashcards; "Estudar" só aparece com flashcard; revisões com texto claro; menu ⋯ do card com Excluir; Arquivo no estilo do Trello (com grupos por data); Agenda só com a Semana; Cumprido e Não feito marcam na hora, com "Por que não fez?"; e grupos de baralhos.
+
 ## Notificações (lembretes com o app fechado)
 
 O Supabase roda, a cada minuto, a função `lembretes`, que confere a agenda e manda os avisos para os aparelhos onde você ativou. Faça isto uma vez, nesta ordem:

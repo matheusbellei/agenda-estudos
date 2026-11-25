@@ -1,7 +1,7 @@
 // Dados em memória + ações que gravam no store e avisam os ouvintes.
 export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings'];
 
-const AJUSTES_PADRAO = { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
+const AJUSTES_PADRAO = { day_start_min: 0, day_end_min: 1440, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
   notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
   notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
   sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,

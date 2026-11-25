@@ -38,13 +38,13 @@ class TestDescartarBloco(BlocoBase):
     def test_fundo_com_texto_pergunta_e_continuar_mantem(self):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula')]); p = self.page
         p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
-        p.click('#bloco-nao-feito'); p.fill('#bloco-no-lugar', 'Fui estudar outra coisa')
+        p.fill('#bloco-titulo', 'Fui estudar outra coisa')
         self.tocar_fora()
         self.assertTrue(self.aberta())
         self.assertIn(PERGUNTA, p.inner_text('#folha-bloco .confirmar-descarte'))
         p.click('#folha-bloco [data-continuar]')
         self.assertTrue(self.aberta())
-        self.assertEqual(p.input_value('#bloco-no-lugar'), 'Fui estudar outra coisa')
+        self.assertEqual(p.input_value('#bloco-titulo'), 'Fui estudar outra coisa')
         p.keyboard.press('Escape')
         self.assertTrue(self.aberta())
         p.click('#folha-bloco [data-descartar]')
@@ -178,15 +178,11 @@ class TestDescartarNovoCard(QuadroBase):
 
 
 class TestSalvarComNotaEmBlocoPlanejado(BlocoBase):
-    def test_salvar_nao_descarta_a_nota_de_bloco_planejado(self):
+    def test_nao_feito_e_salvar_grava_a_nota(self):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula')]); p = self.page
         p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
-        p.click('#bloco-nao-feito'); p.fill('#bloco-no-lugar', 'Estudei outra matéria')
+        p.click('#bloco-nao-feito'); p.wait_for_function("window.__memdb.blocks[0].status === 'missed'")
+        p.fill('#bloco-no-lugar', 'Estudei outra matéria')
         p.click('#bloco-salvar')
-        p.wait_for_selector('#bloco-erro:has-text("Marcar como não feito")')
-        self.assertTrue(self.aberta())
-        self.assertEqual(p.input_value('#bloco-no-lugar'), 'Estudei outra matéria')
-        self.assertEqual((self.db()['blocks'][0]['status'], self.db()['blocks'][0]['instead_note']), ('planned', ''))
-        p.click('#bloco-nao-feito-ok')
-        p.wait_for_function("window.__memdb.blocks[0].status === 'missed'")
-        self.assertEqual(self.db()['blocks'][0]['instead_note'], 'Estudei outra matéria')
+        p.wait_for_function("document.querySelector('#folha-bloco').hidden")
+        p.wait_for_function("window.__memdb.blocks[0].instead_note === 'Estudei outra matéria'")

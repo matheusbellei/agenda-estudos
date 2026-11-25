@@ -1,4 +1,5 @@
 // Tela Hoje: um dia, com navegação entre dias.
+import { mostrarSemana } from './semana.js';
 import { registrarTela, irPara } from './casca.js';
 import { criar, elementoBloco, abrirBloco, ligarCabecaECorpo, gravarBloco } from './bloco.js';
 import { ajustarAFatia } from '../regras/calendario.js';
@@ -29,8 +30,13 @@ export function iniciarHoje({ estado }) {
   const hoje = botao('dia-hoje', 'Hoje', 'Voltar para hoje');
   ant.addEventListener('click', () => { diaAtual = somaDias(diaAtual, -1); desenhar(); });
   prox.addEventListener('click', () => { diaAtual = somaDias(diaAtual, 1); desenhar(); });
-  hoje.addEventListener('click', () => { diaAtual = isoDe(new Date()); desenhar(); });
-  const topo = criar('div', { class: 'cal-topo' }, ant, titulo, hoje, prox);
+  hoje.addEventListener('click', () => { diaAtual = isoDe(new Date()); rolarParaAgora = null; desenhar(); });
+  let rolarParaAgora = null; // o dia que já rolou para a hora atual
+  // Sem o alternador Hoje/Semana: daqui se volta para a semana deste dia.
+  const semana = criar('button', { type: 'button', class: 'btn', id: 'dia-semana', 'aria-label': 'Ver a semana deste dia' },
+    criar('i', { class: 'ti ti-calendar-week', 'aria-hidden': 'true' }), ' Semana');
+  semana.addEventListener('click', () => mostrarSemana(diaAtual));
+  const topo = criar('div', { class: 'cal-topo' }, ant, titulo, hoje, prox, semana);
   const fila = criar('aside', { id: 'fila-hoje', class: 'fila' });
   const principal = criar('div', { class: 'cal-principal' }, topo);
   const aviso = criar('div', { class: 'erro', id: 'dia-aviso', role: 'alert' });
@@ -200,6 +206,13 @@ export function iniciarHoje({ estado }) {
     }
     linha.replaceChildren(...filhos);
     desenhado = { blocos, inicio, fim, fatia: a.day_slot_min };
+    // Dia de hoje: abre perto da hora atual (a primeira vez que se vê o dia e no botão Hoje).
+    if (rolarParaAgora !== diaAtual && diaAtual === isoDe(agora)) {
+      rolarParaAgora = diaAtual;
+      const min = agora.getHours() * 60 + agora.getMinutes();
+      const fatias = [...linha.querySelectorAll('.fatia')].filter((f) => Number(f.dataset.inicio) <= min);
+      fatias[fatias.length - 1]?.scrollIntoView({ block: 'start' });
+    }
     montarFila(fila, { estado, hoje: isoDe(agora), aoSoltar: soltarNaFatia });
   }
 

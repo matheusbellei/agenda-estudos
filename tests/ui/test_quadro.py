@@ -149,18 +149,100 @@ class TestQuadro(QuadroBase):
         pos = {l['name']: l['position'] for l in self.db()['lists']}
         self.assertLess(pos['Em andamento'], pos['Ideias'])
 
+    def test_menu_do_card_sem_abrir_e_com_excluir(self):
+        self.preparar(cards=[{'title': 'C1', 'lista': 'Backlog', 'position': 1024}])
+        p = self.page; cid = self.card_id('C1')
+        p.click(f'.cartao-card[data-card="{cid}"] .cartao-menu')
+        self.assertEqual(p.locator('.menu-card [data-acao="abrir"]').count(), 0)
+        p.evaluate("window.confirm = () => false")
+        p.click('.menu-card [data-acao="excluir"]')
+        p.wait_for_timeout(200)
+        self.assertEqual(len(self.db()['cards']), 1)
+        p.click(f'.cartao-card[data-card="{cid}"] .cartao-menu')
+        p.evaluate("window.confirm = () => true")
+        p.click('.menu-card [data-acao="excluir"]')
+        p.wait_for_function("window.__memdb.cards.length === 0")
+        self.assertEqual(self.titulos('Backlog'), [])
+
+    def test_excluir_pelo_menu_apaga_os_rascunhos_do_card(self):
+        self.preparar(cards=[{'title': 'C1', 'lista': 'Backlog', 'position': 1024}])
+        p = self.page; cid = self.card_id('C1')
+        p.evaluate(f"localStorage.setItem('rascunho:cards:{cid}', '{{}}'); localStorage.setItem('rascunho:cards:{cid}:novo', '{{}}')")
+        p.click(f'.cartao-card[data-card="{cid}"] .cartao-menu')
+        p.evaluate("window.confirm = () => true")
+        p.click('.menu-card [data-acao="excluir"]')
+        p.wait_for_function("window.__memdb.cards.length === 0")
+        p.wait_for_function(f"!Object.keys(localStorage).some(k => k.startsWith('rascunho:cards:{cid}'))")
+
     def test_arquivar_e_restaurar(self):
         self.preparar(cards=[{'title': 'C1', 'lista': 'Backlog', 'position': 1024}])
         p = self.page; cid = self.card_id('C1')
         p.click(f'.cartao-card[data-card="{cid}"] .cartao-menu')
         p.click('.menu-card [data-acao="arquivar"]')
         p.wait_for_function("window.__memdb.cards[0].archived === true")
+        self.assertTrue(self.db()['cards'][0]['archived_at'].startswith('2026-11-16'))
         self.assertEqual(self.titulos('Backlog'), [])
         p.click('#quadro-arquivo-btn')
-        self.assertIn('C1', p.inner_text('#quadro-arquivo'))
+        p.wait_for_selector('#quadro-arquivo', state='visible')
+        texto = p.inner_text('#quadro-arquivo')
+        self.assertIn('Itens arquivados', texto)
+        self.assertIn('Nos últimos 7 dias', texto)
+        self.assertIn('Arquivado', p.inner_text(f'#quadro-arquivo [data-card="{cid}"]'))
         p.click(f'#quadro-arquivo [data-card="{cid}"] [data-acao="restaurar"]')
         p.wait_for_function("window.__memdb.cards[0].archived === false")
+        self.assertIsNone(self.db()['cards'][0]['archived_at'])
         self.assertEqual(self.titulos('Backlog'), ['C1'])
+
+    def preparar_arquivo(self):
+        self.preparar(categorias=True, cards=[
+            {'title': 'Revisão de Função', 'lista': 'Backlog', 'position': 1, 'archived': True, 'archived_at': '2026-11-14T10:00:00Z',
+             'completed_at': '2026-04-12T10:00:00Z'},
+            {'title': 'Aula 1 Software', 'lista': 'Backlog', 'position': 2, 'archived': True, 'archived_at': '2026-10-01T10:00:00Z'},
+            {'title': 'Antigo', 'lista': 'Backlog', 'position': 3, 'archived': True},
+        ])
+        self.ids_c = {c['title']: c['id'] for c in self.db()['cards']}
+        cat = next(c['id'] for c in self.db()['categories'] if c['name'] == 'Programação')
+        self.seed('card_categories', [{'card_id': self.ids_c['Revisão de Função'], 'category_id': cat}])
+        self.seed('items', [{'card_id': self.ids_c['Revisão de Função'], 'title': 'a', 'position': 1, 'done': True},
+                            {'card_id': self.ids_c['Revisão de Função'], 'title': 'b', 'position': 2, 'done': False}])
+        p = self.page
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro')
+        p.click('#quadro-arquivo-btn'); p.wait_for_selector('#quadro-arquivo', state='visible')
+
+    def test_arquivo_em_grupos_com_visual_do_card(self):
+        self.preparar_arquivo(); p = self.page
+        grupos = p.eval_on_selector_all('#quadro-arquivo .arquivo-grupo h3', 'els => els.map(e => e.textContent)')
+        self.assertEqual(grupos, ['Nos últimos 7 dias', 'Há mais de 30 dias', 'Sem data'])
+        item = p.inner_text(f'#quadro-arquivo [data-card="{self.ids_c["Revisão de Função"]}"]')
+        for t in ['Programação', 'Revisão de Função', 'Concluído em 12 de abr.', '1/2', 'Arquivado', 'Restaurar', 'Excluir']:
+            self.assertIn(t, item)
+        rid = self.ids_c['Revisão de Função']
+        self.assertEqual(p.get_attribute(f'#quadro-arquivo [data-card="{rid}"] [data-acao="restaurar"]', 'aria-label'), 'Restaurar Revisão de Função')
+        p.click(f'#quadro-arquivo [data-card="{rid}"] [data-acao="restaurar"]')
+        p.wait_for_function(f"!window.__memdb.cards.find(c => c.id === '{rid}').archived")
+        self.assertEqual(p.evaluate('document.activeElement.id'), 'arquivo-busca')
+
+    def test_arquivo_busca(self):
+        self.preparar_arquivo(); p = self.page
+        p.fill('#arquivo-busca', 'FUNCAO')
+        self.assertEqual(p.locator('#quadro-arquivo .arquivado').count(), 1)
+        p.fill('#arquivo-busca', 'nada disso')
+        self.assertIn('Nenhum card arquivado encontrado', p.inner_text('#quadro-arquivo'))
+
+    def test_arquivo_excluir_e_abrir_e_fechar(self):
+        self.preparar_arquivo(); p = self.page
+        cid = self.ids_c['Antigo']
+        p.evaluate("window.confirm = () => true")
+        p.click(f'#quadro-arquivo [data-card="{cid}"] [data-acao="excluir"]')
+        p.wait_for_function(f"!window.__memdb.cards.some(c => c.id === '{cid}')")
+        p.click('#arquivo-fechar')
+        p.wait_for_selector('#quadro-arquivo', state='hidden')
+        p.click('#quadro-arquivo-btn'); p.wait_for_selector('#quadro-arquivo', state='visible')
+        p.keyboard.press('Escape')
+        p.wait_for_selector('#quadro-arquivo', state='hidden')
+        p.click('#quadro-arquivo-btn')
+        p.click(f'#quadro-arquivo [data-card="{self.ids_c["Aula 1 Software"]}"] .arquivado-titulo')
+        p.wait_for_selector('#folha-card', state='visible')
 
     def test_cartao_mostra_categorias_progresso_e_icone_de_anotacao(self):
         self.preparar(categorias=True, cards=[{'title': 'Trilha <b>x</b>', 'lista': 'Backlog', 'position': 1024, 'notes': 'algo'}])

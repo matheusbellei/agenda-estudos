@@ -78,7 +78,7 @@ test('ajustes: padrões sem linha; alterar settings cria a linha e depois atuali
   const store = storeFalso();
   const e = criarEstado(store);
   await e.carregar();
-  assert.deepEqual(e.ajustes(), { day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
+  assert.deepEqual(e.ajustes(), { day_start_min: 0, day_end_min: 1440, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
     notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
     notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
     sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
@@ -87,7 +87,7 @@ test('ajustes: padrões sem linha; alterar settings cria a linha e depois atuali
     flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140 });
   await e.alterar('settings', null, { day_start_min: 480 });
   assert.equal(e.ajustes().day_start_min, 480);
-  assert.equal(e.ajustes().day_end_min, 1320);
+  assert.equal(e.ajustes().day_end_min, 1440);
   assert.equal(e.dados.settings.length, 1);
   await e.alterar('settings', null, { last_rollover: '2026-11-16' });
   assert.equal(e.dados.settings.length, 1);

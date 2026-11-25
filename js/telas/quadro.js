@@ -6,6 +6,8 @@ import { progresso } from '../regras/fila.js';
 import { horasDosCards, formatarHoras } from '../regras/acompanhamento.js';
 import { agoraNoFuso } from '../regras/lembretes.js';
 import { registrarTextoNaoSalvo, pedirDescarte } from './folhas.js';
+import { isoDe, MESES } from '../regras/datas.js';
+import { arquivoAgrupado } from '../regras/arquivo.js';
 
 export function criar(tag, atributos = {}, ...filhos) {
   const el = document.createElement(tag);
@@ -63,15 +65,37 @@ export const cardsDaLista = (estado, listaId) => estado.dados.cards
   .filter((c) => c.list_id === listaId && !c.archived && !c.is_fixed)
   .sort(porPosicao);
 
+// Excluir card (tela do card, menu ⋯ e Arquivo): a mesma pergunta e o mesmo efeito em todo lugar.
+export const PERGUNTA_EXCLUIR_CARD = 'Excluir este card? Os blocos já passados continuam no calendário; os agendados daqui para frente serão apagados.';
+export async function excluirCard(estado, cardId) {
+  const hoje = isoDe(new Date());
+  const itens = estado.dados.items.filter((i) => i.card_id === cardId).map((i) => i.id);
+  for (const b of estado.dados.blocks.filter((x) => x.card_id === cardId && x.status === 'planned' && x.date >= hoje)) {
+    await estado.excluir('blocks', b.id);
+  }
+  await estado.excluir('cards', cardId);
+  // Rascunhos de anotação do card e dos itens dele (guardados neste aparelho pela tela do card) vão junto.
+  try {
+    const prefixos = [`rascunho:cards:${cardId}`, ...itens.map((i) => `rascunho:items:${i}`)];
+    for (const k of Object.keys(localStorage)) if (prefixos.some((p) => k === p || k.startsWith(`${p}:`))) localStorage.removeItem(k);
+  } catch { /* sem armazenamento: nada a apagar */ }
+}
+
+// Arquivar guarda quando foi (grupos do Arquivo); restaurar apaga a data.
+export function arquivarCard(estado, cardId) {
+  return estado.alterar('cards', cardId, { archived: true, archived_at: new Date().toISOString() });
+}
+
 // Tira do Arquivo; se a lista dele sumiu, o card vai para a primeira lista.
 export async function restaurarCard(estado, card) {
+  const volta = { archived: false, archived_at: null };
   if (card.list_id && estado.dados.lists.some((l) => l.id === card.list_id)) {
-    await estado.alterar('cards', card.id, { archived: false });
+    await estado.alterar('cards', card.id, volta);
     return;
   }
   const primeira = [...estado.dados.lists].sort(porPosicao)[0];
   if (!primeira) throw new Error('Crie uma lista antes de restaurar o card.');
-  await moverCard(estado, card, primeira.id, posicaoNoFim(cardsDaLista(estado, primeira.id)), { archived: false });
+  await moverCard(estado, card, primeira.id, posicaoNoFim(cardsDaLista(estado, primeira.id)), volta);
 }
 
 export function iniciarQuadro({ estado, abrirCard }) {
@@ -90,7 +114,9 @@ export function iniciarQuadro({ estado, abrirCard }) {
   const topo = criar('div', { class: 'quadro-topo' });
   const avisoEl = criar('div', { class: 'erro', id: 'quadro-aviso', role: 'alert' });
   const colunas = criar('div', { class: 'quadro-colunas' });
-  const arquivo = criar('div', { class: 'cartao', id: 'quadro-arquivo', hidden: '' });
+  // Arquivo como no Trello: painel pela direita, por cima do quadro.
+  const arquivo = criar('aside', { class: 'arquivo-painel', id: 'quadro-arquivo', role: 'dialog', 'aria-label': 'Itens arquivados', hidden: '' });
+  let buscaArquivo = '';
   const camada = criar('div', { class: 'menu-camada', hidden: '' });
   secao.replaceChildren(topo, avisoEl, colunas, arquivo, camada);
 
@@ -150,9 +176,12 @@ export function iniciarQuadro({ estado, abrirCard }) {
   function menuDoCard(card) {
     const acao = (fn) => () => { fecharMenu(); tentar(fn); };
     const principal = () => abrirMenu('menu-card', card.title, [
-      { acao: 'abrir', texto: 'Abrir', fn: () => { fecharMenu(); abrirCard(card.id); } },
       { acao: 'mover', texto: 'Mover para…', fn: escolherLista },
-      { acao: 'arquivar', texto: 'Arquivar', fn: acao(() => estado.alterar('cards', card.id, { archived: true })) },
+      { acao: 'arquivar', texto: 'Arquivar', fn: acao(() => arquivarCard(estado, card.id)) },
+      { acao: 'excluir', texto: 'Excluir', perigo: true, fn: () => {
+        fecharMenu();
+        if (window.confirm(PERGUNTA_EXCLUIR_CARD)) tentar(() => excluirCard(estado, card.id));
+      } },
     ]);
     function escolherLista() {
       abrirMenu('menu-card', 'Mover para…', [
@@ -379,22 +408,64 @@ export function iniciarQuadro({ estado, abrirCard }) {
     const filtros = criar('div', { class: 'filtro-categorias' }, chip(null), ...categorias.map(chip));
     const arquivados = estado.dados.cards.filter((c) => c.archived && !c.is_fixed).length;
     const btn = criar('button', { type: 'button', class: 'btn', id: 'quadro-arquivo-btn', 'aria-expanded': String(arquivoAberto), texto: `Arquivo (${arquivados})` });
-    btn.addEventListener('click', () => { arquivoAberto = !arquivoAberto; desenhar(); });
+    btn.addEventListener('click', () => {
+      arquivoAberto = !arquivoAberto;
+      desenhar();
+      if (arquivoAberto) document.querySelector('#arquivo-busca')?.focus();
+    });
     topo.replaceChildren(filtros, btn);
   }
 
-  function desenharArquivo() {
+  const dataCurta = (iso) => { const d = new Date(iso); return `${d.getDate()} de ${MESES[d.getMonth()].slice(0, 3)}.`; };
+  const fecharArquivo = () => { arquivoAberto = false; buscaArquivo = ''; desenhar(); document.querySelector('#quadro-arquivo-btn')?.focus(); };
+  document.addEventListener('keydown', (e) => {
+    // Com o card aberto por cima, o Esc é dele.
+    if (e.key !== 'Escape' || !arquivoAberto || document.querySelector('#folha-card')?.hidden === false) return;
+    fecharArquivo();
+  });
+
+  function itemDoArquivo(c, itens) {
+    const chips = categoriasDoCard(c.id).map((k) => chipCategoria(k, nomeCompleto(estado.dados.categories, k)));
+    const { feitos, total } = progresso(c.id, itens);
+    const selos = [];
+    if (c.completed_at) selos.push(criar('span', { class: 'arquivo-selo concluido' }, criar('i', { class: 'ti ti-circle-check', 'aria-hidden': 'true' }), ` Concluído em ${dataCurta(c.completed_at)}`));
+    if (total) selos.push(criar('span', { class: 'arquivo-selo', title: 'Itens feitos' }, criar('i', { class: 'ti ti-checkbox', 'aria-hidden': 'true' }), ` ${feitos}/${total}`));
+    selos.push(criar('span', { class: 'arquivo-selo' }, criar('i', { class: 'ti ti-archive', 'aria-hidden': 'true' }), ' Arquivado'));
+    const titulo = criar('button', { type: 'button', class: 'arquivado-titulo', texto: c.title });
+    titulo.addEventListener('click', () => abrirCard(c.id));
+    // Depois de restaurar ou excluir o painel é redesenhado: o foco volta para a busca.
+    const focarBusca = () => document.querySelector('#arquivo-busca')?.focus();
+    const restaurar = criar('button', { type: 'button', class: 'arquivo-acao', 'data-acao': 'restaurar', 'aria-label': `Restaurar ${c.title}`, texto: 'Restaurar' });
+    restaurar.addEventListener('click', async () => { await tentar(() => restaurarCard(estado, c)); focarBusca(); });
+    const excluir = criar('button', { type: 'button', class: 'arquivo-acao', 'data-acao': 'excluir', 'aria-label': `Excluir ${c.title}`, texto: 'Excluir' });
+    excluir.addEventListener('click', async () => { if (window.confirm(PERGUNTA_EXCLUIR_CARD)) { await tentar(() => excluirCard(estado, c.id)); focarBusca(); } });
+    return criar('div', { class: 'arquivado', 'data-card': c.id },
+      criar('div', { class: 'arquivado-cartao' },
+        ...(chips.length ? [criar('div', { class: 'cartao-chips' }, ...chips)] : []),
+        titulo, criar('div', { class: 'arquivo-selos' }, ...selos)),
+      criar('div', { class: 'arquivo-acoes' }, restaurar, criar('span', { 'aria-hidden': 'true', texto: '•' }), excluir));
+  }
+
+  function desenharArquivo(itens) {
     arquivo.hidden = !arquivoAberto;
     if (!arquivoAberto) { arquivo.replaceChildren(); return; }
-    const lista = estado.dados.cards.filter((c) => c.archived && !c.is_fixed).sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
-    const linhas = lista.map((c) => {
-      const restaurar = criar('button', { type: 'button', class: 'btn', 'data-acao': 'restaurar', texto: 'Restaurar' });
-      restaurar.addEventListener('click', () => tentar(() => restaurarCard(estado, c)));
-      const titulo = criar('button', { type: 'button', class: 'arquivado-titulo', texto: c.title });
-      titulo.addEventListener('click', () => abrirCard(c.id));
-      return criar('div', { class: 'arquivado', 'data-card': c.id }, titulo, restaurar);
-    });
-    arquivo.replaceChildren(criar('h2', { texto: 'Arquivo' }), ...(linhas.length ? linhas : [criar('p', { class: 'suave', texto: 'Nenhum card arquivado.' })]));
+    const focoNaBusca = document.activeElement?.id === 'arquivo-busca';
+    const posicao = focoNaBusca ? document.activeElement.selectionStart : null;
+    const cards = estado.dados.cards.filter((c) => c.archived && !c.is_fixed);
+    const grupos = arquivoAgrupado(cards, { busca: buscaArquivo, agoraMs: Date.now() });
+    const fechar = criar('button', { type: 'button', class: 'btn-icone', id: 'arquivo-fechar', 'aria-label': 'Fechar' }, criar('i', { class: 'ti ti-x', 'aria-hidden': 'true' }));
+    fechar.addEventListener('click', fecharArquivo);
+    const busca = criar('input', { type: 'search', id: 'arquivo-busca', placeholder: 'Pesquisar', 'aria-label': 'Pesquisar nos arquivados', autocomplete: 'off' });
+    busca.value = buscaArquivo;
+    busca.addEventListener('input', () => { buscaArquivo = busca.value; desenharArquivo(itens); });
+    const vazio = cards.length ? 'Nenhum card arquivado encontrado.' : 'Nenhum card arquivado.';
+    arquivo.replaceChildren(
+      criar('header', { class: 'arquivo-topo' }, criar('h2', { texto: 'Itens arquivados' }), fechar),
+      busca,
+      criar('div', { class: 'arquivo-lista' }, ...(grupos.length
+        ? grupos.map((g) => criar('section', { class: 'arquivo-grupo' }, criar('h3', { texto: g.titulo }), ...g.cards.map((c) => itemDoArquivo(c, itens))))
+        : [criar('p', { class: 'suave', texto: vazio })])));
+    if (focoNaBusca) { busca.focus(); busca.setSelectionRange(posicao, posicao); }
   }
 
   // Horas dos cards com meta: calculadas uma vez por desenho do Quadro, não uma vez por card.
@@ -424,7 +495,7 @@ export function iniciarQuadro({ estado, abrirCard }) {
       focar = feitas.find((f) => f.focar)?.focar;
       colunas.replaceChildren(...feitas.map((f) => f.el), criar('div', { class: 'coluna coluna-nova' }, formNovaLista()));
     }
-    desenharArquivo();
+    desenharArquivo(itens);
     if (focar) focar.focus();
   }
 

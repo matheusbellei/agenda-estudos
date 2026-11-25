@@ -2,10 +2,8 @@
 import { criar } from './bloco.js';
 import { abrirJanela } from './janela.js';
 import { agoraNoFuso } from '../regras/lembretes.js';
-import { datasDoPadrao, validarDatas } from '../regras/revisoes.js';
+import { datasDoPadrao, validarDatas, textoDoPadrao } from '../regras/revisoes.js';
 
-const dm = (iso) => `${Number(iso.slice(8))}/${Number(iso.slice(5, 7))}`;
-const juntar = (l) => (l.length < 2 ? l.join('') : `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}`);
 
 export function hojeDoApp(estado) {
   return agoraNoFuso(Date.now(), estado.ajustes().fuso).data;
@@ -13,14 +11,15 @@ export function hojeDoApp(estado) {
 
 export function abrirAgendarRevisao(estado, cardId) {
   const hoje = hojeDoApp(estado);
-  const padrao = datasDoPadrao(hoje, estado.ajustes().revisoes_dias);
+  const dias = estado.ajustes().revisoes_dias;
+  const padrao = datasDoPadrao(hoje, dias);
   const opcao = (id, valor, rotulo, marcado) => {
     const r = criar('input', { type: 'radio', name: 'revisao-modo', id, value: valor });
     r.checked = marcado;
     return [r, criar('label', { class: 'campo-check', for: id }, r, criar('span', { texto: rotulo }))];
   };
-  const [rPadrao, lPadrao] = opcao('revisao-padrao', 'padrao', `Padrão: ${juntar(padrao.map(dm))}`, true);
-  const [rPers, lPers] = opcao('revisao-personalizar', 'personalizar', 'Personalizar as datas', false);
+  const [rPadrao, lPadrao] = opcao('revisao-padrao', 'padrao', textoDoPadrao(dias, padrao), true);
+  const [rPers, lPers] = opcao('revisao-personalizar', 'personalizar', 'Escolher outras datas', false);
   const lista = criar('div', { id: 'revisao-datas', class: 'revisao-datas', hidden: '' });
   const mais = criar('button', { type: 'button', class: 'btn', id: 'revisao-mais', texto: 'Acrescentar data', hidden: '' });
   const erro = criar('div', { class: 'erro', id: 'revisao-erro', role: 'alert' });
@@ -41,8 +40,8 @@ export function abrirAgendarRevisao(estado, cardId) {
   rPers.addEventListener('change', trocar);
   mais.addEventListener('click', () => lista.append(linha('')));
 
-  const { fechar } = abrirJanela('revisao-janela', 'Agendar revisão',
-    criar('p', { class: 'suave', texto: 'As revisões entram em "Para encaixar" no dia marcado. Atrasar uma não muda as outras.' }),
+  const { fechar } = abrirJanela('revisao-janela', 'Revisões espaçadas',
+    criar('p', { class: 'suave', texto: 'Cada revisão aparece em "Para encaixar" no dia marcado. Se atrasar uma, as outras continuam nas datas delas.' }),
     lPadrao, lPers, lista, mais, erro, criar('div', { class: 'linha-botoes' }, agendar, cancelar));
   cancelar.addEventListener('click', fechar);
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { maeDe, filhasDe, familia, nomeCompleto, nomeRepetido, podeSerMae, arvore, maesPrimeiro, emOrdem, categoriaDoCard, trocarTag, alternarSubtag } from '../../js/regras/tags.js';
+import { maeDe, filhasDe, familia, nomeCompleto, nomeRepetido, podeSerMae, arvore, maesPrimeiro, emOrdem, categoriaDoCard, trocarTag, escolherSubtag, categoriaParaBloco } from '../../js/regras/tags.js';
 
 const cats = [
   { id: 'id', name: 'Idiomas', parent_id: null, archived: false },
@@ -63,19 +63,19 @@ test('emOrdem: mãe seguida das subtags; arquivadas só se pedidas, e subtag ped
   assert.deepEqual(emOrdem(maeArquivada, { incluir: new Set(['vo']) }).map((c) => c.id), ['ex', 'vo']);
 });
 
-// ---- tag do card: uma tag e subtags dela
+// ---- tag do card: uma tag e, se quiser, uma subtag dela
 const doCard = [...cats, { id: 'ca', name: 'Cálculo', parent_id: 'ex', archived: false }];
 
-test('categoriaDoCard: vazio, só a tag, subtags e a família arquivada que o card usa', () => {
-  assert.deepEqual(categoriaDoCard(doCard, []), { tagId: null, subIds: [], outras: [] });
-  assert.deepEqual(categoriaDoCard(doCard, ['id']), { tagId: 'id', subIds: [], outras: [] });
-  assert.deepEqual(categoriaDoCard(doCard, ['vo', 'gr']), { tagId: 'id', subIds: ['gr', 'vo'], outras: [] });
-  assert.deepEqual(categoriaDoCard(doCard, ['ar']), { tagId: 'id', subIds: ['ar'], outras: [] });
+test('categoriaDoCard: vazio, só a tag, subtag e subtag arquivada que o card usa', () => {
+  assert.deepEqual(categoriaDoCard(doCard, []), { tagId: null, subId: null, outras: [] });
+  assert.deepEqual(categoriaDoCard(doCard, ['id']), { tagId: 'id', subId: null, outras: [] });
+  assert.deepEqual(categoriaDoCard(doCard, ['vo']), { tagId: 'id', subId: 'vo', outras: [] });
+  assert.deepEqual(categoriaDoCard(doCard, ['ar']), { tagId: 'id', subId: 'ar', outras: [] });
 });
 
-test('categoriaDoCard: duas famílias — a primeira na ordem das tags manda, a outra vai para "outras"', () => {
-  // Exatas vem antes de Idiomas.
-  assert.deepEqual(categoriaDoCard(doCard, ['vo', 'ca']), { tagId: 'ex', subIds: ['ca'], outras: ['vo'] });
+test('categoriaDoCard: card antigo — a primeira subtag manda; as demais e as outras famílias vão para "outras"', () => {
+  assert.deepEqual(categoriaDoCard(doCard, ['vo', 'gr']), { tagId: 'id', subId: 'gr', outras: ['vo'] });
+  assert.deepEqual(categoriaDoCard(doCard, ['vo', 'ca']), { tagId: 'ex', subId: 'ca', outras: ['vo'] });
 });
 
 test('trocarTag: a tag sozinha, ou nada', () => {
@@ -83,13 +83,20 @@ test('trocarTag: a tag sozinha, ou nada', () => {
   assert.deepEqual(trocarTag(null), []);
 });
 
-test('alternarSubtag: marca, desmarca e volta para a tag quando não sobra subtag', () => {
-  assert.deepEqual(alternarSubtag(doCard, ['id'], 'vo'), ['vo']);
-  assert.deepEqual(alternarSubtag(doCard, ['vo'], 'gr').sort(), ['gr', 'vo']);
-  assert.deepEqual(alternarSubtag(doCard, ['vo'], 'vo'), ['id']);
+test('escolherSubtag: uma só; "Nenhuma" volta para a tag', () => {
+  assert.deepEqual(escolherSubtag(doCard, ['id'], 'vo'), ['vo']);
+  assert.deepEqual(escolherSubtag(doCard, ['vo'], 'gr'), ['gr']);
+  assert.deepEqual(escolherSubtag(doCard, ['vo', 'gr'], 'vo'), ['vo']);
+  assert.deepEqual(escolherSubtag(doCard, ['vo'], null), ['id']);
 });
 
-test('alternarSubtag: mantém a outra família de um card antigo', () => {
-  assert.deepEqual(alternarSubtag(doCard, ['vo', 'ca'], 'ca').sort(), ['ex', 'vo']);
-  assert.deepEqual(alternarSubtag(doCard, ['ex', 'vo'], 'ca').sort(), ['ca', 'vo']);
+test('escolherSubtag: mantém a outra família de um card antigo', () => {
+  assert.deepEqual(escolherSubtag(doCard, ['vo', 'ca'], null).sort(), ['ex', 'vo']);
+  assert.deepEqual(escolherSubtag(doCard, ['ex', 'vo'], 'ca').sort(), ['ca', 'vo']);
+});
+
+test('categoriaParaBloco: a subtag, senão a tag, senão nada', () => {
+  assert.equal(categoriaParaBloco(doCard, ['vo', 'gr']), 'gr');
+  assert.equal(categoriaParaBloco(doCard, ['id']), 'id');
+  assert.equal(categoriaParaBloco(doCard, []), null);
 });

@@ -5,8 +5,11 @@ SEG, TER, QUA, QUI, SEX = '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19'
 
 class CalendarioBase(UITest):
     def preparar(self, **seeds):
-        """Login, semeia (tabela=linhas) e recarrega para o estado ler tudo."""
+        """Login, semeia (tabela=linhas) e recarrega para o estado ler tudo.
+        As contas de posição destes testes usam o dia das 6h às 22h (o padrão do app agora é o dia inteiro)."""
         self.login()
+        dia = {'day_start_min': 360, 'day_end_min': 1320}
+        seeds['settings'] = [{**dia, **l} for l in seeds.get('settings', [{}])]
         for tabela, linhas in seeds.items():
             self.seed(tabela, linhas)
         self.page.reload()
@@ -18,6 +21,8 @@ class CalendarioBase(UITest):
     def ir_para_hoje(self):
         self.ir('hoje')
         self.page.wait_for_selector('#tela-hoje .linha-do-tempo', state='visible')
+        # O dia de hoje abre rolado até a hora atual; as contas de posição destes testes partem do topo.
+        self.page.evaluate('window.scrollTo(0, 0)')
 
     def folha_aberta(self):
         self.page.wait_for_selector('#folha-bloco:not([hidden])')
@@ -46,8 +51,8 @@ class TestSemana(CalendarioBase):
                          ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'])
         self.assertEqual(p.inner_text('#sem-titulo'), '16 a 22 de novembro')
         for dia in ('2026-11-16', '2026-11-22'):
-            self.assertEqual(p.locator(f'.dia[data-data="{dia}"] .faixa').count(), 8)
-            self.assertEqual(p.locator(f'.dia[data-data="{dia}"] .faixa .livre').count(), 8)
+            self.assertEqual(p.locator(f'.dia[data-data="{dia}"] .faixa').count(), 12)  # dia inteiro em faixas de 2h
+            self.assertEqual(p.locator(f'.dia[data-data="{dia}"] .faixa .livre').count(), 12)
         self.assertEqual(p.locator('#fila-semana').count(), 1)
 
     def test_navegar_entre_semanas(self):
@@ -321,8 +326,8 @@ class TestHoje(CalendarioBase):
     def test_sem_blocos_o_dia_inteiro_e_livre(self):
         self.login(); p = self.page
         self.ir_para_hoje()
-        self.assertEqual(p.locator('.fatia').count(), 32)
-        self.assertEqual(p.locator('.fatia').first.get_attribute('data-inicio'), '360')
+        self.assertEqual(p.locator('.fatia').count(), 48)  # meia-noite a meia-noite, de 30 em 30
+        self.assertEqual(p.locator('.fatia').first.get_attribute('data-inicio'), '0')
         self.assertEqual(p.locator('.linha-do-tempo .livre').count(), 1)
         self.assertEqual(p.locator('.agora-linha').count(), 1)
 

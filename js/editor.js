@@ -15,18 +15,21 @@ export function modoVisual(markdown = '') {
   return !window.__EDITOR_SIMPLES__ && !!(window.toastui && window.toastui.Editor) && !temHtmlCru(markdown);
 }
 
-export function criarEditor(el, { markdown = '', aoMudar = () => {}, aoColarImagem } = {}) {
-  if (modoVisual(markdown)) return editorVisual(el, markdown, aoMudar, aoColarImagem);
+// Opções: `barra` (grupos de botões do Toast UI), `rotulo` (nome acessível), `id` (da caixa de texto do modo simples),
+// `alturaMin` (modo visual).
+export function criarEditor(el, { markdown = '', aoMudar = () => {}, aoColarImagem, barra = BARRA, rotulo = 'Anotações', id, alturaMin = '160px' } = {}) {
+  if (modoVisual(markdown)) return editorVisual(el, markdown, aoMudar, aoColarImagem, { barra, alturaMin, rotulo });
   const avisar = modoVisual() && temHtmlCru(markdown);
-  return editorSimples(el, markdown, aoMudar, avisar ? AVISO_HTML : '');
+  return editorSimples(el, markdown, aoMudar, avisar ? AVISO_HTML : '', { rotulo, id });
 }
 
-function editorSimples(el, markdown, aoMudar, aviso) {
+function editorSimples(el, markdown, aoMudar, aviso, { rotulo = 'Anotações', id } = {}) {
   let original = markdown || '';
   const area = document.createElement('textarea');
   area.className = 'editor-simples';
   area.rows = 5;
-  area.setAttribute('aria-label', 'Anotações');
+  area.setAttribute('aria-label', rotulo);
+  if (id) area.id = id;
   area.value = original;
   area.addEventListener('input', () => aoMudar(area.value));
   el.replaceChildren(...(aviso ? [Object.assign(document.createElement('p'), { className: 'suave aviso-html', textContent: aviso })] : []), area);
@@ -48,7 +51,7 @@ function semQuebrasForcadas(md) {
   }).join('\n');
 }
 
-function editorVisual(el, markdown, aoMudar, aoColarImagem) {
+function editorVisual(el, markdown, aoMudar, aoColarImagem, { barra = BARRA, alturaMin = '160px', rotulo = 'Anotações' } = {}) {
   let original = markdown || '';
   let base = '';      // como a biblioteca escreve `original`: só serve para saber se o usuário mudou algo
   let mexeu = false;  // houve gesto do usuário dentro do editor desde o último `definir`
@@ -65,8 +68,8 @@ function editorVisual(el, markdown, aoMudar, aoColarImagem) {
     autofocus: false,
     language: 'pt-BR',
     height: 'auto',
-    minHeight: '160px',
-    toolbarItems: BARRA,
+    minHeight: alturaMin,
+    toolbarItems: barra,
     hooks: {
       addImageBlobHook(arquivo, inserir) {
         if (!aoColarImagem) return;
@@ -76,6 +79,8 @@ function editorVisual(el, markdown, aoMudar, aoColarImagem) {
     },
   });
   base = ed.getMarkdown();
+  // Nome acessível da área de edição (a do modo visual).
+  caixa.querySelector('.toastui-editor-ww-container .ProseMirror')?.setAttribute('aria-label', rotulo);
 
   const marcar = () => { mexeu = true; };
   GESTOS.forEach((g) => el.addEventListener(g, marcar, true));

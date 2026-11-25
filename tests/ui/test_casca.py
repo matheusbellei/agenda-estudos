@@ -157,21 +157,39 @@ class TestMenu(UITest):
 
 
 class TestAgenda(UITest):
-    def test_pagina_inicial_alterna_hoje_e_semana(self):
+    def test_agenda_e_so_a_semana_sem_alternador(self):
         self.login(); p = self.page
-        self.assertTrue(p.is_visible('#visao'))
-        self.assertEqual([t.strip() for t in p.locator('#visao button').all_inner_texts()], ['Hoje', 'Semana'])
-        self.assertEqual(p.get_attribute('#visao [data-visao="semana"]', 'aria-pressed'), 'true')
-        p.click('#visao [data-visao="hoje"]')
-        self.assertTrue(p.is_visible('#tela-hoje')); self.assertTrue(p.is_hidden('#tela-semana'))
-        self.assertEqual(p.get_attribute('#visao [data-visao="hoje"]', 'aria-pressed'), 'true')
+        self.assertEqual(p.locator('#visao').count(), 0)
+        self.assertTrue(p.is_visible('#tela-semana'))
         self.assertEqual(p.inner_text('#cabecalho-titulo'), 'Agenda')
 
-    def test_agenda_no_menu_volta_para_a_ultima_visao(self):
+    def test_dia_pelo_nome_e_volta_para_a_semana_dele(self):
         self.login(); p = self.page
-        p.click('#visao [data-visao="hoje"]')
-        self.ir('quadro')
-        self.assertTrue(p.is_hidden('#visao'))
-        p.click('#menu-botao'); p.click('#menu [data-tela="agenda"]')
-        self.assertTrue(p.is_visible('#tela-hoje'))
+        p.click('#sem-prox')
+        p.click('#sem-grade .dia-nome >> nth=2')  # quarta da semana seguinte
+        p.wait_for_selector('#tela-hoje', state='visible')
         self.assertIn('ativo', p.get_attribute('#menu [data-tela="agenda"]', 'class'))
+        p.click('#dia-semana')
+        p.wait_for_selector('#tela-semana', state='visible')
+        self.assertIn('23 a 29 de novembro', p.inner_text('#sem-titulo'))
+
+    def test_agenda_no_menu_abre_a_semana(self):
+        self.login(); p = self.page
+        p.click('#sem-grade .dia-nome >> nth=0'); p.wait_for_selector('#tela-hoje', state='visible')
+        self.ir('quadro')
+        p.click('#menu-botao'); p.click('#menu [data-tela="agenda"]')
+        self.assertTrue(p.is_visible('#tela-semana'))
+
+    def test_coluna_de_hoje_sem_fundo_diferente(self):
+        self.login(); p = self.page
+        cores = p.evaluate("""() => [document.querySelector('.dia.hoje .faixa'), document.querySelector('.dia:not(.hoje) .faixa')]
+          .map((e) => getComputedStyle(e).backgroundColor)""")
+        self.assertEqual(cores[0], cores[1])
+
+    def test_semana_e_dia_abrem_perto_da_hora_atual(self):
+        self.login(); p = self.page
+        p.set_viewport_size({'width': 1100, 'height': 700})
+        p.reload(); p.wait_for_selector('#tela-semana', state='visible')
+        p.wait_for_function('window.scrollY > 200')  # 12h no relógio falso: a grade não fica na meia-noite
+        self.ir('hoje')
+        p.wait_for_function('window.scrollY > 200')

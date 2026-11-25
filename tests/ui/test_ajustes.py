@@ -35,8 +35,17 @@ class TestAjustes(UITest):
 
     def test_horarios_mostram_padrao_sem_settings(self):
         self.abrir_ajustes(); p = self.page
-        self.assertEqual((p.input_value('#aj-inicio'), p.input_value('#aj-fim')), ('06:00', '22:00'))
+        # dia inteiro: o fim "00:00" é a meia-noite do fim do dia
+        self.assertEqual((p.input_value('#aj-inicio'), p.input_value('#aj-fim')), ('00:00', '00:00'))
         self.assertEqual((p.input_value('#aj-faixa-semana'), p.input_value('#aj-fatia-dia')), ('120', '30'))
+
+    def test_fim_meia_noite_grava_o_dia_inteiro(self):
+        self.abrir_ajustes(); p = self.page
+        p.fill('#aj-inicio', '05:00'); p.fill('#aj-fim', '00:00')
+        p.click('#aj-horarios-salvar')
+        p.wait_for_function("window.__memdb.settings.length === 1")
+        s = self.db()['settings'][0]
+        self.assertEqual((s['day_start_min'], s['day_end_min']), (300, 1440))
 
     def test_fim_antes_do_inicio_e_recusado(self):
         self.abrir_ajustes(); p = self.page

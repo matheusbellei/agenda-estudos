@@ -1,8 +1,7 @@
 // Casca do app: login, abas e troca de telas.
 const telas = {};
-// Hoje e Semana são as duas visões da página inicial (item Agenda do menu).
+// Agenda (item do menu) = Semana; o dia (tela "hoje") abre tocando no nome do dia e volta para a Semana.
 const AGENDA = ['hoje', 'semana'];
-let ultimaAgenda = 'semana';
 const TITULOS = { hoje: 'Agenda', semana: 'Agenda', quadro: 'Quadro', fixas: 'Fixas', busca: 'Busca', tags: 'Tags', dashboards: 'Dashboards', revisao: 'Revisão da semana', foco: 'Modo foco', diario: 'Diário', flashcards: 'Flashcards', 'flash-sessao': 'Estudar flashcards', ajustes: 'Configurações' };
 const $ = (s) => document.querySelector(s);
 
@@ -12,13 +11,8 @@ export function registrarTela(nome, { mostrar }) {
 
 export function irPara(nome) {
   document.querySelectorAll('main > section').forEach((s) => { s.hidden = s.id !== `tela-${nome}`; });
-  const naAgenda = AGENDA.includes(nome);
-  if (naAgenda) ultimaAgenda = nome;
-  const item = naAgenda ? 'agenda' : nome;
+  const item = AGENDA.includes(nome) ? 'agenda' : nome;
   document.querySelectorAll('#menu [data-tela]').forEach((b) => b.classList.toggle('ativo', b.dataset.tela === item));
-  const visao = $('#visao');
-  visao.hidden = !naAgenda;
-  visao.querySelectorAll('[data-visao]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.visao === nome)));
   $('#cabecalho-titulo').textContent = TITULOS[nome] || '';
   abrirMenu(false);
   if (telas[nome]) telas[nome].mostrar();
@@ -52,8 +46,7 @@ async function entrar(usuario, aoEntrar) {
 
 export async function iniciarCasca({ store, aoEntrar, aoSair }) {
   $('#menu-botao').addEventListener('click', (e) => { e.stopPropagation(); abrirMenu($('#menu').hidden); });
-  document.querySelectorAll('#menu [data-tela]').forEach((b) => b.addEventListener('click', () => irPara(b.dataset.tela === 'agenda' ? ultimaAgenda : b.dataset.tela)));
-  document.querySelectorAll('#visao [data-visao]').forEach((b) => b.addEventListener('click', () => irPara(b.dataset.visao)));
+  document.querySelectorAll('#menu [data-tela]').forEach((b) => b.addEventListener('click', () => irPara(b.dataset.tela === 'agenda' ? 'semana' : b.dataset.tela)));
   $('#menu-sair').addEventListener('click', () => { abrirMenu(false); store.signOut(); });
   // Fecha tocando fora ou com Esc.
   document.addEventListener('click', (e) => { if (!$('#menu').hidden && !e.target.closest('#cabecalho')) abrirMenu(false); }, true);

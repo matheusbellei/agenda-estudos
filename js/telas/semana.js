@@ -1,6 +1,6 @@
 // Tela Semana: sete colunas (segunda a domingo) com faixas grandes.
 import { abrirModelos } from './modelos.js';
-import { registrarTela } from './casca.js';
+import { registrarTela, irPara } from './casca.js';
 import { criar, elementoBloco, abrirBloco, ligarCabecaECorpo, idDoBloco } from './bloco.js';
 import { mostrarDia } from './hoje.js';
 import { diasDaSemana, somaDias, isoDe, horaTexto, rotuloSemana, DIAS_CURTOS, inicioDaSemana } from '../regras/datas.js';
@@ -11,6 +11,13 @@ import { montarFila, selecaoAtual, agendarSelecionada, agendarEntrada, umaHoraLi
 const ALTURA_FAIXA = 72;
 // Recuo, por nível, de um bloco em cascata (começa depois de outro com que se cruza).
 const RECUO_PX = 14;
+
+// Abre a Semana que contém o dia `iso` (botão "Semana" da tela do dia).
+let semanaPedida = null;
+export function mostrarSemana(iso) {
+  semanaPedida = iso;
+  irPara('semana');
+}
 
 export function iniciarSemana({ estado }) {
   const secao = document.querySelector('#tela-semana');
@@ -23,7 +30,8 @@ export function iniciarSemana({ estado }) {
   const hoje = botao('sem-hoje', 'Hoje', 'Voltar para a semana de hoje');
   ant.addEventListener('click', () => { referencia = somaDias(referencia, -7); desenhar(); });
   prox.addEventListener('click', () => { referencia = somaDias(referencia, 7); desenhar(); });
-  hoje.addEventListener('click', () => { referencia = isoDe(new Date()); desenhar(); });
+  hoje.addEventListener('click', () => { referencia = isoDe(new Date()); rolarParaAgora = true; desenhar(); });
+  let rolarParaAgora = true;
   const modelos = criar('button', { type: 'button', class: 'btn', id: 'semana-modelos', 'aria-label': 'Modelos de semana' },
     criar('i', { class: 'ti ti-template', 'aria-hidden': 'true' }), ' Modelos');
   modelos.addEventListener('click', () => abrirModelos({ estado, segunda: inicioDaSemana(referencia) }));
@@ -139,6 +147,14 @@ export function iniciarSemana({ estado }) {
     });
     grade.replaceChildren(...celulas);
     montarFila(fila, { estado, hoje: hojeIso, aoSoltar: soltarNaFaixa });
+    // Com o dia inteiro na grade, a semana de hoje abre perto da hora atual (só na primeira vez e no botão Hoje).
+    if (rolarParaAgora && dias.includes(hojeIso)) {
+      rolarParaAgora = false;
+      const agora = new Date();
+      const min = agora.getHours() * 60 + agora.getMinutes();
+      const faixas = [...grade.querySelectorAll('.dia.hoje .faixa')].filter((f) => Number(f.dataset.inicio) <= min);
+      faixas[faixas.length - 1]?.scrollIntoView({ block: 'start' });
+    }
   }
 
   // Virada do dia com o app aberto: quem olhava a semana de hoje passa a ver a nova semana de hoje.
@@ -146,6 +162,6 @@ export function iniciarSemana({ estado }) {
     if (detail.antes && diasDaSemana(referencia)[0] === diasDaSemana(detail.antes)[0]) referencia = detail.agora;
     if (!secao.hidden) desenhar();
   });
-  registrarTela('semana', { mostrar: desenhar });
+  registrarTela('semana', { mostrar: () => { if (semanaPedida) { referencia = semanaPedida; semanaPedida = null; } desenhar(); } });
   estado.aoMudar(() => { if (!secao.hidden) desenhar(); });
 }

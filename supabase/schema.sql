@@ -42,6 +42,7 @@ create table public.cards (
   position     double precision not null default 0,
   notes        text not null default '',
   archived     boolean not null default false,
+  archived_at  timestamptz,  -- quando foi arquivado (grupos do Arquivo)
   created_at   timestamptz not null default now(),
   completed_at timestamptz,
   is_fixed     boolean not null default false,
@@ -141,8 +142,8 @@ create table public.occurrences (
 
 create table public.settings (
   owner_id        uuid primary key default auth.uid() references auth.users(id),
-  day_start_min   int not null default 360,
-  day_end_min     int not null default 1320,
+  day_start_min   int not null default 0,
+  day_end_min     int not null default 1440,
   week_slot_min   int not null default 120,
   day_slot_min    int not null default 30,
   last_rollover   date,
@@ -346,6 +347,7 @@ alter table public.settings add constraint settings_acompanhamento_check check (
 -- ============ Modo foco e diário (24/11/2026) ============
 -- Diário: o que estudou no bloco (texto simples, opcional).
 alter table public.blocks add column if not exists diario text not null default '';
+alter table public.blocks add column if not exists motivo text not null default '';  -- não feito: o porquê
 
 -- Tempos do modo foco (minutos) e som/vibração com o app aberto.
 alter table public.settings add column if not exists foco_min int not null default 25;
@@ -550,3 +552,23 @@ returns public.flash_dias language sql security invoker set search_path = '' as 
 $$;
 revoke all on function public.flash_somar_dia(date, int) from public, anon;
 grant execute on function public.flash_somar_dia(date, int) to authenticated;
+
+-- Grupos de baralhos: um grupo é um baralho marcado como grupo (só tem nome; não recebe flashcards).
+-- Baralhos e grupos podem ficar dentro de um grupo (pai_id), em quantos níveis quiser.
+alter table public.baralhos add column if not exists e_grupo boolean not null default false;
+alter table public.baralhos add column if not exists pai_id uuid references public.baralhos(id) on delete set null;
+alter table public.baralhos drop constraint if exists baralhos_pai_check;
+alter table public.baralhos add constraint baralhos_pai_check check (pai_id is null or pai_id <> id);
+create index if not exists baralhos_pai_idx on public.baralhos (pai_id);
+
+-- A regra de acesso de baralhos não pode consultar baralhos (recursão): esta função confere por fora
+-- se o grupo de cima é um grupo de quem está logado.
+create or replace function public.e_meu_grupo_de_baralhos(grupo uuid) returns boolean
+  language sql volatile security definer set search_path = ''
+  as $$ select exists (select 1 from public.baralhos b where b.id = grupo and b.e_grupo and b.owner_id = (select auth.uid())) $$;
+revoke all on function public.e_meu_grupo_de_baralhos(uuid) from public, anon;
+grant execute on function public.e_meu_grupo_de_baralhos(uuid) to authenticated;
+drop policy if exists "grupo de cima é meu" on public.baralhos;
+create policy "grupo de cima é meu" on public.baralhos as restrictive for all to authenticated
+  using (true)
+  with check (pai_id is null or public.e_meu_grupo_de_baralhos(pai_id));

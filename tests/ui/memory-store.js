@@ -7,19 +7,19 @@
   const PADROES = {
     categories: () => ({ color: '#6F4E37', archived: false, trello_id: null }),
     lists: () => ({ is_done: false, is_active: false, trello_id: null }),
-    cards: () => ({ list_id: null, position: 0, notes: '', archived: false, created_at: new Date().toISOString(), completed_at: null, is_fixed: false, fixed_days: [], trello_id: null }),
+    cards: () => ({ list_id: null, position: 0, notes: '', archived: false, archived_at: null, created_at: new Date().toISOString(), completed_at: null, is_fixed: false, fixed_days: [], trello_id: null }),
     items: () => ({ group_name: '', position: 0, done: false, done_at: null, notes: '', trello_id: null }),
     attachments: () => ({ item_id: null, path: null, url: null, trello_id: null }),
     commitments: () => ({ category_id: null, valid_to: null }),
-    blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, revisao_id: null, diario: '' }),
+    blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, revisao_id: null, diario: '', motivo: '' }),
     occurrences: () => ({ instead_note: '' }),
     revisoes: () => ({ status: 'pendente', feita_em: null, criado_em: new Date().toISOString() }),
-    baralhos: () => ({ fator: 2.5, novos_dia: 20, revisoes_dia: 200, criado_em: new Date().toISOString() }),
+    baralhos: () => ({ fator: 2.5, novos_dia: 20, revisoes_dia: 200, e_grupo: false, pai_id: null, criado_em: new Date().toISOString() }),
     flashcards: () => ({ baralho_id: null, card_id: null, verso: '', criado_em: new Date().toISOString() }),
     flash_lados: () => ({ intervalo: 0, vence: null, errado_em: null, introduzido_em: null, revisado_em: null }),
     flash_dias: () => ({ revisados: 0, acertos: 0 }),
     modelos: () => ({ blocos: [], criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }),
-    settings: () => ({ day_start_min: 360, day_end_min: 1320, week_slot_min: 120, day_slot_min: 30, last_rollover: null }),
+    settings: () => ({ day_start_min: 0, day_end_min: 1440, week_slot_min: 120, day_slot_min: 30, last_rollover: null }),
   };
   const SINCRONOS = ['currentUser', 'onAuthChange'];
   const chaveDe = (t) => (t === 'settings' || t === 'focos' ? 'owner_id' : 'id');

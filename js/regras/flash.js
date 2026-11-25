@@ -1,5 +1,6 @@
 // Flashcards: agendamento de 2 botões (Errei/Acertei), fila da sessão com limites do dia, "para hoje",
 // lacunas e resposta digitada. Regra pura: usada pelas telas e pela função "lembretes".
+import { baralhosDentro } from './baralhos.js';
 import { somaDias, inicioDaSemana } from './datas.js';
 import { semMarcacao } from './marcacao.js';
 
@@ -93,7 +94,7 @@ export function resposta(flashcard, lado) {
 // "Digitar": acerto só se for idêntico (acentos e maiúsculas contam; só os espaços das pontas são ignorados).
 export function confereDigitado(digitado, flashcard) {
   // Formatação só sai quando está "fechada" (**x**, *x*, ==x==); asterisco solto (2*3*4) fica.
-  const certa = semMarcacao(flashcard.verso).trim();
+  const certa = semMarcacao(flashcard.verso, { escapes: false }).trim();
   const d = String(digitado).trim();
   let ini = 0;
   while (ini < d.length && ini < certa.length && d[ini] === certa[ini]) ini += 1;
@@ -152,4 +153,23 @@ export function acertoDoPeriodo(dias, de, ate) {
   const doPeriodo = dias.filter((x) => x.data >= de && x.data <= ate);
   const revisados = doPeriodo.reduce((s, x) => s + x.revisados, 0);
   return revisados ? Math.round((doPeriodo.reduce((s, x) => s + x.acertos, 0) * 100) / revisados) : null;
+}
+
+// Estudar um grupo: a sessão de cada baralho de dentro (com os limites dele), revisões de todos antes dos novos,
+// e os errados de hoje no fim. Baralhos na ordem alfabética.
+export function filaDoGrupo({ baralhos = [], flashcards = [], flash_lados: lados = [] }, grupoId, hoje, ajustes) {
+  const ids = new Set(baralhosDentro(baralhos, grupoId));
+  const ordem = baralhos.filter((b) => ids.has(b.id)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const revisoes = []; const novos = []; const errados = [];
+  for (const b of ordem) {
+    const lista = flashcards.filter((f) => f.baralho_id === b.id);
+    if (!lista.length) continue;
+    for (const item of filaDaSessao({ flashcards: lista, lados, hoje, limites: limitesDe(lista[0], { baralhos, ajustes }) })) {
+      const r = item.registro;
+      if (!r || (!r.vence && !r.introduzido_em)) novos.push(item);
+      else if (r.errado_em === hoje) errados.push(item);
+      else revisoes.push(item);
+    }
+  }
+  return [...revisoes, ...novos, ...errados];
 }

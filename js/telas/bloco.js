@@ -1,7 +1,7 @@
 // Blocos do calendário: elemento visual, gravação e (mais abaixo) a folha de criar/editar.
 import { corDoTexto } from './ajustes.js';
 import { OPCOES_LEMBRETE, textoDoLembrete } from './notificacoes.js';
-import { emOrdem } from '../regras/tags.js';
+import { emOrdem, categoriaParaBloco } from '../regras/tags.js';
 import { criarTagPeloBloco } from './tags.js';
 import { horaTexto, minutosDe, somaDias, diaDaSemana, DIAS_CURTOS } from '../regras/datas.js';
 import { efeitosDeEstado } from '../regras/fila.js';
@@ -37,7 +37,12 @@ export function iniciarBloco({ estado: e, abrirCard }) {
   registrarTextoNaoSalvo(() => !camada.hidden && temTextoAberto());
 }
 
+// Ao fechar, os textos do estado (porquê, no lugar, diário) ainda não gravados são gravados.
+let aoFecharBloco = null;
 function fecharBloco() {
+  const gravarPendentes = aoFecharBloco;
+  aoFecharBloco = null;
+  gravarPendentes?.();
   camada.hidden = true;
   camada.replaceChildren();
   document.body.classList.remove('sem-rolagem');
@@ -94,11 +99,12 @@ export async function gravarBloco(est, bloco, patch) {
 // Muda o estado do bloco e aplica o efeito no item. O item vai primeiro: se algo falhar, nunca sobra
 // um bloco cumprido cujo item não foi marcado. Se o bloco falhar depois, o item volta como estava.
 // Devolve o card a oferecer para concluir (só em transição real e se existir lista de conclusão).
-export async function mudarEstado(est, bloco, novo, { instead_note = '', diario } = {}) {
+export async function mudarEstado(est, bloco, novo, { instead_note = '', diario, motivo } = {}) {
   const atual = bloco.status || 'planned';
-  if (bloco.virtual && novo === 'planned') return { concluirCard: null };
+  if (bloco.virtual && novo === 'planned') return { concluirCard: null, bloco };
   let concluirCard = null;
   let desfazer = null;
+  let gravado = bloco;
   if (novo !== atual) {
     const { marcarItem, perguntarConcluirCard } = efeitosDeEstado(bloco, novo, { cards: est.dados.cards, items: est.dados.items });
     const antes = marcarItem && est.dados.items.find((i) => i.id === marcarItem.id);
@@ -112,7 +118,8 @@ export async function mudarEstado(est, bloco, novo, { instead_note = '', diario 
     // O texto de "o que fiz no lugar" nunca é apagado por mudança de estado: só é regravado em "não feito".
     // O diário só é gravado quando vem junto com "cumprido" (pelo foco ou pela folha do bloco).
     const comDiario = novo === 'done' && typeof diario === 'string' ? { diario: diario.trim() } : {};
-    await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim() } : { status: novo, ...comDiario });
+    const comMotivo = typeof motivo === 'string' ? { motivo: motivo.trim() } : {};
+    gravado = await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim(), ...comMotivo } : { status: novo, ...comDiario });
     // Sessão de revisão: cumprida conclui a revisão; desfazer o cumprido devolve a revisão para a fila.
     const rev = statusDaRevisao(bloco, novo);
     if (rev && est.dados.revisoes.some((r) => r.id === bloco.revisao_id && r.status !== 'cancelada')) {
@@ -128,7 +135,7 @@ export async function mudarEstado(est, bloco, novo, { instead_note = '', diario 
     }
     throw err;
   }
-  return { concluirCard };
+  return { concluirCard, bloco: gravado };
 }
 
 // Move o card para a lista de conclusão (ele ganha `completed_at`).
@@ -279,9 +286,11 @@ export function abrirBloco(arg) {
   item.addEventListener('change', sugerirTitulo);
 
   function escolherCard(card) {
+    // Tag vazia: vem a do card (a subtag, se houver). Tag já escolhida nunca é trocada; tag arquivada não vem.
     if (!categoriaValor()) {
-      const cc = estado.dados.card_categories.find((x) => x.card_id === card.id);
-      if (cc && estado.dados.categories.some((c) => c.id === cc.category_id && !c.archived)) definirCategoria(cc.category_id);
+      const ids = estado.dados.card_categories.filter((x) => x.card_id === card.id).map((x) => x.category_id);
+      const id = categoriaParaBloco(estado.dados.categories, ids);
+      if (id && estado.dados.categories.some((c) => c.id === id && !c.archived)) definirCategoria(id);
     }
     cardId = card.id;
     busca.value = '';
@@ -337,17 +346,18 @@ export function abrirBloco(arg) {
   const btnNaoFeito = botaoEstado('bloco-nao-feito', 'Não feito', 'missed');
   const btnPlanejado = botaoEstado('bloco-planejado', 'Voltar a planejado', 'planned');
   btnPlanejado.hidden = estadoAtual === 'planned';
-  const noLugar = criar('textarea', { id: 'bloco-no-lugar', rows: '3' });
+  // Não feito: o porquê e o que fez no lugar. Cumprido: o diário. Os três gravam sozinhos ao sair do campo
+  // (e ao fechar a folha); não há botão de confirmar.
+  const motivo = criar('textarea', { id: 'bloco-motivo', rows: '2', placeholder: 'Opcional' });
+  motivo.value = arg.motivo || '';
+  const noLugar = criar('textarea', { id: 'bloco-no-lugar', rows: '3', placeholder: 'Opcional' });
   noLugar.value = arg.instead_note || '';
-  const noLugarOk = criar('button', { type: 'button', class: 'btn btn-principal', id: 'bloco-nao-feito-ok', texto: 'Marcar como não feito' });
-  const caixaNoLugar = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-no-lugar-caixa' }, campo('O que fiz no lugar', noLugar), noLugarOk);
+  const caixaNoLugar = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-no-lugar-caixa' },
+    campo('Por que não fez?', motivo), campo('O que fez no lugar?', noLugar));
   caixaNoLugar.hidden = estadoAtual !== 'missed';
-  // Diário: oferecido ao marcar cumprido (como o "o que fiz no lugar" no não feito) e editável depois.
   const diario = criar('textarea', { id: 'bloco-diario', rows: '3', placeholder: 'O que você estudou (opcional)' });
   diario.value = arg.diario || '';
-  const cumpridoOk = criar('button', { type: 'button', class: 'btn btn-principal', id: 'bloco-cumprido-ok', texto: 'Marcar como cumprido' });
-  cumpridoOk.hidden = estadoAtual === 'done';
-  const caixaDiario = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-diario-caixa' }, campo('Diário', diario), cumpridoOk);
+  const caixaDiario = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-diario-caixa' }, campo('Diário', diario));
   caixaDiario.hidden = estadoAtual !== 'done';
   const areaEstado = criar('div', { class: 'bloco-area-estado' },
     criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito, btnPlanejado), caixaNoLugar, caixaDiario);
@@ -434,13 +444,15 @@ export function abrirBloco(arg) {
 
   // Texto que o usuário escreveu e que ainda não foi gravado (o título sugerido pelo card não conta).
   const notaMudou = () => !caixaNoLugar.hidden && noLugar.value.trim() !== (arg.instead_note || '').trim();
+  const motivoMudou = () => !caixaNoLugar.hidden && motivo.value.trim() !== (arg.motivo || '').trim();
   const diarioMudou = () => !caixaDiario.hidden && diario.value.trim() !== (arg.diario || '').trim();
-  temTextoAberto = () => notaMudou() || diarioMudou()
-    || (titulo.value.trim() !== (arg.title || '').trim() && titulo.value !== tituloAuto);
+  // Os textos do estado gravam sozinhos: só o título conta como "texto por salvar".
+  temTextoAberto = () => titulo.value.trim() !== (arg.title || '').trim() && titulo.value !== tituloAuto;
   // "Salvar" num bloco já não feito também grava o "o que fiz no lugar" corrigido.
   // Idem para o diário de um bloco já cumprido.
   const patchNota = () => ({
     ...(arg.status === 'missed' && notaMudou() ? { instead_note: noLugar.value.trim() } : {}),
+    ...(arg.status === 'missed' && motivoMudou() ? { motivo: motivo.value.trim() } : {}),
     ...(arg.status === 'done' && diarioMudou() ? { diario: diario.value.trim() } : {}),
   });
 
@@ -456,15 +468,6 @@ export function abrirBloco(arg) {
   };
 
   salvar.addEventListener('click', () => {
-    // "O que fiz no lugar" escrito num bloco que ainda não é não feito só se grava pelo botão do estado.
-    if (arg.status !== 'missed' && notaMudou()) {
-      erro.textContent = 'Para guardar o que você fez no lugar, toque em “Marcar como não feito”, ou apague o texto.';
-      return;
-    }
-    if (arg.status !== 'done' && diarioMudou()) {
-      erro.textContent = 'Para guardar o diário, toque em “Marcar como cumprido”, ou apague o texto.';
-      return;
-    }
     const problema = validar();
     if (problema) { erro.textContent = problema; return; }
     erro.textContent = '';
@@ -547,33 +550,89 @@ export function abrirBloco(arg) {
       return MANTER_ABERTA;
     });
   });
-  cancelar.addEventListener('click', fecharBloco);
+  cancelar.addEventListener('click', () => fecharGravandoTextos());
 
-  // Cumprido e não feito gravam na hora, sem passar pelo Salvar. O card só é oferecido depois de tudo gravado.
-  const aplicarEstado = (valor, nota = '', textoDiario) => executar(async () => {
-    const { concluirCard: card } = await mudarEstado(estado, arg, valor, { instead_note: nota, diario: textoDiario });
-    if (!card) return undefined;
+  // Cumprido e não feito gravam na hora, sem passar pelo Salvar, e a folha fica aberta para o texto do estado.
+  // "Voltar a planejado" fecha. O card só é oferecido depois de tudo gravado.
+  function mostrarEstado(valor) {
+    for (const [b, v] of [[btnCumprido, 'done'], [btnNaoFeito, 'missed'], [btnPlanejado, 'planned']]) b.setAttribute('aria-pressed', String(valor === v));
+    btnPlanejado.hidden = valor === 'planned';
+    caixaNoLugar.hidden = valor !== 'missed';
+    caixaDiario.hidden = valor !== 'done';
+    // Depois de marcar não há o que cancelar: o botão vira "Fechar".
+    cancelar.textContent = 'Fechar';
+  }
+  const aplicarEstado = (valor) => executar(async () => {
+    // Um texto ainda gravando termina antes: as duas gravações nunca se cruzam no mesmo bloco.
+    await filaTextos;
+    const { concluirCard: card, bloco: gravado } = await mudarEstado(estado, arg, valor,
+      { instead_note: noLugar.value, motivo: motivo.value, diario: diario.value });
+    if (gravado) arg = gravado;
+    if (valor === 'planned') return undefined;
+    mostrarEstado(valor);
+    const campoTexto = valor === 'missed' ? motivo : diario;
+    if (!card) { campoTexto.focus(); return MANTER_ABERTA; }
     perguntar('Concluir este card?', [['sim', 'Concluir card'], ['nao', 'Agora não']],
       async (esc) => {
-        if (esc !== 'sim') return;
-        try { await concluirCard(estado, card); } catch {
-          throw new Error('O compromisso ficou como cumprido, mas não foi possível concluir o card. Mova o card para a lista de concluídos.');
+        if (esc === 'sim') {
+          try { await concluirCard(estado, card); } catch {
+            throw new Error('O compromisso ficou como cumprido, mas não foi possível concluir o card. Mova o card para a lista de concluídos.');
+          }
         }
+        mostrarEscopo(false);
+        campoTexto.focus();
+        return MANTER_ABERTA;
       }, { semVoltar: true });
     return MANTER_ABERTA;
   });
-  btnCumprido.addEventListener('click', () => {
-    // Já cumprido: tocar de novo só confirma (e guarda o diário corrigido, se mudou).
-    if (arg.status === 'done') { aplicarEstado('done', '', diario.value); return; }
-    caixaNoLugar.hidden = true; caixaDiario.hidden = false; diario.focus();
-  });
-  cumpridoOk.addEventListener('click', () => aplicarEstado('done', '', diario.value));
+  btnCumprido.addEventListener('click', () => { if (arg.status === 'done') diario.focus(); else aplicarEstado('done'); });
+  btnNaoFeito.addEventListener('click', () => { if (arg.status === 'missed') motivo.focus(); else aplicarEstado('missed'); });
   btnPlanejado.addEventListener('click', () => aplicarEstado('planned'));
-  btnNaoFeito.addEventListener('click', () => { if (arg.status !== 'done') caixaDiario.hidden = true; caixaNoLugar.hidden = false; noLugar.focus(); });
-  noLugarOk.addEventListener('click', () => aplicarEstado('missed', noLugar.value));
+
+  // Grava um texto do estado (uma gravação de cada vez). Só a coluna do texto muda na cópia da folha:
+  // a resposta do banco nunca desfaz um estado gravado depois. Devolve false se não deu para gravar.
+  let filaTextos = Promise.resolve(true);
+  const gravarTexto = (coluna, el) => {
+    filaTextos = filaTextos.then(async () => {
+      const valor = el.value.trim();
+      if (arg.virtual || valor === (arg[coluna] || '').trim()) return true;
+      try {
+        await gravarBloco(estado, arg, { [coluna]: valor });
+        arg = { ...arg, [coluna]: valor };
+        erro.textContent = '';
+        return true;
+      } catch (err) {
+        erro.textContent = `O texto não foi salvo: ${err.message || 'tente de novo.'}`;
+        return false;
+      }
+    });
+    return filaTextos;
+  };
+  // Fechar pela folha (Fechar/Cancelar, fundo, Esc): grava os textos pendentes e só fecha se der certo.
+  async function fecharGravandoTextos() {
+    const pendentes = [];
+    if (motivoMudou()) pendentes.push(gravarTexto('motivo', motivo));
+    if (notaMudou()) pendentes.push(gravarTexto('instead_note', noLugar));
+    if (diarioMudou()) pendentes.push(gravarTexto('diario', diario));
+    const resultados = await Promise.all([filaTextos, ...pendentes]);
+    if (resultados.every((ok) => ok !== false)) { fecharBloco(); return; }
+    // Não gravou: a folha fica aberta com o aviso. Se falhar de novo na próxima vez, fecha sem o texto.
+    if (jaFalhouAoFechar) { aoFecharBloco = null; fecharBloco(); return; }
+    jaFalhouAoFechar = true;
+    cancelar.textContent = 'Fechar sem salvar o texto';
+  }
+  let jaFalhouAoFechar = false;
+  motivo.addEventListener('change', () => gravarTexto('motivo', motivo));
+  noLugar.addEventListener('change', () => gravarTexto('instead_note', noLugar));
+  diario.addEventListener('change', () => gravarTexto('diario', diario));
+  aoFecharBloco = () => {
+    if (motivoMudou()) gravarTexto('motivo', motivo);
+    if (notaMudou()) gravarTexto('instead_note', noLugar);
+    if (diarioMudou()) gravarTexto('diario', diario);
+  };
 
   const fundo = criar('div', { class: 'menu-fundo' });
-  fecharPeloFundo = () => { if (temTextoAberto()) pedirDescarte(painel, fecharBloco); else fecharBloco(); };
+  fecharPeloFundo = () => { if (temTextoAberto()) pedirDescarte(painel, () => fecharGravandoTextos()); else fecharGravandoTextos(); };
   fundo.addEventListener('click', () => fecharPeloFundo());
   const painel = criar('form', { class: 'menu-folha bloco-painel', novalidate: '' },
     criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado,

@@ -53,6 +53,15 @@ test('instead_note de bloco devolve no_lugar e bloco_id', () => {
   assert.deepEqual([r[0].campo, r[0].bloco_id, r[0].card_id], ['no_lugar', 'b1', 'c1']);
 });
 
+test('motivo de bloco não feito devolve o campo motivo', () => {
+  const r = buscar('machucado', dados({
+    cards: [{ id: 'c1', title: 'Muay thai', notes: '' }],
+    blocks: [{ id: 'b1', card_id: 'c1', item_id: null, title: 'Muay thai', status: 'missed', instead_note: '', motivo: 'Estava machucado' },
+      { id: 'b2', card_id: 'c1', item_id: null, title: 'Muay thai', status: 'done', motivo: 'machucado antigo' }],
+  }));
+  assert.deepEqual(r.map((x) => [x.campo, x.bloco_id]), [['motivo', 'b1']]);
+});
+
 test('bloco de card excluído ainda é achado, com card_id nulo', () => {
   const r = buscar('passeio', dados({ blocks: [{ id: 'b1', card_id: null, item_id: null, title: 'Antigo', status: 'missed', instead_note: 'passeio' }] }));
   assert.deepEqual([r[0].campo, r[0].card_id], ['no_lugar', null]);

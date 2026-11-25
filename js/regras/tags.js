@@ -56,32 +56,36 @@ export function emOrdem(categories, { incluir = new Set() } = {}) {
   return saida;
 }
 
-// ---- Tag do card: uma tag e, se quiser, subtags dela.
-// Com subtags marcadas, o card guarda só as subtags; sem subtag, guarda a própria tag.
-// Card antigo com mais de uma família: a primeira na ordem das tags manda; as outras ficam em `outras`.
+// ---- Tag do card: uma tag e, se quiser, uma subtag dela.
+// O card guarda a subtag (se houver) ou a tag. Card antigo com várias subtags ou famílias: a primeira na ordem
+// das tags manda; o resto fica em `outras` até a próxima escolha.
+const tagDe = (categories, id) => {
+  const c = categories.find((x) => x.id === id);
+  return c ? c.parent_id || c.id : null;
+};
+
 export function categoriaDoCard(categories, ids) {
   const doCard = new Set(ids);
   const ordem = emOrdem(categories, { incluir: doCard }).filter((c) => doCard.has(c.id));
-  if (!ordem.length) return { tagId: null, subIds: [], outras: [] };
+  if (!ordem.length) return { tagId: null, subId: null, outras: [] };
   const tagId = ordem[0].parent_id || ordem[0].id;
-  const daTag = (c) => (c.parent_id || c.id) === tagId;
-  return {
-    tagId,
-    subIds: ordem.filter((c) => daTag(c) && c.parent_id).map((c) => c.id),
-    outras: ordem.filter((c) => !daTag(c)).map((c) => c.id),
-  };
+  const subId = ordem.find((c) => c.parent_id === tagId)?.id || null;
+  return { tagId, subId, outras: ordem.filter((c) => c.id !== tagId && c.id !== subId).map((c) => c.id) };
 }
 
 export function trocarTag(tagId) {
   return tagId ? [tagId] : [];
 }
 
-export function alternarSubtag(categories, ids, subId) {
-  const mae = maeDe(categories, subId);
-  if (!mae) return [...ids];
-  const { tagId, subIds, outras } = categoriaDoCard(categories, ids);
-  const atuais = tagId === mae.id ? subIds : [];
-  const subs = atuais.includes(subId) ? atuais.filter((x) => x !== subId) : [...atuais, subId];
-  const resto = tagId === mae.id ? outras : ids.filter((x) => x !== mae.id);
-  return [...resto, ...(subs.length ? subs : [mae.id])];
+// Escolher a subtag (ou "Nenhuma" = null) deixa só ela na família; as outras famílias de um card antigo ficam.
+export function escolherSubtag(categories, ids, subId) {
+  const tagId = subId ? tagDe(categories, subId) : categoriaDoCard(categories, ids).tagId;
+  if (!tagId) return [...ids];
+  return [...ids.filter((id) => tagDe(categories, id) !== tagId), subId || tagId];
+}
+
+// O que vai para a tag do bloco criado a partir do card.
+export function categoriaParaBloco(categories, ids) {
+  const { tagId, subId } = categoriaDoCard(categories, ids);
+  return subId || tagId || null;
 }

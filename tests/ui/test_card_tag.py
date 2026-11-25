@@ -48,7 +48,7 @@ class CardTagBase(QuadroBase):
 
 
 class TestCardTag(CardTagBase):
-    def test_tag_e_subtags_em_listas(self):
+    def test_tag_e_subtag_em_listas(self):
         self.preparar_tags(); p = self.page; self.abrir()
         self.assertFalse(self.visivel('#card-subtags'))
         self.assertIn('Escolher tag', p.inner_text('#card-tag'))
@@ -58,23 +58,31 @@ class TestCardTag(CardTagBase):
         self.assertIn('Espiritual', p.inner_text('#card-tag'))
         self.assertIn('Nenhuma', p.inner_text('#card-subtags'))
         p.click('#card-subtags')
-        # só as subtags da tag escolhida
-        self.assertEqual(p.locator('#card-subtags-lista [role="option"]').count(), 2)
+        # "Nenhuma" e as duas subtags da tag escolhida
+        self.assertEqual(p.locator('#card-subtags-lista [role="option"]').count(), 3)
+        self.assertIsNone(p.get_attribute('#card-subtags-lista', 'aria-multiselectable'))
         p.click(f'#card-subtags-lista [data-cat="{self.cat["Orações"]}"]')
         self.esperar([self.cat['Orações']])
-        p.click(f'#card-subtags-lista [data-cat="{self.cat["Estudo pessoal"]}"]')
-        self.esperar([self.cat['Orações'], self.cat['Estudo pessoal']])
-        self.assertTrue(self.visivel('#card-subtags-lista'))
-        self.assertEqual(p.get_attribute(f'#card-subtags-lista [data-cat="{self.cat["Orações"]}"]', 'aria-selected'), 'true')
-        self.assertIn('Estudo pessoal, Orações', p.inner_text('#card-subtags'))
-        p.click(f'#card-subtags-lista [data-cat="{self.cat["Orações"]}"]')
-        p.click(f'#card-subtags-lista [data-cat="{self.cat["Estudo pessoal"]}"]')
-        self.esperar([self.cat['Espiritual']])
-        p.click('#card-titulo')  # tocar fora fecha
         self.assertFalse(self.visivel('#card-subtags-lista'))
+        self.assertIn('Orações', p.inner_text('#card-subtags'))
+        p.click('#card-subtags'); p.click(f'#card-subtags-lista [data-cat="{self.cat["Estudo pessoal"]}"]')
+        self.esperar([self.cat['Estudo pessoal']])
+        p.click('#card-subtags'); p.click('#card-subtags-lista [data-cat=""]')
+        self.esperar([self.cat['Espiritual']])
         self.escolher_tag(None)
         self.esperar([])
         self.assertFalse(self.visivel('#card-subtags'))
+
+    def test_card_antigo_com_duas_subtags_mostra_a_primeira(self):
+        self.preparar_tags(); p = self.page
+        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Orações']},
+                                      {'card_id': self.cid, 'category_id': self.cat['Estudo pessoal']}])
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro'); self.abrir()
+        self.assertIn('Estudo pessoal', p.inner_text('#card-subtags'))
+        self.assertIn('Espiritual › Orações', p.inner_text('#card-tag-outras'))
+        p.click('#card-subtags'); p.click(f'#card-subtags-lista [data-cat="{self.cat["Orações"]}"]')
+        self.esperar([self.cat['Orações']])
+        self.assertFalse(self.visivel('#card-tag-outras'))
 
     def test_trocar_tag_tira_subtags(self):
         self.preparar_tags(); p = self.page; self.abrir()
@@ -96,8 +104,8 @@ class TestCardTag(CardTagBase):
         p.click('#card-subtags')
         self.assertEqual(p.locator(f'#card-subtags-lista [data-cat="{self.cat["Velha"]}"]').count(), 0)
         self.fechar()
-        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Velha']}])
         self.page.evaluate(f"window.__memdb.card_categories = window.__memdb.card_categories.filter(c => c.category_id !== '{self.cat['Idiomas']}')")
+        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Velha']}])
         p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro'); self.abrir()
         self.assertIn('Velha', p.inner_text('#card-subtags'))
         p.click('#card-subtags')
@@ -112,7 +120,7 @@ class TestCardTag(CardTagBase):
         self.assertIn('Também neste card', p.inner_text('#card-tag-outras'))
         self.assertIn('Idiomas › Inglês', p.inner_text('#card-tag-outras'))
         p.click('#card-subtags'); p.click(f'#card-subtags-lista [data-cat="{self.cat["Estudo pessoal"]}"]')
-        self.esperar([self.cat['Inglês'], self.cat['Orações'], self.cat['Estudo pessoal']])
+        self.esperar([self.cat['Inglês'], self.cat['Estudo pessoal']])
         self.escolher_tag('Lazer')
         self.esperar([self.cat['Lazer']])
         self.assertFalse(self.visivel('#card-tag-outras'))
@@ -151,17 +159,15 @@ class TestCardTag(CardTagBase):
         p.click('#card-sessao')
         p.wait_for_selector('#folha-bloco', state='visible')
 
-    def test_toques_rapidos_nas_subtags_nao_deixam_sem_categoria(self):
+    def test_toques_rapidos_nao_deixam_sem_categoria(self):
         self.preparar_tags(); p = self.page
-        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Orações']},
-                                      {'card_id': self.cid, 'category_id': self.cat['Estudo pessoal']}])
+        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Orações']}])
         p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro'); self.abrir()
-        p.click('#card-subtags')
         p.evaluate("window.__memAtraso = { removeWhere: 300, insert: 300 }")
-        p.click(f'#card-subtags-lista [data-cat="{self.cat["Orações"]}"]')
-        p.click(f'#card-subtags-lista [data-cat="{self.cat["Estudo pessoal"]}"]')
-        p.wait_for_function('!window.__memGravando')
-        p.wait_for_timeout(700); p.wait_for_function('!window.__memGravando')
+        p.click('#card-subtags'); p.click(f'#card-subtags-lista [data-cat="{self.cat["Estudo pessoal"]}"]')
+        p.click('#card-subtags'); p.click('#card-subtags-lista [data-cat=""]')
+        p.wait_for_timeout(200); p.wait_for_function('!window.__memGravando')
+        p.wait_for_timeout(800); p.wait_for_function('!window.__memGravando')
         self.assertEqual(self.do_card(), [self.cat['Espiritual']])
 
     def test_mesma_tag_em_card_antigo_nao_apaga_nada(self):
@@ -189,11 +195,23 @@ class TestCardTag(CardTagBase):
         p.wait_for_timeout(100)
         self.assertFalse(self.visivel('#card-tag-lista'))
 
-    def test_marcar_nao_recria_as_opcoes(self):
+    def test_marcar_sessao_traz_a_tag_e_a_subtag_do_card(self):
+        self.preparar_tags(); p = self.page
+        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Orações']}])
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro'); self.abrir()
+        p.click('#card-sessao'); p.wait_for_selector('#folha-bloco', state='visible')
+        self.assertEqual(p.input_value('#bloco-tag'), self.cat['Espiritual'])
+        self.assertEqual(p.input_value('#bloco-subtag'), self.cat['Orações'])
+
+    def test_marcar_sessao_em_card_sem_tag(self):
         self.preparar_tags(); p = self.page; self.abrir()
-        self.escolher_tag('Espiritual'); self.esperar([self.cat['Espiritual']])
-        p.click('#card-subtags')
-        p.evaluate(f"window.__op = document.querySelector('#card-subtags-lista [data-cat=\"{self.cat['Estudo pessoal']}\"]')")
-        p.click(f'#card-subtags-lista [data-cat="{self.cat["Orações"]}"]')
-        self.esperar([self.cat['Orações']])
-        self.assertTrue(p.evaluate('document.contains(window.__op)'))
+        p.click('#card-sessao'); p.wait_for_selector('#folha-bloco', state='visible')
+        self.assertEqual(p.input_value('#bloco-tag'), '')
+
+    def test_na_agenda_com_espaco_igual(self):
+        self.preparar_tags(); p = self.page; self.abrir()
+        ys = p.eval_on_selector_all('#card-na-agenda .agenda-linha', 'els => els.map(e => { const r = e.getBoundingClientRect(); return [r.top, r.bottom]; })')
+        self.assertEqual(len(ys), 3)
+        g1, g2 = ys[1][0] - ys[0][1], ys[2][0] - ys[1][1]
+        self.assertLessEqual(abs(g1 - g2), 1, (g1, g2))
+

@@ -192,3 +192,54 @@ class TestEditorVisual(UITest):
         self.assertEqual(a['name'], 'foto [1].png')
         self.assertIn(f"](anexo:{a['path']})", notas)
         self.assertNotIn('memoria://', notas)
+
+
+class TestEditorDoFlashcard(UITest):
+    def setUp(self):
+        super().setUp()
+        self.page.add_init_script('window.__EDITOR_SIMPLES__ = false;')
+
+    def test_barra_com_tres_botoes_e_negrito(self):
+        self.login()
+        self.seed('baralhos', [{'id': 'B', 'nome': 'V', 'fator': 2.5, 'novos_dia': 20, 'revisoes_dia': 200}])
+        p = self.page
+        p.reload(); p.wait_for_selector('#app', state='visible')
+        self.ir('flashcards'); p.click('.baralho-item[data-baralho="B"] .baralho-nome'); p.wait_for_selector('#baralho-tela')
+        p.click('#flash-adicionar'); p.wait_for_selector('#flash-frente .toastui-editor-ww-container')
+        self.assertEqual(p.locator('#flash-frente .toastui-editor-toolbar-icons:not(.more)').count(), 3)
+        self.assertNotIn('Formatação', p.inner_text('#flash-janela'))
+        p.click('#flash-frente .toastui-editor-ww-container .ProseMirror')
+        p.click('#flash-frente .toastui-editor-toolbar-icons.bold')
+        p.keyboard.type('perro')
+        p.click('#flash-verso .toastui-editor-ww-container .ProseMirror'); p.keyboard.type('cachorro')
+        p.click('#flash-salvar')
+        p.wait_for_function("window.__memdb.flashcards.length === 1")
+        f = self.db()['flashcards'][0]
+        self.assertEqual((f['frente'], f['verso']), ('**perro**', 'cachorro'))
+
+    def abrir_novo_flashcard(self):
+        self.login()
+        self.seed('baralhos', [{'id': 'B', 'nome': 'V', 'fator': 2.5, 'novos_dia': 20, 'revisoes_dia': 200}])
+        p = self.page
+        p.reload(); p.wait_for_selector('#app', state='visible')
+        self.ir('flashcards'); p.click('.baralho-item[data-baralho="B"] .baralho-nome'); p.wait_for_selector('#baralho-tela')
+        p.click('#flash-adicionar'); p.wait_for_selector('#flash-frente .toastui-editor-ww-container')
+
+    def test_linhas_vazias_nao_viram_br(self):
+        self.abrir_novo_flashcard(); p = self.page
+        p.click('#flash-frente .toastui-editor-ww-container .ProseMirror'); p.keyboard.type('pergunta')
+        p.click('#flash-verso .toastui-editor-ww-container .ProseMirror')
+        p.keyboard.type('um'); [p.keyboard.press('Enter') for _ in range(4)]; p.keyboard.type('dois')
+        p.click('#flash-salvar')
+        p.wait_for_function("window.__memdb.flashcards.length === 1")
+        verso = self.db()['flashcards'][0]['verso']
+        self.assertNotIn('<br', verso)
+        self.assertIn('um', verso); self.assertIn('dois', verso)
+
+    def test_editor_com_nome_e_barra_no_tema(self):
+        self.abrir_novo_flashcard(); p = self.page
+        self.assertEqual(p.get_attribute('#flash-frente .toastui-editor-ww-container .ProseMirror', 'aria-label'), 'Frente')
+        self.assertEqual(p.get_attribute('#flash-verso .toastui-editor-ww-container .ProseMirror', 'aria-label'), 'Verso')
+        p.evaluate("document.documentElement.dataset.tema = 'escuro'")
+        fundo = p.evaluate("getComputedStyle(document.querySelector('#flash-frente .toastui-editor-defaultUI-toolbar')).backgroundColor")
+        self.assertNotEqual(fundo, 'rgb(247, 249, 252)')

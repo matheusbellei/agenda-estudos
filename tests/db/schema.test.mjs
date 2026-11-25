@@ -457,3 +457,34 @@ test('flash_somar_dia soma de forma atômica e só no dono', () => {
   assert.equal(psql(DB, `select revisados||':'||acertos from flash_dias where owner_id='${A}' and data='2026-12-02'`), '2:1');
   assert.equal(psql(DB, `select revisados||':'||acertos from flash_dias where owner_id='${B}' and data='2026-12-02'`), '1:1');
 });
+
+test('migração dos ajustes roda 2× sobre o schema da rodada 5 (archived_at e dia inteiro)', () => {
+  const VELHO = 'estudos_migracao_ajustes';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', '9482541:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psqlFile(VELHO, 'supabase/migracao-2026-11-ajustes.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-ajustes.sql');
+  assert.equal(psql(VELHO, `select data_type from information_schema.columns where table_name = 'cards' and column_name = 'archived_at'`), 'timestamp with time zone');
+  assert.equal(psql(VELHO, `select column_default from information_schema.columns where table_name = 'settings' and column_name = 'day_end_min'`), '1440');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.columns where table_name = 'blocks' and column_name = 'motivo'`), '1');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+test('schema atual tem cards.archived_at', () => {
+  assert.equal(psql(DB, `select count(*) from information_schema.columns where table_name = 'cards' and column_name = 'archived_at'`), '1');
+});
+
+test('grupos de baralhos: baralho dentro de grupo meu; não dentro de baralho comum, de grupo alheio nem de si mesmo', () => {
+  const g = id(as(A, `insert into baralhos (nome, e_grupo) values ('Idiomas', true) returning id`));
+  const d = id(as(A, `insert into baralhos (nome, pai_id) values ('Verbos', '${g}') returning id`));
+  assert.equal(psql(DB, `select pai_id from baralhos where id = '${d}'`), g);
+  assert.throws(() => as(A, `insert into baralhos (nome, pai_id) values ('Dentro de baralho', '${d}')`));
+  assert.throws(() => as(B, `insert into baralhos (nome, pai_id) values ('Invasor', '${g}')`));
+  assert.throws(() => as(A, `update baralhos set pai_id = id where id = '${g}'`));
+  // excluir o grupo deixa o baralho sem grupo (o app sobe os filhos antes)
+  as(A, `delete from baralhos where id = '${g}'`);
+  assert.equal(psql(DB, `select coalesce(pai_id::text, 'nulo') from baralhos where id = '${d}'`), 'nulo');
+});

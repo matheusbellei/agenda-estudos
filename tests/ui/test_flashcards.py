@@ -36,7 +36,8 @@ class TestBaralhos(FlashBase):
         p.wait_for_selector('#baralho-tela')
         for tipo, frente, verso in [('basico', 'perro', 'cachorro'), ('invertido', 'gato', 'gato'), ('lacuna', 'Yo {{tuve}} un perro', ''), ('digitar', 'cachorro', 'Perro')]:
             p.click('#flash-adicionar'); p.wait_for_selector('#flash-janela')
-            p.select_option('#flash-tipo', tipo); p.fill('#flash-frente', frente); p.fill('#flash-verso', verso)
+            p.select_option('#flash-tipo', tipo); p.fill('#flash-frente', frente)
+            p.fill('#flash-resposta' if tipo == 'digitar' else '#flash-verso', verso)
             p.click('#flash-salvar'); p.wait_for_selector('#flash-janela', state='detached')
         fs = self.db()['flashcards']
         self.assertEqual(sorted(f['tipo'] for f in fs), ['basico', 'digitar', 'invertido', 'lacuna'])
@@ -50,6 +51,41 @@ class TestBaralhos(FlashBase):
         self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
         p.click('#flash-adicionar'); p.select_option('#flash-tipo', 'lacuna'); p.fill('#flash-frente', 'sem lacuna'); p.click('#flash-salvar')
         self.assertEqual(p.inner_text('#flash-erro'), 'Marque pelo menos uma lacuna com {{ }}.')
+
+    def test_formulario_sem_texto_de_formatacao_e_previa_so_na_lacuna(self):
+        self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
+        p.click('#flash-adicionar'); p.wait_for_selector('#flash-janela')
+        self.assertNotIn('Formatação', p.inner_text('#flash-janela'))
+        self.assertFalse(p.is_visible('#flash-previa'))
+        p.select_option('#flash-tipo', 'lacuna'); p.fill('#flash-frente', 'Yo {{tuve}} un perro')
+        self.assertTrue(p.is_visible('#flash-previa'))
+        self.assertNotIn('tuve', p.inner_text('#flash-previa').split('\n')[0])
+
+    def test_digitar_usa_caixa_de_uma_linha(self):
+        self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
+        p.click('#flash-adicionar'); p.select_option('#flash-tipo', 'digitar')
+        self.assertTrue(p.is_visible('#flash-resposta'))
+        self.assertFalse(p.is_visible('#flash-verso'))
+        self.assertEqual(p.get_attribute('#flash-resposta', 'type'), 'text')
+        p.fill('#flash-frente', 'cachorro'); p.fill('#flash-resposta', 'Perro'); p.click('#flash-salvar')
+        p.wait_for_function("window.__memdb.flashcards.length === 1")
+        self.assertEqual(self.db()['flashcards'][0]['verso'], 'Perro')
+        # editar abre com a resposta na caixa certa
+        p.click('.flash-item .flash-editar')
+        self.assertEqual(p.input_value('#flash-resposta'), 'Perro')
+
+    def test_salvar_ajustes_mostra_que_salvou_e_atualiza_o_nome(self):
+        self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
+        p.click('.baralho-ajustes summary')
+        p.fill('#baralho-nome', 'Vocabulário 2'); p.fill('#baralho-novos', '7'); p.click('#baralho-salvar')
+        p.wait_for_function("window.__memdb.baralhos[0].novos_dia === 7")
+        p.wait_for_function("document.querySelector('#baralho-salvo').textContent === 'Ajustes salvos.'")
+        self.assertIn('Vocabulário 2', p.inner_text('#baralho-tela h2'))
+        self.assertTrue(p.evaluate("document.querySelector('.baralho-ajustes').open"))
+        self.assertEqual(p.input_value('#baralho-novos'), '7')
+        # mudar de novo apaga o aviso antigo
+        p.fill('#baralho-novos', '8')
+        self.assertEqual(p.inner_text('#baralho-salvo'), '')
 
     def test_ajustes_do_baralho_e_excluir(self):
         self.entrar(baralhos=[BAR], flashcards=[F('a', 'x', 'y')]); self.abrir_baralho(); p = self.page
@@ -138,6 +174,7 @@ class TestFlashNoCard(FlashBase):
         self.entrar(lists=[{'id': 'L1', 'name': 'Em andamento', 'position': 1, 'is_active': True}],
                     cards=[{'id': 'K', 'title': 'Curso', 'list_id': 'L1', 'position': 1}]); p = self.page
         self.ir('quadro'); p.click('.cartao-card[data-card="K"] .cartao-titulo'); p.wait_for_selector('#folha-card', state='visible')
+        self.assertFalse(p.is_visible('#card-flash-estudar'))
         p.click('#card-flash-adicionar'); p.fill('#flash-frente', 'pergunta'); p.fill('#flash-verso', 'resposta'); p.click('#flash-salvar')
         p.wait_for_function("window.__memdb.flashcards.length === 1")
         f = self.db()['flashcards'][0]
@@ -189,3 +226,68 @@ class TestSessaoRobusta(FlashBase):
         item.locator('.flash-card-estudar').click()
         p.wait_for_selector('#tela-flash-sessao', state='visible')
         self.assertEqual(p.get_attribute('#menu-flash-contador', 'aria-label'), '1 para hoje')
+
+
+def BG(id, nome, pai=None, grupo=False):
+    return {'id': id, 'nome': nome, 'fator': 2.5, 'novos_dia': 20, 'revisoes_dia': 200, 'e_grupo': grupo, 'pai_id': pai}
+
+
+class TestGrupos(FlashBase):
+    def test_criar_grupo_e_colocar_baralho_dentro(self):
+        self.entrar(baralhos=[BAR]); p = self.page
+        self.ir('flashcards')
+        p.click('#flash-novo-grupo'); p.fill('#grupo-nome', 'Idiomas'); p.click('#grupo-salvar')
+        p.wait_for_function("window.__memdb.baralhos.some(b => b.e_grupo && b.nome === 'Idiomas')")
+        gid = next(b['id'] for b in self.db()['baralhos'] if b['e_grupo'])
+        self.abrir_baralho()
+        p.click('.baralho-ajustes summary')
+        self.assertEqual(p.locator('#baralho-pai option').all_inner_texts(), ['Nenhum', 'Idiomas'])
+        p.select_option('#baralho-pai', gid); p.click('#baralho-salvar')
+        p.wait_for_function(f"window.__memdb.baralhos.find(b => b.id === 'B').pai_id === '{gid}'")
+        self.ir('flashcards')
+        self.assertEqual(p.locator(f'.baralho-grupo[data-baralho="{gid}"] .baralho-filhos .baralho-item[data-baralho="B"]').count(), 1)
+
+    def test_grupo_soma_e_estuda_os_baralhos_de_dentro(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True), BG('A', 'Alemão', 'G'), BG('X', 'Basco', 'G'), BG('F', 'Fora')],
+                    flashcards=[F('a1', 'eins', baralho_id='A'), F('x1', 'bat', baralho_id='X'), F('f1', 'fora', baralho_id='F')]); p = self.page
+        self.ir('flashcards')
+        self.assertIn('2 novos', p.inner_text('.baralho-grupo[data-baralho="G"] > .baralho-grupo-linha'))
+        p.click('.baralho-grupo[data-baralho="G"] > .baralho-grupo-linha .grupo-estudar')
+        p.wait_for_selector('#tela-flash-sessao', state='visible')
+        vistos = []
+        for _ in range(2):
+            vistos.append(p.inner_text('#sessao-pergunta'))
+            p.click('#sessao-mostrar'); p.click('#sessao-acertei')
+        p.wait_for_selector('#sessao-fim', state='visible')
+        self.assertEqual(sorted(vistos), ['bat', 'eins'])
+
+    def test_abrir_e_fechar_o_grupo_fica_lembrado(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True), BG('A', 'Alemão', 'G')]); p = self.page
+        self.ir('flashcards')
+        filhos = '.baralho-grupo[data-baralho="G"] .baralho-filhos'
+        self.assertTrue(p.is_visible(filhos))
+        p.click('.baralho-grupo[data-baralho="G"] .grupo-abrir')
+        self.assertFalse(p.is_visible(filhos))
+        self.assertTrue(p.evaluate("document.activeElement.matches('.baralho-grupo[data-baralho=\"G\"] .grupo-abrir')"))
+        self.assertEqual(p.get_attribute('.baralho-grupo[data-baralho="G"] .grupo-abrir', 'aria-expanded'), 'false')
+        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('flashcards')
+        self.assertFalse(p.is_visible(filhos))
+
+    def test_grupo_dentro_de_grupo_e_destinos_sem_ciclo(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True), BG('E', 'Espanhol', 'G', grupo=True), BG('V', 'Verbos', 'E')]); p = self.page
+        self.ir('flashcards')
+        self.assertEqual(p.locator('.baralho-grupo[data-baralho="G"] .baralho-grupo[data-baralho="E"] .baralho-item[data-baralho="V"]').count(), 1)
+        p.click('.baralho-grupo[data-baralho="G"] > .baralho-grupo-linha .grupo-nome')
+        p.wait_for_selector('#grupo-janela')
+        self.assertEqual(p.locator('#grupo-pai option').all_inner_texts(), ['Nenhum'])
+        p.fill('#grupo-nome', 'Línguas'); p.click('#grupo-salvar')
+        p.wait_for_function("window.__memdb.baralhos.find(b => b.id === 'G').nome === 'Línguas'")
+
+    def test_excluir_grupo_sobe_o_que_estava_dentro(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True), BG('E', 'Espanhol', 'G', grupo=True), BG('V', 'Verbos', 'E')]); p = self.page
+        self.ir('flashcards')
+        p.click('.baralho-grupo[data-baralho="E"] > .baralho-grupo-linha .grupo-nome'); p.wait_for_selector('#grupo-janela')
+        p.evaluate("window.confirm = () => true")
+        p.click('#grupo-excluir')
+        p.wait_for_function("!window.__memdb.baralhos.some(b => b.id === 'E')")
+        self.assertEqual(next(b for b in self.db()['baralhos'] if b['id'] == 'V')['pai_id'], 'G')

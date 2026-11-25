@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { datasDoPadrao, validarDias, validarDatas, revisoesParaEncaixar, statusDaRevisao, textoDasRevisoes } from '../../js/regras/revisoes.js';
+import { datasDoPadrao, validarDias, validarDatas, revisoesParaEncaixar, statusDaRevisao, textoDasRevisoes, textoDoPadrao } from '../../js/regras/revisoes.js';
 
 const HOJE = '2026-11-24';
 const rev = (id, data, extra = {}) => ({ id, card_id: 'K', data, status: 'pendente', ...extra });
@@ -53,4 +53,10 @@ test('textoDasRevisoes', () => {
   const r = [rev('a', '2026-12-01', { status: 'feita' }), rev('b', '2026-12-24'), rev('c', '2026-12-10', { status: 'cancelada' }), rev('d', '2026-12-05', { card_id: 'Z' })];
   assert.equal(textoDasRevisoes(r, 'K'), 'Revisões: 1/12 ✓ · 24/12');
   assert.equal(textoDasRevisoes([], 'K'), null);
+});
+
+test('textoDoPadrao: em quantos dias e as datas, em linguagem simples', () => {
+  assert.equal(textoDoPadrao([7, 30], ['2026-12-01', '2026-12-24']), 'Daqui a 7 e 30 dias (1/12 e 24/12)');
+  assert.equal(textoDoPadrao([1], ['2026-11-25']), 'Daqui a 1 dia (25/11)');
+  assert.equal(textoDoPadrao([3, 7, 30], ['2026-11-27', '2026-12-01', '2026-12-24']), 'Daqui a 3, 7 e 30 dias (27/11, 1/12 e 24/12)');
 });

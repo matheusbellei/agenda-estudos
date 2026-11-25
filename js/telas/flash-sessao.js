@@ -4,11 +4,11 @@ import { registrarTela, irPara } from './casca.js';
 import { criar } from './bloco.js';
 import { hojeDoApp } from './revisoes.js';
 import { marcacaoParaHtml } from '../regras/marcacao.js';
-import { filaDaSessao, limitesDe, responder, pergunta, resposta, confereDigitado } from '../regras/flash.js';
+import { filaDaSessao, filaDoGrupo, limitesDe, responder, pergunta, resposta, confereDigitado } from '../regras/flash.js';
 
 let iniciar = null;
 
-// Abre a sessão: `alvo` = { baralhoId } ou { cardId }; `voltar` = tela para onde "Sair" leva.
+// Abre a sessão: `alvo` = { baralhoId }, { grupoId } ou { cardId }; `voltar` = tela para onde "Sair" leva.
 export function estudar(alvo, voltar = 'flashcards') {
   if (iniciar) iniciar(alvo, voltar);
   irPara('flash-sessao');
@@ -129,6 +129,14 @@ export function iniciarSessao({ estado }) {
     voltarPara = voltarTela;
     hoje = hojeDoApp(estado);
     const d = estado.dados;
+    pos = 0; revisados = 0; acertosDePrimeira = 0;
+    // Grupo: junta os baralhos de dentro, cada um com os próprios limites.
+    if (alvo.grupoId) {
+      titulo.textContent = d.baralhos.find((b) => b.id === alvo.grupoId)?.nome || 'Flashcards';
+      fila = filaDoGrupo(d, alvo.grupoId, hoje, estado.ajustes());
+      desenhar();
+      return;
+    }
     const flashcards = d.flashcards.filter((f) => (alvo.baralhoId ? f.baralho_id === alvo.baralhoId : f.card_id === alvo.cardId));
     const dono = alvo.baralhoId ? d.baralhos.find((b) => b.id === alvo.baralhoId) : d.cards.find((c) => c.id === alvo.cardId);
     titulo.textContent = dono ? (dono.nome || dono.title) : 'Flashcards';

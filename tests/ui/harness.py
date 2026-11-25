@@ -52,6 +52,13 @@ class UITest(unittest.TestCase):
         self.page.goto(self.base)
         self.page.wait_for_selector('#tela-login, #app', state='visible')
 
+    def fechar_folha(self):
+        """Fecha a folha do bloco pelo botão Fechar/Cancelar, depois de terminar a gravação em curso."""
+        p = self.page
+        p.wait_for_function("!document.querySelector('#bloco-salvar').disabled")
+        p.click('#bloco-cancelar')
+        p.wait_for_function("document.querySelector('#folha-bloco').hidden")
+
     def login(self, email='dono@exemplo.com', senha='senha123'):
         self.open()
         p = self.page
@@ -62,9 +69,11 @@ class UITest(unittest.TestCase):
         """Abre o menu ☰ e escolhe a tela."""
         p = self.page
         if p.is_hidden('#menu'): p.click('#menu-botao')
-        # Hoje e Semana são as duas visões da página inicial (item Agenda do menu).
+        # Agenda = Semana; o dia (Hoje) abre tocando no nome do dia na Semana.
         p.click(f'#menu [data-tela="{"agenda" if tela in ("hoje", "semana") else tela}"]')
-        if tela in ('hoje', 'semana'): p.click(f'#visao [data-visao="{tela}"]')
+        if tela == 'hoje':
+            p.wait_for_selector('#tela-semana', state='visible')
+            p.click(f'#sem-grade .dia[data-data="{self.TODAY}"] .dia-nome')
         p.wait_for_selector(f'#tela-{tela}', state='visible')
 
     def seed(self, table, rows):

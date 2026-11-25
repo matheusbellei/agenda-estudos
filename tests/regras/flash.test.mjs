@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ladosDoTipo, responder, filaDaSessao, paraHoje, pergunta, resposta, confereDigitado, validarFlashcard,
-  limitesDe, textoDoAvisoFlash, serieFlash, acertoDoPeriodo,
+  limitesDe, textoDoAvisoFlash, serieFlash, acertoDoPeriodo, filaDoGrupo,
 } from '../../js/regras/flash.js';
 
 const HOJE = '2026-11-24';
@@ -129,4 +129,23 @@ test('aviso, série e acerto', () => {
   assert.deepEqual(s[1], { inicio: '2026-11-17', revisados: 10, acertos: 8 });
   assert.equal(acertoDoPeriodo(dias, '2026-11-16', '2026-11-22'), 80);
   assert.equal(acertoDoPeriodo(dias, '2026-10-01', '2026-10-31'), null);
+});
+
+
+test('filaDoGrupo: junta os baralhos de dentro (cada um com seus limites), revisões antes dos novos', () => {
+  const baralhos = [
+    { id: 'G', nome: 'Idiomas', e_grupo: true, pai_id: null },
+    { id: 'A', nome: 'Alemão', e_grupo: false, pai_id: 'G', novos_dia: 1, revisoes_dia: 200, fator: 2.5 },
+    { id: 'B', nome: 'Basco', e_grupo: false, pai_id: 'G', novos_dia: 5, revisoes_dia: 200, fator: 2.5 },
+    { id: 'C', nome: 'Fora', e_grupo: false, pai_id: null, novos_dia: 5, revisoes_dia: 200, fator: 2.5 },
+  ];
+  const flashcards = [flash('a1', { baralho_id: 'A' }), flash('a22', { baralho_id: 'A' }), flash('b1', { baralho_id: 'B' }),
+    flash('b22', { baralho_id: 'B' }), flash('c1', { baralho_id: 'C' })];
+  const lados = [lado('b22', { vence: HOJE, introduzido_em: '2026-11-01', intervalo: 3 })];
+  const fila = filaDoGrupo({ baralhos, flashcards, flash_lados: lados, cards: [] }, 'G', HOJE, AJ);
+  assert.deepEqual(fila.map((x) => x.flashcard.id), ['b22', 'a1', 'b1']);
+});
+
+test('confereDigitado: resposta com barra invertida é comparada como foi gravada', () => {
+  assert.equal(confereDigitado('a\\.b', flash('d', { tipo: 'digitar', verso: 'a\\.b' })).acertou, true);
 });

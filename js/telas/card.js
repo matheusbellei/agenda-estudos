@@ -1,6 +1,6 @@
 // Card aberto numa folha sobre a tela: título, categorias, lista, anotações, itens, anexos e ações.
-import { criar, itensOrdenados, moverCard, posicaoNoFim, trocarPosicoes, cardsDaLista, restaurarCard } from './quadro.js';
-import { emOrdem, nomeCompleto, categoriaDoCard, trocarTag, alternarSubtag } from '../regras/tags.js';
+import { criar, itensOrdenados, moverCard, posicaoNoFim, trocarPosicoes, cardsDaLista, restaurarCard, arquivarCard, excluirCard, PERGUNTA_EXCLUIR_CARD } from './quadro.js';
+import { emOrdem, nomeCompleto, categoriaDoCard, trocarTag, escolherSubtag, categoriaParaBloco } from '../regras/tags.js';
 import { criarEscolha, fecharEscolhaAberta } from './escolha.js';
 import { chipCategoria } from './ajustes.js';
 import { progresso, proximoItem } from '../regras/fila.js';
@@ -513,11 +513,10 @@ export function iniciarCard({ estado, store }) {
   }
 
   function subtagsDaTag() {
-    const ids = idsDoCard();
-    const { tagId, subIds } = categoriaDoCard(estado.dados.categories, ids);
-    if (!tagId) return { subs: [], marcadas: [] };
-    const subs = emOrdem(estado.dados.categories, { incluir: new Set(subIds) }).filter((k) => k.parent_id === tagId);
-    return { subs, marcadas: subIds };
+    const { tagId, subId } = categoriaDoCard(estado.dados.categories, idsDoCard());
+    if (!tagId) return { subs: [], subId: null };
+    const subs = emOrdem(estado.dados.categories, { incluir: new Set(subId ? [subId] : []) }).filter((k) => k.parent_id === tagId);
+    return { subs, subId };
   }
 
   function criarEscolhasDeCategoria() {
@@ -534,17 +533,20 @@ export function iniciarCard({ estado, store }) {
         ((id || null) === categoriaDoCard(estado.dados.categories, atuais).tagId ? null : trocarTag(id || null))),
     });
     const sub = criarEscolha({
-      id: 'card-subtags', rotulo: 'Subtags', chave: 'cat', multipla: true,
+      id: 'card-subtags', rotulo: 'Subtag', chave: 'cat',
       opcoes: () => {
-        const { subs, marcadas } = subtagsDaTag();
-        return subs.map((k) => ({ id: k.id, conteudo: chipCategoria(k), selecionada: marcadas.includes(k.id) }));
+        const { subs, subId } = subtagsDaTag();
+        return [{ id: '', conteudo: criar('span', { class: 'escolha-nada', texto: 'Nenhuma' }), selecionada: !subId },
+          ...subs.map((k) => ({ id: k.id, conteudo: chipCategoria(k), selecionada: k.id === subId }))];
       },
       resumo: () => {
-        const { subs, marcadas } = subtagsDaTag();
-        const nomes = subs.filter((k) => marcadas.includes(k.id)).map((k) => k.name);
-        return nomes.length ? criar('span', { texto: nomes.join(', ') }) : 'Nenhuma';
+        const { subs, subId } = subtagsDaTag();
+        const k = subs.find((x) => x.id === subId);
+        return k ? chipCategoria(k) : 'Nenhuma';
       },
-      aoEscolher: (id) => gravarCategorias((atuais) => alternarSubtag(estado.dados.categories, atuais, id)),
+      // A mesma subtag de novo não muda nada.
+      aoEscolher: (id) => gravarCategorias((atuais) =>
+        ((id || null) === categoriaDoCard(estado.dados.categories, atuais).subId ? null : escolherSubtag(estado.dados.categories, atuais, id || null))),
     });
     return { tag, sub };
   }
@@ -625,6 +627,8 @@ export function iniciarCard({ estado, store }) {
     const n = hoje.novos + hoje.revisar;
     nodos.flashEstudar.textContent = `Estudar (${n})`;
     nodos.flashEstudar.disabled = !n;
+    // Só aparece quando o card já tem flashcard.
+    nodos.flashEstudar.hidden = !fs.length;
     nodos.flashResumo.textContent = fs.length ? `${fs.length} ${fs.length === 1 ? 'flashcard' : 'flashcards'}` : 'Crie perguntas e respostas sobre este card para estudar com repetição espaçada.';
     nodos.flashLista.replaceChildren(...fs.map((f) => itemDeFlash(estado, f)));
   }
@@ -774,7 +778,9 @@ export function iniciarCard({ estado, store }) {
       let data = isoDe(agora);
       let inicio = Math.max(a.day_start_min, Math.ceil((agora.getHours() * 60 + agora.getMinutes() + 1) / 60) * 60);
       if (inicio + 60 > a.day_end_min) { data = somaDias(data, 1); inicio = a.day_start_min; }
-      abrirBloco({ novo: true, kind: 'study', date: data, start_min: inicio, end_min: Math.min(inicio + 60, 1440), card_id: cardId, item_id: proximoItem(cardId, itensOrdenados(estado))?.id || null });
+      const cat = categoriaParaBloco(estado.dados.categories, idsDoCard());
+      const categoria = estado.dados.categories.find((k) => k.id === cat && !k.archived) ? cat : null;
+      abrirBloco({ novo: true, kind: 'study', date: data, start_min: inicio, end_min: Math.min(inicio + 60, 1440), card_id: cardId, category_id: categoria, item_id: proximoItem(cardId, itensOrdenados(estado))?.id || null });
     });
     const renomear = () => {
       const novo = titulo.value.trim();
@@ -823,18 +829,12 @@ export function iniciarCard({ estado, store }) {
       const atual = card();
       if (atual.archived) { await tentar(() => restaurarCard(estado, atual)); return; }
       if (!(await descarregarTudo())) return;
-      if (await tentar(() => estado.alterar('cards', cardId, { archived: true }))) ocultar();
+      if (await tentar(() => arquivarCard(estado, cardId))) ocultar();
     });
     excluir.addEventListener('click', async () => {
-      if (!window.confirm('Excluir este card? Os blocos já passados continuam no calendário; os agendados daqui para frente serão apagados.')) return;
+      if (!window.confirm(PERGUNTA_EXCLUIR_CARD)) return;
       const id = cardId;
-      const hoje = isoDe(new Date());
-      const ok = await tentar(async () => {
-        for (const b of estado.dados.blocks.filter((x) => x.card_id === id && x.status === 'planned' && x.date >= hoje)) {
-          await estado.excluir('blocks', b.id);
-        }
-        await estado.excluir('cards', id);
-      });
+      const ok = await tentar(() => excluirCard(estado, id));
       if (ok) {
         // Card e itens não existem mais: o que estava por gravar e os rascunhos deles vão junto.
         for (const chave of [...pendentes.keys()]) { const [t, x] = chave.split(':'); descartar(t, x); }

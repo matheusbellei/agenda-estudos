@@ -27,21 +27,21 @@ class TestDiarioNoBloco(DiarioBase):
         p.click('#bloco-cumprido')
         p.wait_for_selector('#bloco-diario-caixa', state='visible')
         p.fill('#bloco-diario', '  Li o capítulo 3.  ')
-        p.click('#bloco-cumprido-ok'); self.folha_fechada()
+        self.fechar_folha()
         b = next(x for x in self.db()['blocks'] if x['id'] == 'b1')
         self.assertEqual((b['status'], b['diario']), ('done', 'Li o capítulo 3.'))
 
     def test_sem_texto_grava_vazio(self):
         self.entrar(blocks=[BLOCO]); p = self.page
         self.abrir_bloco('.bloco[data-bloco="b1"]')
-        p.click('#bloco-cumprido'); p.click('#bloco-cumprido-ok'); self.folha_fechada()
+        p.click('#bloco-cumprido'); self.fechar_folha()
         b = next(x for x in self.db()['blocks'] if x['id'] == 'b1')
         self.assertEqual((b['status'], b.get('diario')), ('done', ''))
 
     def test_ocorrencia_de_fixa_vira_bloco_com_diario(self):
         self.entrar(commitments=[FIXA]); p = self.page
         self.abrir_bloco('.dia[data-data="2026-11-16"] .bloco')
-        p.click('#bloco-cumprido'); p.fill('#bloco-diario', 'Conversa sobre viagens.'); p.click('#bloco-cumprido-ok'); self.folha_fechada()
+        p.click('#bloco-cumprido'); p.fill('#bloco-diario', 'Conversa sobre viagens.'); self.fechar_folha()
         b = next(x for x in self.db()['blocks'] if x.get('commitment_id') == 'F1')
         self.assertEqual((b['date'], b['status'], b['diario']), (HOJE, 'done', 'Conversa sobre viagens.'))
 
@@ -49,16 +49,17 @@ class TestDiarioNoBloco(DiarioBase):
         self.entrar(blocks=[dict(BLOCO, status='done', diario='Primeira versão')]); p = self.page
         self.abrir_bloco('.bloco[data-bloco="b1"]')
         self.assertEqual(p.input_value('#bloco-diario'), 'Primeira versão')
-        self.assertTrue(p.is_hidden('#bloco-cumprido-ok'))
         p.fill('#bloco-diario', 'Versão corrigida'); p.click('#bloco-salvar'); self.folha_fechada()
         self.assertEqual(next(x for x in self.db()['blocks'] if x['id'] == 'b1')['diario'], 'Versão corrigida')
 
-    def test_tocar_fora_com_diario_digitado_pergunta(self):
+    def test_tocar_fora_com_diario_digitado_grava_e_fecha(self):
         self.entrar(blocks=[BLOCO]); p = self.page
         self.abrir_bloco('.bloco[data-bloco="b1"]')
-        p.click('#bloco-cumprido'); p.fill('#bloco-diario', 'algo')
+        p.click('#bloco-cumprido'); p.wait_for_selector('#bloco-diario-caixa', state='visible')
+        p.fill('#bloco-diario', 'algo')
         p.click('#folha-bloco .menu-fundo', position={'x': 5, 'y': 5})
-        self.assertEqual(p.locator('#folha-bloco .confirmar-descarte').count(), 1)
+        self.folha_fechada()
+        p.wait_for_function("window.__memdb.blocks.find(b => b.id === 'b1').diario === 'algo'")
 
 
 CATS = [{'id': 'I', 'name': 'Idiomas', 'color': '#2471A3', 'parent_id': None}, {'id': 'E', 'name': 'Espanhol', 'color': '#2471A3', 'parent_id': 'I'},

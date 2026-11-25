@@ -55,3 +55,11 @@ export function textoDasRevisoes(revisoes, cardId) {
   if (!doCard.length) return null;
   return `Revisões: ${doCard.map((r) => (r.status === 'feita' ? `${dm(r.data)} ✓` : dm(r.data))).join(' · ')}`;
 }
+
+// "Daqui a 7 e 30 dias (1/12 e 24/12)": o padrão explicado na janela de revisões.
+const diaMes = (iso) => `${Number(iso.slice(8))}/${Number(iso.slice(5, 7))}`;
+const emLista = (l) => (l.length < 2 ? l.join('') : `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}`);
+export function textoDoPadrao(dias, datas) {
+  const unidade = dias.length === 1 && dias[0] === 1 ? 'dia' : 'dias';
+  return `Daqui a ${emLista(dias.map(String))} ${unidade} (${emLista(datas.map(diaMes))})`;
+}
