@@ -141,3 +141,7 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Um grupo pode definir novos e revisões por dia (`baralhos.limites_do_grupo` + os `novos_dia`/`revisoes_dia` do grupo). Valem para cada baralho de dentro, em qualquer nível; com grupos dentro de grupos, manda o grupo mais de cima que tiver limites. O fator é sempre do baralho.
 - No baralho sobreposto os dois campos ficam travados, com o aviso "Definido pelo grupo …"; os números próprios do baralho ficam guardados e voltam a valer se o grupo desligar os limites ou o baralho sair dele.
 - Novo baralho já escolhe o grupo na criação.
+
+## Bloco sem card (24/11/2026)
+
+- A escolha "Bloco sem card" saiu das Configurações. O bloco novo sem card sempre mostra "Criar card para este bloco" (desmarcado), com a lista ativa sugerida; sem marcar, nada é criado no Quadro. As colunas antigas `auto_card` e `auto_card_list_id` ficam no banco, sem uso.

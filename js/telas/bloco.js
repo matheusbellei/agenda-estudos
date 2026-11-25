@@ -226,11 +226,11 @@ export function abrirBloco(arg) {
   const escolhido = criar('div', { id: 'bloco-card-escolhido', class: 'card-escolhido' });
   const item = criar('select', { id: 'bloco-item' });
   const campoItem = campo('Item', item);
-  // Card que nasce junto com o bloco (Configurações → "Bloco sem card": perguntar, sempre ou nunca).
-  const ajustes = estado.ajustes();
+  // Card que nasce junto com o bloco: o bloco novo sem card sempre pergunta ("Criar card para este bloco",
+  // desmarcado), sugerindo a lista ativa. Sem listas no Quadro, não oferece.
   const listas = [...estado.dados.lists].sort((a, b) => a.position - b.position);
-  const listaPadrao = listas.find((l) => l.id === ajustes.auto_card_list_id) || listas.find((l) => l.is_active) || listas[0] || null;
-  const modoCard = listaPadrao ? ajustes.auto_card : 'nunca';
+  const listaPadrao = listas.find((l) => l.is_active) || listas[0] || null;
+  const modoCard = listaPadrao ? 'perguntar' : 'nunca';
   const criarCard = criar('input', { id: 'bloco-criar-card', type: 'checkbox' });
   const novoCardTitulo = criar('input', { id: 'bloco-novo-card-titulo', type: 'text', maxlength: '200', autocomplete: 'off' });
   const novoCardLista = criar('select', { id: 'bloco-novo-card-lista' },
@@ -476,7 +476,7 @@ export function abrirBloco(arg) {
     // Com card é estudo (conta no progresso do card); sem card é compromisso.
     const doCard = () => ({ card_id: cardId, item_id: cardId && !campoItem.hidden ? item.value || null : null, kind: cardId ? 'study' : 'commitment' });
     const regraNova = () => ({ ...v, card_id: cardId, days: [...dias].sort((a, b) => a - b), valid_from: de.value, valid_to: ate.value || null });
-    const querCard = novo && !cardId && Boolean(listaPadrao) && (modoCard === 'sempre' || (modoCard === 'perguntar' && criarCard.checked));
+    const querCard = novo && !cardId && Boolean(listaPadrao) && modoCard === 'perguntar' && criarCard.checked;
     // Cria o card antes do bloco. Se o bloco falhar depois, tentar de novo usa o card já criado.
     async function garantirCard() {
       if (!querCard || cardId) return;

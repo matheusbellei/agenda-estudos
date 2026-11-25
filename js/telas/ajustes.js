@@ -227,37 +227,6 @@ export async function restaurarBackup(texto, { estado, store }) {
 export function iniciarAjustes({ estado, store }) {
   const secao = document.querySelector('#tela-ajustes');
 
-  // ---- bloco sem card: o que fazer ao salvar um bloco novo sem card associado
-  const modo = criar('select', { id: 'aj-auto-card-modo' },
-    ...[['perguntar', 'Perguntar ao salvar'], ['sempre', 'Criar sempre'], ['nunca', 'Nunca criar']]
-      .map(([v, t]) => criar('option', { value: v, texto: t })));
-  const listaAuto = criar('select', { id: 'aj-auto-card-lista' });
-  const salvarAuto = criar('button', { type: 'button', class: 'btn btn-principal', id: 'aj-auto-card-salvar', texto: 'Salvar' });
-  const erroAuto = criar('div', { class: 'erro', id: 'aj-auto-card-erro', role: 'alert' });
-  const cartaoAutoCard = criar('div', { class: 'cartao', id: 'aj-auto-card' },
-    criar('h2', { texto: 'Bloco sem card' }),
-    criar('p', { class: 'suave', texto: 'Ao salvar um bloco novo sem card, o app pode criar um card no Quadro para ele. Você continua podendo associar um card que já existe.' }),
-    criar('div', { class: 'linha-campos' },
-      criar('label', { class: 'campo' }, criar('span', { texto: 'Criar card' }), modo),
-      criar('label', { class: 'campo' }, criar('span', { texto: 'Lista do card criado' }), listaAuto)),
-    erroAuto, criar('div', { class: 'linha-botoes' }, salvarAuto));
-  function desenharAutoCard() {
-    const a = estado.ajustes();
-    const listas = [...estado.dados.lists].sort((x, y) => x.position - y.position);
-    listaAuto.replaceChildren(criar('option', { value: '', texto: 'Primeira lista ativa' }),
-      ...listas.map((l) => { const o = criar('option', { value: l.id }); o.textContent = l.name; return o; }));
-    modo.value = a.auto_card || 'perguntar';
-    listaAuto.value = listas.some((l) => l.id === a.auto_card_list_id) ? a.auto_card_list_id : '';
-  }
-  salvarAuto.addEventListener('click', async () => {
-    try {
-      await estado.alterar('settings', null, { auto_card: modo.value, auto_card_list_id: listaAuto.value || null });
-      erroAuto.textContent = '';
-    } catch (err) {
-      erroAuto.textContent = err.message || 'Não foi possível salvar.';
-    }
-  });
-
   // ---- esqueleto fixo da tela
 
   const inicio = criar('input', { id: 'aj-inicio', type: 'time' });
@@ -392,11 +361,10 @@ export function iniciarAjustes({ estado, store }) {
     cartaoRevisoes,
     cartaoModelos,
     cartaoFlash,
-    cartaoAutoCard,
     cartaoImportar,
     cartaoBackup,
   );
-  const abas = criar('div', { id: 'aj-abas', class: 'visao aj-abas', role: 'tablist' },
+  const abas = criar('div', { id: 'aj-abas', class: 'aj-abas', role: 'tablist' },
     ...[['geral', 'Geral'], ['notificacoes', 'Notificações']].map(([v, t]) => criar('button', { type: 'button', role: 'tab', 'data-aba-ajustes': v, texto: t })));
   let abaAtual = 'geral';
   function mostrarAba(nome) {
@@ -531,7 +499,6 @@ export function iniciarAjustes({ estado, store }) {
 
   function desenhar() {
     desenharHorarios();
-    desenharAutoCard();
   }
 
   registrarTela('ajustes', { mostrar: () => { desenhar(); mostrarAba(abaAtual); } });

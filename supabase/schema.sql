@@ -575,3 +575,13 @@ create policy "grupo de cima é meu" on public.baralhos as restrictive for all t
 
 -- Limites definidos no grupo (migracao-2026-11-grupos-limites.sql).
 alter table public.baralhos add column if not exists limites_do_grupo boolean not null default false;
+
+-- Acesso da função "lembretes" (chave de serviço) — migracao-2026-11-servico.sql.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;
+-- Tabelas criadas daqui para frente também.
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public grant usage, select on sequences to service_role;
+alter default privileges in schema public grant execute on functions to service_role;

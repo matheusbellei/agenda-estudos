@@ -120,3 +120,12 @@ class TestFlashAjustes(UITest):
         p.wait_for_function("window.__memdb.settings.length === 1 && window.__memdb.settings[0].flash_card_novos_dia === 10")
         s = self.db()['settings'][0]
         self.assertEqual((s['flash_card_revisoes_dia'], float(s['flash_card_fator'])), (100, 2.0))
+
+
+class TestAbasDoAjuste(UITest):
+    def test_abas_com_o_visual_do_app(self):
+        self.login(); self.ir('ajustes'); p = self.page
+        fundo = p.evaluate("getComputedStyle(document.querySelector('#aj-abas')).backgroundColor")
+        self.assertNotIn(fundo, ('rgba(0, 0, 0, 0)', 'transparent'))
+        borda = p.evaluate("getComputedStyle(document.querySelector('#aj-abas [data-aba-ajustes=\"geral\"]')).borderTopStyle")
+        self.assertEqual(borda, 'none')

@@ -501,3 +501,12 @@ test('migração dos limites do grupo roda 2× sobre o schema dos ajustes', () =
   assert.equal(psql(VELHO, `select column_default from information_schema.columns where table_name = 'baralhos' and column_name = 'limites_do_grupo'`), 'false');
   psql('postgres', `drop database ${VELHO}`);
 });
+
+test('a função dos avisos (service_role) lê e grava as tabelas que usa', () => {
+  const comoServico = (sql) => psql(DB, `begin; set local role service_role; ${sql}; commit;`);
+  for (const t of ['push_subscriptions', 'notificacoes_enviadas', 'adiamentos', 'settings', 'blocks', 'commitments', 'cards', 'items',
+    'focos', 'revisoes', 'baralhos', 'flashcards', 'flash_lados', 'lists', 'categories', 'occurrences']) {
+    comoServico(`select count(*) from public.${t}`);
+  }
+  comoServico(`delete from public.notificacoes_enviadas where false`);
+});

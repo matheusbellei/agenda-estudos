@@ -15,9 +15,10 @@ class TestBlocoUnico(CalendarioBase):
         p.click('#bloco-salvar')
         self.assertEqual(p.inner_text('#bloco-erro'), 'Dê um título ao bloco.')
 
-    def test_estudo_sem_card_salva_solto(self):
+    def test_ajuste_antigo_nunca_ainda_pergunta(self):
+        # A escolha "Bloco sem card" saiu das Configurações: o bloco sempre pergunta.
         self.novo_bloco(settings=[{'auto_card': 'nunca'}], lists=LISTAS); p = self.page
-        self.assertTrue(p.is_hidden('#bloco-criar-card'))
+        self.assertTrue(p.is_visible('#bloco-criar-card'))
         p.fill('#bloco-titulo', 'Vocabulário em Espanhol')
         p.click('#bloco-salvar')
         p.wait_for_function("window.__memdb.blocks.length === 1")
@@ -50,18 +51,19 @@ class TestBlocoUnico(CalendarioBase):
         b = self.db()['blocks'][0]
         self.assertEqual((b['kind'], b['card_id'], b['title']), ('study', card['id'], 'Vocabulário em Espanhol'))
 
-    def test_sempre_cria_sem_perguntar_na_lista_dos_ajustes(self):
+    def test_ajuste_antigo_sempre_nao_cria_sozinho(self):
         self.novo_bloco(lists=LISTAS, settings=[{'auto_card': 'sempre', 'auto_card_list_id': 'L2'}]); p = self.page
-        self.assertTrue(p.is_hidden('#bloco-criar-card'))
+        self.assertTrue(p.is_visible('#bloco-criar-card'))
+        p.check('#bloco-criar-card')
+        self.assertEqual(p.input_value('#bloco-novo-card-lista'), 'L1')  # a lista ativa
+        p.uncheck('#bloco-criar-card')
         p.fill('#bloco-titulo', 'Leitura')
         p.click('#bloco-salvar')
         p.wait_for_function("window.__memdb.blocks.length === 1")
-        card = self.db()['cards'][0]
-        self.assertEqual((card['title'], card['list_id']), ('Leitura', 'L2'))
-        self.assertEqual(self.db()['blocks'][0]['card_id'], card['id'])
+        self.assertEqual(self.db()['cards'], [])
 
     def test_sem_listas_nao_oferece_nem_cria_card(self):
-        self.novo_bloco(settings=[{'auto_card': 'sempre'}]); p = self.page
+        self.novo_bloco(); p = self.page
         self.assertTrue(p.is_hidden('#bloco-criar-card'))
         p.fill('#bloco-titulo', 'Leitura'); p.click('#bloco-salvar')
         p.wait_for_function("window.__memdb.blocks.length === 1")
@@ -96,12 +98,8 @@ class TestBlocoUnico(CalendarioBase):
         p.wait_for_function("window.__memdb.commitments.length === 1")
         self.assertEqual(self.db()['commitments'][0]['card_id'], 'c1')
 
-    def test_configuracoes_estudo_sem_card_grava_settings(self):
+    def test_configuracoes_sem_a_secao_bloco_sem_card(self):
         self.preparar(lists=LISTAS); p = self.page
         self.ir('ajustes')
-        self.assertEqual(p.input_value('#aj-auto-card-modo'), 'perguntar')
-        p.select_option('#aj-auto-card-modo', 'sempre')
-        p.select_option('#aj-auto-card-lista', 'L2')
-        p.click('#aj-auto-card-salvar')
-        p.wait_for_function("window.__memdb.settings.length === 1 && window.__memdb.settings[0].auto_card === 'sempre'")
-        self.assertEqual(self.db()['settings'][0]['auto_card_list_id'], 'L2')
+        self.assertEqual(p.locator('#aj-auto-card-modo').count(), 0)
+        self.assertNotIn('Bloco sem card', p.inner_text('#tela-ajustes'))
