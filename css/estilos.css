@@ -693,3 +693,4 @@ body.escolhendo-horario .faixa .livre, body.escolhendo-horario .linha-do-tempo .
 .baralho-filhos[hidden] { display: none; }
 .grupo-nome .ti { color: var(--texto-suave); }
 .faixa, .fatia { scroll-margin-top: 130px; } /* abrir perto da hora atual sem esconder sob o cabeçalho */
+.aviso-sobreposto { margin: 4px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--creme); border: 1px solid var(--linha); color: var(--texto-suave); font-size: .9rem; }

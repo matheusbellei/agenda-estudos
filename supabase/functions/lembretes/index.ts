@@ -161,6 +161,24 @@ function flashVence({ instanteMs, fuso, ajustes, enviadas = /* @__PURE__ */ new 
   return { chave, data };
 }
 
+// js/regras/baralhos.js
+function paiValido(baralhos, b) {
+  const pai = b.pai_id && baralhos.find((x) => x.id === b.pai_id);
+  return pai && pai.e_grupo && pai.id !== b.id ? pai.id : null;
+}
+function grupoQueDefineLimites(baralhos, baralhoId) {
+  let atual = baralhos.find((b) => b.id === baralhoId);
+  let achado = null;
+  const vistos = /* @__PURE__ */ new Set();
+  while (atual && !vistos.has(atual.id)) {
+    vistos.add(atual.id);
+    const paiId = paiValido(baralhos, atual);
+    atual = paiId ? baralhos.find((b) => b.id === paiId) : null;
+    if (atual?.limites_do_grupo) achado = atual;
+  }
+  return achado;
+}
+
 // js/regras/flash.js
 function ladosDoTipo(tipo) {
   return tipo === "invertido" ? ["frente", "verso"] : ["frente"];
@@ -168,7 +186,8 @@ function ladosDoTipo(tipo) {
 function limitesDe(flashcard, { baralhos, ajustes }) {
   if (flashcard.baralho_id) {
     const b = baralhos.find((x) => x.id === flashcard.baralho_id) || {};
-    return { novos: b.novos_dia ?? 20, revisoes: b.revisoes_dia ?? 200, fator: Number(b.fator ?? 2.5) };
+    const g = grupoQueDefineLimites(baralhos, flashcard.baralho_id) || b;
+    return { novos: g.novos_dia ?? 20, revisoes: g.revisoes_dia ?? 200, fator: Number(b.fator ?? 2.5) };
   }
   return { novos: ajustes.flash_card_novos_dia, revisoes: ajustes.flash_card_revisoes_dia, fator: Number(ajustes.flash_card_fator) };
 }

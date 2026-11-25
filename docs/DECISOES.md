@@ -135,3 +135,9 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Agenda = Semana. O dia abre tocando no nome do dia e tem o botão "Semana" para voltar. Padrão do dia: meia-noite a meia-noite (fim 00:00 = 24:00).
 - Cumprido e Não feito gravam o estado na hora e a folha fica aberta; "Por que não fez?" (`blocks.motivo`), "O que fez no lugar?" e o Diário gravam sozinhos ao sair do campo e ao fechar a folha.
 - Grupos de baralhos: baralho com `e_grupo` e `pai_id` (vários níveis). Estudar o grupo junta os baralhos de dentro, cada um com os próprios limites, revisões antes dos novos. Excluir um grupo sobe o que estava dentro. Aberto/fechado fica no aparelho.
+
+## Limites no grupo de baralhos (24/11/2026)
+
+- Um grupo pode definir novos e revisões por dia (`baralhos.limites_do_grupo` + os `novos_dia`/`revisoes_dia` do grupo). Valem para cada baralho de dentro, em qualquer nível; com grupos dentro de grupos, manda o grupo mais de cima que tiver limites. O fator é sempre do baralho.
+- No baralho sobreposto os dois campos ficam travados, com o aviso "Definido pelo grupo …"; os números próprios do baralho ficam guardados e voltam a valer se o grupo desligar os limites ou o baralho sair dele.
+- Novo baralho já escolhe o grupo na criação.

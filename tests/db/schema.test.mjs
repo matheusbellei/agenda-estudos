@@ -488,3 +488,16 @@ test('grupos de baralhos: baralho dentro de grupo meu; não dentro de baralho co
   as(A, `delete from baralhos where id = '${g}'`);
   assert.equal(psql(DB, `select coalesce(pai_id::text, 'nulo') from baralhos where id = '${d}'`), 'nulo');
 });
+
+test('migração dos limites do grupo roda 2× sobre o schema dos ajustes', () => {
+  const VELHO = 'estudos_migracao_limites';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', 'c5e1e06:supabase/schema.sql'], { encoding: 'utf8' });
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psqlFile(VELHO, 'supabase/migracao-2026-11-grupos-limites.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-grupos-limites.sql');
+  assert.equal(psql(VELHO, `select column_default from information_schema.columns where table_name = 'baralhos' and column_name = 'limites_do_grupo'`), 'false');
+  psql('postgres', `drop database ${VELHO}`);
+});

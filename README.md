@@ -102,6 +102,14 @@ Nesta mesma atualização, o card ganhou os campos **Tag** e **Subtags** (listas
 
 O que muda: uma subtag por card e a tag do card já vem no bloco; editor com negrito, itálico e lista nos flashcards; "Estudar" só aparece com flashcard; revisões com texto claro; menu ⋯ do card com Excluir; Arquivo no estilo do Trello (com grupos por data); Agenda só com a Semana; Cumprido e Não feito marcam na hora, com "Por que não fez?"; e grupos de baralhos.
 
+### Limites no grupo de baralhos (24/11/2026)
+
+**Antes:** a atualização dos ajustes de 24/11 (seção acima). Depois:
+
+1. No **SQL Editor**, rode `supabase/migracao-2026-11-grupos-limites.sql` (pode rodar de novo sem problema).
+2. Publique o código novo no GitHub.
+3. Atualize a função dos avisos: em **Edge Functions › lembretes**, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy** (o aviso "flashcards para hoje" passa a contar com os limites do grupo).
+
 ## Notificações (lembretes com o app fechado)
 
 O Supabase roda, a cada minuto, a função `lembretes`, que confere a agenda e manda os avisos para os aparelhos onde você ativou. Faça isto uma vez, nesta ordem:

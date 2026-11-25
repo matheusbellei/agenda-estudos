@@ -572,3 +572,6 @@ drop policy if exists "grupo de cima é meu" on public.baralhos;
 create policy "grupo de cima é meu" on public.baralhos as restrictive for all to authenticated
   using (true)
   with check (pai_id is null or public.e_meu_grupo_de_baralhos(pai_id));
+
+-- Limites definidos no grupo (migracao-2026-11-grupos-limites.sql).
+alter table public.baralhos add column if not exists limites_do_grupo boolean not null default false;

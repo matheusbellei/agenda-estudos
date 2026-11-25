@@ -1,6 +1,6 @@
 // Flashcards: agendamento de 2 botões (Errei/Acertei), fila da sessão com limites do dia, "para hoje",
 // lacunas e resposta digitada. Regra pura: usada pelas telas e pela função "lembretes".
-import { baralhosDentro } from './baralhos.js';
+import { baralhosDentro, grupoQueDefineLimites } from './baralhos.js';
 import { somaDias, inicioDaSemana } from './datas.js';
 import { semMarcacao } from './marcacao.js';
 
@@ -22,7 +22,9 @@ export function responder(lado, acertou, { hoje, fator }) {
 export function limitesDe(flashcard, { baralhos, ajustes }) {
   if (flashcard.baralho_id) {
     const b = baralhos.find((x) => x.id === flashcard.baralho_id) || {};
-    return { novos: b.novos_dia ?? 20, revisoes: b.revisoes_dia ?? 200, fator: Number(b.fator ?? 2.5) };
+    // Grupo com limites próprios sobrepõe novos e revisões (o fator é sempre do baralho).
+    const g = grupoQueDefineLimites(baralhos, flashcard.baralho_id) || b;
+    return { novos: g.novos_dia ?? 20, revisoes: g.revisoes_dia ?? 200, fator: Number(b.fator ?? 2.5) };
   }
   return { novos: ajustes.flash_card_novos_dia, revisoes: ajustes.flash_card_revisoes_dia, fator: Number(ajustes.flash_card_fator) };
 }

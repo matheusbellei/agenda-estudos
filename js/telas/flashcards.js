@@ -8,7 +8,7 @@ import { marcacaoParaHtml, limparSaidaDoEditor } from '../regras/marcacao.js';
 import { criarEditor } from '../editor.js';
 import { paraHoje, validarFlashcard, pergunta, resposta } from '../regras/flash.js';
 import { normalizar } from '../regras/busca.js';
-import { arvoreDeBaralhos, contagemDoGrupo, destinosPossiveis, filhosAoExcluirGrupo } from '../regras/baralhos.js';
+import { arvoreDeBaralhos, contagemDoGrupo, destinosPossiveis, filhosAoExcluirGrupo, grupoQueDefineLimites } from '../regras/baralhos.js';
 
 const TIPOS = [['basico', 'Frente e verso'], ['invertido', 'Frente e verso + invertido'], ['lacuna', 'Lacuna'], ['digitar', 'Digitar a resposta']];
 const ROTULO_VERSO = { basico: 'Verso', invertido: 'Verso', lacuna: 'Observação (opcional)', digitar: 'Resposta exata' };
@@ -203,6 +203,22 @@ export function iniciarFlashcards({ estado }) {
     const pai = criar('select', { id: 'grupo-pai' }, criar('option', { value: '', texto: 'Nenhum' }),
       ...destinosPossiveis(estado.dados.baralhos, grupo?.id || '__novo__').map((g) => criar('option', { value: g.id, texto: g.nome })));
     pai.value = grupo?.pai_id || '';
+    // Limites para os baralhos de dentro (sobrepõem os de cada baralho; o grupo mais de cima com limites manda).
+    const limites = criar('input', { type: 'checkbox', id: 'grupo-limites' });
+    limites.checked = !!grupo?.limites_do_grupo;
+    const numero = (id, valor, max) => { const i = criar('input', { id, type: 'number', min: '0', max: String(max), step: '1', inputmode: 'numeric' }); i.value = String(valor); return i; };
+    const novosG = numero('grupo-novos', grupo?.novos_dia ?? 20, 999);
+    const revisoesG = numero('grupo-revisoes', grupo?.revisoes_dia ?? 200, 9999);
+    const camposLimites = criar('div', { class: 'linha-campos' },
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Novos por dia' }), novosG),
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Revisões por dia' }), revisoesG));
+    // Um grupo de cima com limites manda: avisa que estes não valem.
+    const deCima = grupo && grupoQueDefineLimites(estado.dados.baralhos, grupo.id);
+    const avisoDeCima = criar('p', { class: 'aviso-sobreposto', id: 'grupo-sobreposto', hidden: '' });
+    if (deCima) { avisoDeCima.hidden = false; avisoDeCima.textContent = `Os limites do grupo ${deCima.nome} valem no lugar destes (o grupo mais de cima manda).`; }
+    const mostrarLimites = () => { camposLimites.hidden = !limites.checked; };
+    limites.addEventListener('change', mostrarLimites);
+    mostrarLimites();
     const erro = criar('div', { class: 'erro', id: 'grupo-erro', role: 'alert' });
     const salvar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'grupo-salvar', texto: grupo ? 'Salvar' : 'Criar grupo' });
     const excluir = criar('button', { type: 'button', class: 'btn perigo', id: 'grupo-excluir', texto: 'Excluir grupo' });
@@ -210,6 +226,9 @@ export function iniciarFlashcards({ estado }) {
     const { fechar } = abrirJanela('grupo-janela', grupo ? 'Grupo de baralhos' : 'Novo grupo',
       criar('label', { class: 'campo' }, criar('span', { texto: 'Nome' }), nome),
       criar('label', { class: 'campo' }, criar('span', { texto: 'Dentro do grupo' }), pai),
+      criar('label', { class: 'campo-check' }, limites, criar('span', { texto: 'Definir limites para os baralhos deste grupo' })),
+      camposLimites, avisoDeCima,
+      criar('p', { class: 'suave', texto: 'Valem para cada baralho de dentro, no lugar dos limites dele.' }),
       erro, criar('div', { class: 'linha-botoes' }, salvar, excluir));
     nome.focus();
     salvar.addEventListener('click', async () => {
@@ -217,7 +236,12 @@ export function iniciarFlashcards({ estado }) {
       if (!texto) { erro.textContent = 'Dê um nome ao grupo.'; return; }
       if (estado.dados.baralhos.some((b) => b.id !== grupo?.id && b.nome.trim().toLowerCase() === texto.toLowerCase())) { erro.textContent = 'Já existe um baralho ou grupo com esse nome.'; return; }
       try {
-        const dados = { nome: texto, pai_id: pai.value || null };
+        // Campo vazio não vale como 0.
+        const n = novosG.value.trim() === '' ? NaN : Number(novosG.value); const r = revisoesG.value.trim() === '' ? NaN : Number(revisoesG.value);
+        if (limites.checked && (!Number.isInteger(n) || n < 0 || n > 999 || !Number.isInteger(r) || r < 0 || r > 9999)) {
+          erro.textContent = 'Use de 0 a 999 novos e de 0 a 9999 revisões por dia.'; return;
+        }
+        const dados = { nome: texto, pai_id: pai.value || null, limites_do_grupo: limites.checked, ...(limites.checked ? { novos_dia: n, revisoes_dia: r } : {}) };
         if (grupo) await estado.alterar('baralhos', grupo.id, dados);
         else await estado.criar('baralhos', { ...dados, e_grupo: true });
         fechar();
@@ -239,15 +263,18 @@ export function iniciarFlashcards({ estado }) {
   function criarBaralho() {
     const nome = criar('input', { id: 'baralho-novo-nome', type: 'text', maxlength: '60', placeholder: 'Vocabulário de espanhol', autocomplete: 'off' });
     const erro = criar('div', { class: 'erro', role: 'alert' });
+    const pai = criar('select', { id: 'baralho-novo-pai' }, criar('option', { value: '', texto: 'Nenhum' }),
+      ...destinosPossiveis(estado.dados.baralhos, '__novo__').map((g) => criar('option', { value: g.id, texto: g.nome })));
     const criarBtn = criar('button', { type: 'button', class: 'btn btn-principal', id: 'baralho-criar', texto: 'Criar' });
-    const { fechar } = abrirJanela('baralho-janela', 'Novo baralho', criar('label', { class: 'campo' }, criar('span', { texto: 'Nome' }), nome), erro, criar('div', { class: 'linha-botoes' }, criarBtn));
+    const { fechar } = abrirJanela('baralho-janela', 'Novo baralho', criar('label', { class: 'campo' }, criar('span', { texto: 'Nome' }), nome),
+      criar('label', { class: 'campo' }, criar('span', { texto: 'Dentro do grupo' }), pai), erro, criar('div', { class: 'linha-botoes' }, criarBtn));
     nome.focus();
     criarBtn.addEventListener('click', async () => {
       const texto = nome.value.trim();
       if (!texto) { erro.textContent = 'Dê um nome ao baralho.'; return; }
       if (estado.dados.baralhos.some((b) => b.nome.trim().toLowerCase() === texto.toLowerCase())) { erro.textContent = 'Já existe um baralho com esse nome.'; return; }
       try {
-        const b = await estado.criar('baralhos', { nome: texto });
+        const b = await estado.criar('baralhos', { nome: texto, pai_id: pai.value || null });
         aberto = b.id; fechar(); desenhar();
       } catch (err) {
         erro.textContent = /registro igual/.test(err.message || '') ? 'Já existe um baralho com esse nome.' : err.message || 'Não foi possível criar.';
@@ -275,6 +302,20 @@ export function iniciarFlashcards({ estado }) {
     const pai = criar('select', { id: 'baralho-pai' }, criar('option', { value: '', texto: 'Nenhum' }),
       ...destinosPossiveis(estado.dados.baralhos, b.id).map((g) => criar('option', { value: g.id, texto: g.nome })));
     pai.value = b.pai_id || '';
+    // Grupo com limites próprios: os campos ficam travados com o aviso de onde vêm os números.
+    // Recalculado também ao trocar "Dentro do grupo" (antes de salvar), com o grupo escolhido.
+    const sobreposto = criar('p', { class: 'aviso-sobreposto', id: 'baralho-sobreposto', hidden: '' });
+    novos.setAttribute('aria-describedby', 'baralho-sobreposto');
+    revisoes.setAttribute('aria-describedby', 'baralho-sobreposto');
+    const travar = () => {
+      const lista = estado.dados.baralhos.map((x) => (x.id === b.id ? { ...x, pai_id: pai.value || null } : x));
+      const sobre = grupoQueDefineLimites(lista, b.id);
+      novos.disabled = !!sobre; revisoes.disabled = !!sobre;
+      sobreposto.hidden = !sobre;
+      sobreposto.textContent = sobre ? `Definido pelo grupo ${sobre.nome}: ${sobre.novos_dia} novos e ${sobre.revisoes_dia} revisões por dia. Para mudar, abra o grupo.` : '';
+    };
+    pai.addEventListener('change', travar);
+    travar();
     const erro = criar('div', { class: 'erro', id: 'baralho-erro', role: 'alert' });
     // O aviso entra vazio e o texto vem depois: assim o leitor de tela anuncia "Ajustes salvos."
     const salvo = criar('span', { class: 'baralho-salvo', id: 'baralho-salvo', role: 'status' });
@@ -283,7 +324,8 @@ export function iniciarFlashcards({ estado }) {
     const salvar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'baralho-salvar', texto: 'Salvar' });
     const excluir = criar('button', { type: 'button', class: 'btn perigo', id: 'baralho-excluir', texto: 'Excluir baralho' });
     salvar.addEventListener('click', async () => {
-      const f = Number(fator.value); const n = Number(novos.value); const r = Number(revisoes.value); const t = nome.value.trim();
+      const vazioNaN = (i) => (i.value.trim() === '' ? NaN : Number(i.value));
+      const f = vazioNaN(fator); const n = vazioNaN(novos); const r = vazioNaN(revisoes); const t = nome.value.trim();
       if (!t) { erro.textContent = 'Dê um nome ao baralho.'; return; }
       if (!(f >= 1.3 && f <= 5)) { erro.textContent = 'Use um fator de 1,3 a 5.'; return; }
       if (!Number.isInteger(n) || n < 0 || n > 999 || !Number.isInteger(r) || r < 0 || r > 9999) { erro.textContent = 'Use de 0 a 999 novos e de 0 a 9999 revisões por dia.'; return; }
@@ -326,6 +368,7 @@ export function iniciarFlashcards({ estado }) {
           criar('label', { class: 'campo' }, criar('span', { texto: 'Fator (acerto multiplica o intervalo)' }), fator),
           criar('label', { class: 'campo' }, criar('span', { texto: 'Novos por dia' }), novos),
           criar('label', { class: 'campo' }, criar('span', { texto: 'Revisões por dia' }), revisoes)),
+        sobreposto,
         erro, criar('div', { class: 'linha-botoes' }, salvar, salvo, excluir))));
     ajustesAbertos = false;
     // Mexeu num campo depois de salvar: o aviso antigo sai.

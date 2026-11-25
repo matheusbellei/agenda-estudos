@@ -14,7 +14,7 @@
     blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, revisao_id: null, diario: '', motivo: '' }),
     occurrences: () => ({ instead_note: '' }),
     revisoes: () => ({ status: 'pendente', feita_em: null, criado_em: new Date().toISOString() }),
-    baralhos: () => ({ fator: 2.5, novos_dia: 20, revisoes_dia: 200, e_grupo: false, pai_id: null, criado_em: new Date().toISOString() }),
+    baralhos: () => ({ fator: 2.5, novos_dia: 20, revisoes_dia: 200, e_grupo: false, pai_id: null, limites_do_grupo: false, criado_em: new Date().toISOString() }),
     flashcards: () => ({ baralho_id: null, card_id: null, verso: '', criado_em: new Date().toISOString() }),
     flash_lados: () => ({ intervalo: 0, vence: null, errado_em: null, introduzido_em: null, revisado_em: null }),
     flash_dias: () => ({ revisados: 0, acertos: 0 }),

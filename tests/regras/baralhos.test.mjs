@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { arvoreDeBaralhos, baralhosDentro, destinosPossiveis, contagemDoGrupo, filhosAoExcluirGrupo, paisPrimeiro } from '../../js/regras/baralhos.js';
+import { arvoreDeBaralhos, baralhosDentro, destinosPossiveis, contagemDoGrupo, filhosAoExcluirGrupo, paisPrimeiro, grupoQueDefineLimites } from '../../js/regras/baralhos.js';
 
 // Idiomas (grupo) › Espanhol (grupo) › Verbos, Vocabulário ; Idiomas › Inglês ; Física (sem grupo)
 const B = [
@@ -51,4 +51,15 @@ test('paisPrimeiro: cada grupo vem antes do que está dentro dele (restauração
   const ordem = paisPrimeiro(embaralhado).map((b) => b.id);
   assert.equal(ordem.length, 6);
   for (const b of B) if (b.pai_id) assert.ok(ordem.indexOf(b.pai_id) < ordem.indexOf(b.id), b.id);
+});
+
+test('grupoQueDefineLimites: o grupo mais de cima com limites manda; sem nenhum, null', () => {
+  const com = B.map((b) => (b.id === 'id' ? { ...b, limites_do_grupo: true, novos_dia: 10, revisoes_dia: 100 }
+    : b.id === 'es' ? { ...b, limites_do_grupo: true, novos_dia: 3, revisoes_dia: 30 } : b));
+  assert.equal(grupoQueDefineLimites(com, 've').id, 'id');
+  assert.equal(grupoQueDefineLimites(com, 'in').id, 'id');
+  assert.equal(grupoQueDefineLimites(com, 'fi'), null);
+  const soEs = B.map((b) => (b.id === 'es' ? { ...b, limites_do_grupo: true } : b));
+  assert.equal(grupoQueDefineLimites(soEs, 've').id, 'es');
+  assert.equal(grupoQueDefineLimites(soEs, 'in'), null);
 });

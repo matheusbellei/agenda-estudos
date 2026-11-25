@@ -291,3 +291,70 @@ class TestGrupos(FlashBase):
         p.click('#grupo-excluir')
         p.wait_for_function("!window.__memdb.baralhos.some(b => b.id === 'E')")
         self.assertEqual(next(b for b in self.db()['baralhos'] if b['id'] == 'V')['pai_id'], 'G')
+
+
+class TestLimitesDoGrupo(FlashBase):
+    def test_novo_baralho_ja_escolhe_o_grupo(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True)]); p = self.page
+        self.ir('flashcards')
+        p.click('#flash-novo-baralho')
+        self.assertEqual(p.locator('#baralho-novo-pai option').all_inner_texts(), ['Nenhum', 'Idiomas'])
+        p.fill('#baralho-novo-nome', 'Verbos'); p.select_option('#baralho-novo-pai', 'G'); p.click('#baralho-criar')
+        p.wait_for_function("window.__memdb.baralhos.some(b => b.nome === 'Verbos' && b.pai_id === 'G')")
+
+    def test_limites_do_grupo_valem_e_travam_o_baralho(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True), BG('A', 'Alemão', 'G')],
+                    flashcards=[F(f'a{i}', f'p{i}', baralho_id='A') for i in range(1, 6)]); p = self.page
+        self.ir('flashcards')
+        self.assertIn('5 novos', p.inner_text('.baralho-item[data-baralho="A"] .baralho-contagem'))
+        p.click('.baralho-grupo[data-baralho="G"] > .baralho-grupo-linha .grupo-nome'); p.wait_for_selector('#grupo-janela')
+        self.assertFalse(p.is_visible('#grupo-novos'))
+        p.check('#grupo-limites'); p.fill('#grupo-novos', '2'); p.fill('#grupo-revisoes', '50'); p.click('#grupo-salvar')
+        p.wait_for_function("window.__memdb.baralhos.find(b => b.id === 'G').limites_do_grupo === true")
+        g = next(b for b in self.db()['baralhos'] if b['id'] == 'G')
+        self.assertEqual((g['novos_dia'], g['revisoes_dia']), (2, 50))
+        p.wait_for_selector('#grupo-janela', state='detached')
+        self.assertIn('2 novos', p.inner_text('.baralho-item[data-baralho="A"] .baralho-contagem'))
+        self.abrir_baralho('A')
+        p.click('.baralho-ajustes summary')
+        self.assertTrue(p.is_disabled('#baralho-novos')); self.assertTrue(p.is_disabled('#baralho-revisoes'))
+        self.assertIn('Definido pelo grupo Idiomas: 2 novos e 50 revisões por dia', p.inner_text('#baralho-sobreposto'))
+        # salvar o baralho não apaga os números próprios dele
+        p.fill('#baralho-fator', '3'); p.click('#baralho-salvar')
+        p.wait_for_function("Number(window.__memdb.baralhos.find(b => b.id === 'A').fator) === 3")
+        a = next(b for b in self.db()['baralhos'] if b['id'] == 'A')
+        self.assertEqual((a['novos_dia'], a['revisoes_dia']), (20, 200))
+
+    def test_baralho_sem_grupo_com_limites_nao_tem_aviso(self):
+        self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
+        p.click('.baralho-ajustes summary')
+        self.assertFalse(p.is_disabled('#baralho-novos'))
+        self.assertEqual(p.locator('#baralho-sobreposto:visible').count(), 0)
+
+    def test_campo_vazio_nao_vira_zero(self):
+        self.entrar(baralhos=[BG('G', 'Idiomas', grupo=True)]); p = self.page
+        self.ir('flashcards')
+        p.click('.baralho-grupo[data-baralho="G"] > .baralho-grupo-linha .grupo-nome'); p.wait_for_selector('#grupo-janela')
+        p.check('#grupo-limites'); p.fill('#grupo-novos', ''); p.click('#grupo-salvar')
+        self.assertIn('Use de 0 a 999', p.inner_text('#grupo-erro'))
+        self.assertFalse(next(b for b in self.db()['baralhos'] if b['id'] == 'G')['limites_do_grupo'])
+
+    def test_grupo_de_dentro_avisa_que_o_de_cima_manda(self):
+        g = dict(BG('G', 'Idiomas', grupo=True), limites_do_grupo=True, novos_dia=5)
+        self.entrar(baralhos=[g, BG('E', 'Espanhol', 'G', grupo=True)]); p = self.page
+        self.ir('flashcards')
+        p.click('.baralho-grupo[data-baralho="E"] > .baralho-grupo-linha .grupo-nome'); p.wait_for_selector('#grupo-janela')
+        self.assertIn('Os limites do grupo Idiomas valem no lugar destes', p.inner_text('#grupo-janela'))
+
+    def test_trocar_o_grupo_no_baralho_atualiza_a_trava_na_hora(self):
+        g = dict(BG('G', 'Idiomas', grupo=True), limites_do_grupo=True, novos_dia=5, revisoes_dia=50)
+        self.entrar(baralhos=[g, BG('A', 'Alemão')]); p = self.page
+        self.abrir_baralho('A'); p.click('.baralho-ajustes summary')
+        self.assertFalse(p.is_disabled('#baralho-novos'))
+        p.select_option('#baralho-pai', 'G')
+        self.assertTrue(p.is_disabled('#baralho-novos'))
+        self.assertIn('Definido pelo grupo Idiomas', p.inner_text('#baralho-sobreposto'))
+        self.assertEqual(p.get_attribute('#baralho-novos', 'aria-describedby'), 'baralho-sobreposto')
+        p.select_option('#baralho-pai', '')
+        self.assertFalse(p.is_disabled('#baralho-novos'))
+        self.assertFalse(p.is_visible('#baralho-sobreposto'))

@@ -149,3 +149,13 @@ test('filaDoGrupo: junta os baralhos de dentro (cada um com seus limites), revis
 test('confereDigitado: resposta com barra invertida é comparada como foi gravada', () => {
   assert.equal(confereDigitado('a\\.b', flash('d', { tipo: 'digitar', verso: 'a\\.b' })).acertou, true);
 });
+
+test('limitesDe: grupo com limites sobrepõe novos e revisões do baralho; o fator continua do baralho', () => {
+  const baralhos = [
+    { id: 'G', nome: 'G', e_grupo: true, pai_id: null, limites_do_grupo: true, novos_dia: 4, revisoes_dia: 40 },
+    { id: 'B', nome: 'B', e_grupo: false, pai_id: 'G', novos_dia: 20, revisoes_dia: 200, fator: 3 },
+  ];
+  assert.deepEqual(limitesDe(flash('x'), { baralhos, ajustes: AJ }), { novos: 4, revisoes: 40, fator: 3 });
+  baralhos[0].limites_do_grupo = false;
+  assert.deepEqual(limitesDe(flash('x'), { baralhos, ajustes: AJ }), { novos: 20, revisoes: 200, fator: 3 });
+});

@@ -78,3 +78,18 @@ export function paisPrimeiro(baralhos) {
   }
   return saida;
 }
+
+// Grupo cujos limites (novos e revisões por dia) valem para o baralho: o mais de cima, entre os grupos acima dele
+// que têm "limites para os baralhos de dentro" ligados. Sem nenhum: null (vale o limite do próprio baralho).
+export function grupoQueDefineLimites(baralhos, baralhoId) {
+  let atual = baralhos.find((b) => b.id === baralhoId);
+  let achado = null;
+  const vistos = new Set();
+  while (atual && !vistos.has(atual.id)) {
+    vistos.add(atual.id);
+    const paiId = paiValido(baralhos, atual);
+    atual = paiId ? baralhos.find((b) => b.id === paiId) : null;
+    if (atual?.limites_do_grupo) achado = atual;
+  }
+  return achado;
+}
