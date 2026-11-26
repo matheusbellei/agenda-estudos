@@ -554,9 +554,16 @@ body.escolhendo-horario .faixa .livre, body.escolhendo-horario .linha-do-tempo .
 .aj-abas button:focus-visible { outline: 2px solid var(--caramelo); outline-offset: 1px; }
 @media (max-width: 600px) { .aj-abas { display: grid; width: 100%; } }
 .aj-painel { display: grid; gap: 12px; }
-.notif-estado { font-weight: 500; margin: 4px 0 8px; }
-.notif-estado[data-estado="ativado"] { color: var(--cumprido); }
-.notif-estado[data-estado="bloqueado"], .notif-estado[data-estado="sem-chave"] { color: var(--nao-feito); }
+/* Situação deste aparelho: quadro com sino, frase e botões (como no controle financeiro) */
+.notif-status { background: var(--creme); border-radius: 10px; padding: 12px 14px; margin: 10px 0; display: grid; gap: 8px; }
+.notif-status .linha-botoes { margin: 0; }
+.notif-status-linha { display: flex; align-items: center; gap: 8px; margin: 0; }
+.notif-status-linha .ti { font-size: 1.15rem; color: var(--texto-suave); }
+.notif-status[data-estado="ativado"] .notif-status-linha .ti { color: var(--cumprido-texto); }
+.notif-estado { font-weight: 600; }
+.notif-estado[data-estado="bloqueado"], .notif-estado[data-estado="sem-chave"] { color: var(--nao-feito-texto); font-weight: 500; }
+.notif-mais { margin-top: 8px; border-top: 1px solid var(--linha); padding-top: 8px; }
+.notif-mais > summary { cursor: pointer; color: var(--texto-suave); font-weight: 500; padding: 4px 0; }
 .notif-aparelhos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .notif-aparelhos li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--linha); }
 .notif-sub { padding-left: 30px; margin: -2px 0 8px; }
@@ -698,3 +705,19 @@ body.escolhendo-horario .faixa .livre, body.escolhendo-horario .linha-do-tempo .
 .grupo-nome .ti { color: var(--texto-suave); }
 .faixa, .fatia { scroll-margin-top: 130px; } /* abrir perto da hora atual sem esconder sob o cabeçalho */
 .aviso-sobreposto { margin: 4px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--creme); border: 1px solid var(--linha); color: var(--texto-suave); font-size: .9rem; }
+/* Verificar notificações: uma linha por item, com ícone de certo/errado */
+.notif-diagnostico { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.notif-diagnostico li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
+.notif-diagnostico li .ti { margin-top: 2px; flex: none; }
+.notif-diagnostico li[data-ok="sim"] .ti { color: var(--cumprido-texto); }
+.notif-diagnostico li[data-ok="nao"] .ti { color: var(--nao-feito); }
+.notif-diagnostico li[data-ok="aviso"] .ti { color: var(--texto-suave); }
+/* Botões de escolha em pílulas (tema, dia da revisão), como no controle financeiro */
+.chips-escolha { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.chips-escolha button { display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 999px; padding: 7px 14px; min-height: 36px;
+  background: var(--latte); color: var(--espresso); font-weight: 500; cursor: pointer; }
+.chips-escolha button[aria-pressed="true"] { background: var(--mocha); color: var(--espuma); }
+.chips-escolha button:focus-visible { outline: 2px solid var(--caramelo); outline-offset: 2px; }
+/* Caixas de marcar na cor do app e ajuda logo abaixo do campo com um respiro */
+input[type="checkbox"] { accent-color: var(--mocha); }
+#tela-ajustes .campo + p.suave { margin-top: 6px; }

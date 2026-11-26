@@ -33,18 +33,23 @@ const TEXTO_ESTADO = {
   'sem-suporte': 'Este navegador não recebe notificações do app. No celular, instale o app pelo Chrome (menu ⋮ → Instalar app) e abra por ele.',
   'sem-chave': 'Falta a chave pública das notificações: preencha VAPID_PUBLIC_KEY no js/config.js (passo a passo no README).',
   bloqueado: 'As notificações deste site estão bloqueadas no navegador. Libere em Configurações do site → Notificações e volte aqui.',
-  ativado: 'Ativado neste aparelho.',
-  desativado: 'Desativado neste aparelho.',
+  ativado: 'Este aparelho recebe os avisos.',
+  desativado: 'Este aparelho não recebe os avisos.',
 };
 
 export function montarPainelNotificacoes({ estado, store }) {
-  const estadoTexto = criar('p', { id: 'notif-aparelho-estado', class: 'notif-estado' });
-  const ativar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'notif-ativar', texto: 'Ativar neste aparelho' });
-  const desativar = criar('button', { type: 'button', class: 'btn', id: 'notif-desativar', texto: 'Desativar neste aparelho' });
+  // Quadro de situação deste aparelho (como no controle financeiro): sino, frase e os botões.
+  const estadoTexto = criar('strong', { id: 'notif-aparelho-estado', class: 'notif-estado' });
+  const sino = criar('i', { class: 'ti ti-bell-off', 'aria-hidden': 'true' });
+  const ativar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'notif-ativar', texto: 'Receber neste aparelho' });
+  const desativar = criar('button', { type: 'button', class: 'btn', id: 'notif-desativar', texto: 'Parar de receber neste aparelho' });
   const teste = criar('button', { type: 'button', class: 'btn', id: 'notif-teste', texto: 'Enviar teste' });
   const erro = criar('div', { class: 'erro', id: 'notif-erro', role: 'alert' });
   const msg = criar('div', { class: 'suave', id: 'notif-msg', role: 'status' });
   const lista = criar('ul', { id: 'notif-aparelhos', class: 'notif-aparelhos' });
+  const verificar = criar('button', { type: 'button', class: 'btn', id: 'notif-verificar' },
+    criar('i', { class: 'ti ti-stethoscope', 'aria-hidden': 'true' }), ' Verificar se está tudo funcionando');
+  const diagnosticoEl = criar('ul', { id: 'notif-diagnostico', class: 'notif-diagnostico', 'aria-live': 'polite' });
 
   const antes = criar('select', { id: 'notif-antes' }, ...OPCOES_LEMBRETE.map(([v, t]) => criar('option', { value: String(v), texto: t })));
   const resumo = caixa('notif-resumo', 'Resumo da manhã');
@@ -59,10 +64,17 @@ export function montarPainelNotificacoes({ estado, store }) {
   const flashHora = hora('notif-flash-hora');
   const camposFlash = criar('div', { class: 'linha-campos' }, campo('Horário', flashHora));
   const revisao = caixa('notif-revisao', 'Revisão da semana');
-  const revisaoDia = criar('select', { id: 'notif-revisao-dia' },
-    ...['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((t, i) => criar('option', { value: String(i + 1), texto: t })));
+  // Dia da revisão em botões Seg a Dom (um só escolhido).
+  let revisaoDiaValor = 7;
+  const revisaoDia = criar('div', { id: 'notif-revisao-dia', class: 'chips-escolha', role: 'group', 'aria-label': 'Dia da revisão' },
+    ...['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((t, i) => {
+      const b = criar('button', { type: 'button', 'data-dia': String(i + 1), texto: t });
+      b.addEventListener('click', () => { revisaoDiaValor = i + 1; marcarDia(); });
+      return b;
+    }));
+  const marcarDia = () => revisaoDia.querySelectorAll('[data-dia]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.dia) === revisaoDiaValor)));
   const revisaoHora = hora('notif-revisao-hora');
-  const camposRevisao = criar('div', { class: 'linha-campos' }, campo('Dia', revisaoDia), campo('Horário', revisaoHora));
+  const camposRevisao = criar('div', {}, criar('div', { class: 'campo' }, criar('span', { texto: 'Dia' }), revisaoDia), campo('Horário', revisaoHora));
   const revisaoNoSilencio = criar('p', { class: 'erro', id: 'notif-revisao-no-silencio', hidden: '',
     texto: 'Este horário cai no horário de silêncio: o aviso da revisão não vai chegar. Escolha outro horário ou mude o silêncio.' });
   const salvar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'notif-salvar', texto: 'Salvar' });
@@ -71,10 +83,18 @@ export function montarPainelNotificacoes({ estado, store }) {
 
   const el = criar('div', { id: 'aj-notificacoes', class: 'aj-painel' },
     criar('div', { class: 'cartao', id: 'notif-este' },
-      criar('h2', { texto: 'Este aparelho' }),
+      criar('h2', { texto: 'Avisos neste aparelho' }),
       criar('p', { class: 'suave', texto: 'Ative em cada aparelho onde quer receber os avisos (celular e computador). Funciona com o app fechado.' }),
-      estadoTexto, criar('div', { class: 'linha-botoes' }, ativar, desativar, teste), erro, msg,
-      criar('h3', { class: 'sub', texto: 'Aparelhos ativos' }), lista),
+      criar('div', { class: 'notif-status', id: 'notif-status' },
+        criar('p', { class: 'notif-status-linha' }, sino, estadoTexto),
+        criar('div', { class: 'linha-botoes' }, ativar, desativar, teste)),
+      erro, msg,
+      // Aparelhos e verificação ficam recolhidos: abre quando precisar.
+      criar('details', { class: 'notif-mais', id: 'notif-mais' }, criar('summary', { texto: 'Aparelhos e verificação' }),
+        criar('h3', { class: 'sub', texto: 'Aparelhos ativos' }), lista,
+        criar('h3', { class: 'sub', texto: 'Funcionamento' }),
+        criar('p', { class: 'suave', texto: 'Confere tudo o que os avisos precisam para chegar com o app fechado e diz o que fazer se algo estiver errado.' }),
+        criar('div', { class: 'linha-botoes' }, verificar), diagnosticoEl)),
     criar('div', { class: 'cartao', id: 'notif-prefs' },
       criar('h2', { texto: 'O que avisar' }),
       campo('Lembrete antes do bloco (padrão)', antes),
@@ -102,7 +122,7 @@ export function montarPainelNotificacoes({ estado, store }) {
     resumo.c.checked = a.notif_resumo; resumoHora.value = horaTexto(a.notif_resumo_min);
     pend.c.checked = a.notif_pendencias; pendHora.value = horaTexto(a.notif_pendencias_min);
     flash.c.checked = a.flash_aviso; flashHora.value = horaTexto(a.flash_aviso_min);
-    revisao.c.checked = a.revisao; revisaoDia.value = String(a.revisao_dia); revisaoHora.value = horaTexto(a.revisao_min);
+    revisao.c.checked = a.revisao; revisaoDiaValor = Number(a.revisao_dia) || 7; marcarDia(); revisaoHora.value = horaTexto(a.revisao_min);
     silencio.c.checked = a.notif_silencio; silDe.value = horaTexto(a.notif_silencio_de); silAte.value = horaTexto(a.notif_silencio_ate);
     atualizarVisibilidade();
   }
@@ -126,6 +146,8 @@ export function montarPainelNotificacoes({ estado, store }) {
     try { atual = await aparelho.estadoDoAparelho(store, linhas); } catch (err) { atual = { estado: 'desativado' }; erro.textContent = err.message; }
     estadoTexto.textContent = TEXTO_ESTADO[atual.estado];
     estadoTexto.dataset.estado = atual.estado;
+    el.querySelector('#notif-status').dataset.estado = atual.estado;
+    sino.className = `ti ${atual.estado === 'ativado' ? 'ti-bell-ringing' : 'ti-bell-off'}`;
     ativar.hidden = atual.estado !== 'desativado';
     desativar.hidden = atual.estado !== 'ativado';
     teste.hidden = atual.estado !== 'ativado';
@@ -144,6 +166,58 @@ export function montarPainelNotificacoes({ estado, store }) {
     finally { ocupado = false; await desenharAparelho(); }
   }
 
+  // ---- Verificar: o que o app vê (permissão, este aparelho) + o que a função vê (chaves, banco, agendador, entregas).
+  const tempo = (s) => (s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
+  function itensDoDiagnostico(local, { http, dados }) {
+    const itens = [];
+    const item = (chave, ok, texto) => itens.push({ chave, ok, texto });
+    if (local.estado === 'ativado') item('aparelho', 'sim', 'Este aparelho está ativado e com permissão para notificações.');
+    else item('aparelho', 'nao', `${TEXTO_ESTADO[local.estado] || 'Este aparelho não está ativado.'}${local.estado === 'desativado' ? ' Toque em "Ativar neste aparelho".' : ''}`);
+    if (http === 0) { item('funcao', 'nao', 'A função "lembretes" não respondeu. Confira em Edge Functions se ela existe com esse nome e se tem internet.'); return itens; }
+    if (http === 404 || (http === 200 && !dados?.chaves)) { item('funcao', 'nao', 'A função "lembretes" está com o código antigo: cole o index.ts novo em Edge Functions → lembretes e clique em Deploy.'); return itens; }
+    if (http === 401) { item('funcao', 'nao', 'Sua sessão venceu: saia e entre no app de novo.'); return itens; }
+    if (http !== 200) { item('funcao', 'nao', `A função respondeu ${http}${dados?.erro ? `: ${dados.erro}` : ''}.`); return itens; }
+    item('funcao', 'sim', 'A função "lembretes" respondeu.');
+    const c = dados.chaves;
+    if (!c.publica || !c.privada) item('chaves', 'nao', `Falta o segredo ${!c.publica ? 'VAPID_PUBLIC_KEY' : 'VAPID_PRIVATE_KEY'} em Edge Functions → Secrets.`);
+    else if (!c.publicaIgual) item('chaves', 'nao', 'A chave pública da função (segredo VAPID_PUBLIC_KEY) é diferente da do app (js/config.js). Deixe as duas iguais e, depois, desative e ative este aparelho.');
+    else item('chaves', 'sim', 'As chaves das notificações da função e do app são as mesmas.');
+    if (!c.segredo) item('segredo', 'nao', 'Falta o segredo LEMBRETES_SEGREDO em Edge Functions → Secrets (o agendador não consegue chamar a função).');
+    if (dados.banco !== 'ok') item('banco', 'nao', `A função não consegue ler o banco (${dados.banco}). Rode supabase/migracao-2026-11-servico.sql no SQL Editor.`);
+    else item('banco', 'sim', 'A função lê o banco.');
+    const a = dados.agendador;
+    const erroDepois = a.ultimoErro && a.erroEm && (!a.ultimoTique || a.erroEm > a.ultimoTique);
+    if (a.segundosDesdeUltimo === null) item('agendador', 'nao', `O agendador ainda não chamou a função${erroDepois ? ` (último erro: ${a.ultimoErro})` : ''}. Rode supabase/agendar-lembretes.sql e a migração migracao-2026-11-diagnostico.sql.`);
+    else if (a.segundosDesdeUltimo > 180) item('agendador', 'nao', `O agendador não roda há ${tempo(a.segundosDesdeUltimo)}${erroDepois ? ` — último erro: ${a.ultimoErro}` : ''}. Confira em Integrations → Cron se "lembretes-a-cada-minuto" está ativo.`);
+    else if (erroDepois) item('agendador', 'nao', `O agendador rodou há ${tempo(a.segundosDesdeUltimo)}, mas deu erro: ${a.ultimoErro}`);
+    else item('agendador', 'sim', `O agendador rodou há ${tempo(a.segundosDesdeUltimo)} (roda a cada minuto).`);
+    const ap = dados.aparelho;
+    if (local.estado === 'ativado' && !ap.ativado) item('entrega', 'nao', 'A função não encontra este aparelho: desative e ative de novo.');
+    else if (ap.ativado && ap.ultimoStatus === null) item('entrega', 'aviso', 'Este aparelho ainda não recebeu nenhum aviso. Toque em "Enviar teste".');
+    else if (ap.ativado) {
+      const problema = aparelho.explicarStatusDoPush(ap.ultimoStatus);
+      if (problema) item('entrega', 'nao', problema);
+      else item('entrega', 'sim', `O último aviso foi aceito para este aparelho${ap.ultimoOk ? ` (${new Date(ap.ultimoOk).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})` : ''}.`);
+    }
+    return itens;
+  }
+  verificar.addEventListener('click', async () => {
+    if (verificar.disabled) return;
+    verificar.disabled = true;
+    diagnosticoEl.replaceChildren(criar('li', { class: 'suave', texto: 'Verificando…' }));
+    try {
+      let linhas = [];
+      try { linhas = await aparelho.aparelhos(store); } catch { /* segue com a lista vazia */ }
+      const local = await aparelho.estadoDoAparelho(store, linhas).catch(() => ({ estado: 'desativado' }));
+      const remoto = await aparelho.diagnosticar(store, local.endpoint);
+      const icone = { sim: 'ti-circle-check', nao: 'ti-alert-circle', aviso: 'ti-info-circle' };
+      diagnosticoEl.replaceChildren(...itensDoDiagnostico(local, remoto).map((i) => criar('li', { 'data-item': i.chave, 'data-ok': i.ok },
+        criar('i', { class: `ti ${icone[i.ok]}`, 'aria-hidden': 'true' }), criar('span', { texto: i.texto }))));
+    } catch (err) {
+      diagnosticoEl.replaceChildren(criar('li', { 'data-item': 'erro', 'data-ok': 'nao', texto: err.message || 'Não deu para verificar.' }));
+    } finally { verificar.disabled = false; }
+  });
+
   ativar.addEventListener('click', () => agir(() => aparelho.ativar(store), 'Pronto: este aparelho vai receber os avisos.'));
   desativar.addEventListener('click', () => agir(() => aparelho.desativar(store), 'Desativado neste aparelho.'));
   teste.addEventListener('click', () => agir(() => aparelho.enviarTeste(store, atual.endpoint), 'Enviado. A notificação deve chegar em alguns segundos.'));
@@ -159,7 +233,7 @@ export function montarPainelNotificacoes({ estado, store }) {
       await estado.alterar('settings', null, {
         notif_antes_min: Number(antes.value), notif_resumo: resumo.c.checked, notif_resumo_min: rMin,
         notif_pendencias: pend.c.checked, notif_pendencias_min: pMin, notif_silencio: silencio.c.checked,
-        notif_silencio_de: de, notif_silencio_ate: ate, revisao: revisao.c.checked, revisao_dia: Number(revisaoDia.value), revisao_min: revMin,
+        notif_silencio_de: de, notif_silencio_ate: ate, revisao: revisao.c.checked, revisao_dia: revisaoDiaValor, revisao_min: revMin,
         flash_aviso: flash.c.checked, flash_aviso_min: flashMin, fuso: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo',
       });
       msgPrefs.textContent = 'Salvo.';

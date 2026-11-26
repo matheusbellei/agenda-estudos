@@ -312,11 +312,17 @@ export function iniciarAjustes({ estado, store }) {
     criar('label', { class: 'campo' }, criar('span', { texto: 'Dias depois do agendamento (padrão do botão "Agendar revisão")' }), revisoesDias),
     criar('p', { class: 'suave', texto: 'Números separados por vírgula, do menor para o maior. Ex.: 7, 30 ou 3, 10, 30.' }),
     erroRevisoes, salvarRevisoes);
-  const tema = criar('select', { id: 'aj-tema' }, criar('option', { value: 'claro', texto: 'Claro' }), criar('option', { value: 'escuro', texto: 'Escuro' }));
-  tema.value = temaAtual();
-  tema.addEventListener('change', () => aplicarTema(tema.value));
-  const cartaoTema = criar('div', { class: 'cartao', id: 'aj-aparencia' }, criar('h2', { texto: 'Aparência' }),
-    criar('label', { class: 'campo' }, criar('span', { texto: 'Tema (vale só neste aparelho)' }), tema));
+  // Aparência: Automático (segue o aparelho), Claro ou Escuro, em botões como no controle financeiro.
+  const tema = criar('div', { id: 'aj-tema', class: 'chips-escolha', role: 'group', 'aria-label': 'Tema' },
+    ...[['auto', 'Automático', 'ti-device-mobile'], ['claro', 'Claro', 'ti-sun'], ['escuro', 'Escuro', 'ti-moon']].map(([v, t, i]) => {
+      const b = criar('button', { type: 'button', 'data-tema': v }, criar('i', { class: `ti ${i}`, 'aria-hidden': 'true' }), ` ${t}`);
+      b.addEventListener('click', () => { aplicarTema(v); marcarTema(); });
+      return b;
+    }));
+  const marcarTema = () => tema.querySelectorAll('[data-tema]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tema === temaAtual())));
+  marcarTema();
+  const cartaoTema = criar('div', { class: 'cartao', id: 'aj-aparencia' }, criar('h2', { texto: 'Aparência' }), tema,
+    criar('p', { class: 'suave', texto: 'Automático segue o tema do celular ou do computador. A escolha fica guardada neste aparelho.' }));
   const fcNovos = criar('input', { id: 'aj-flash-card-novos', type: 'number', min: '0', max: '999', inputmode: 'numeric' });
   const fcRevisoes = criar('input', { id: 'aj-flash-card-revisoes', type: 'number', min: '0', max: '9999', inputmode: 'numeric' });
   const fcFator = criar('input', { id: 'aj-flash-card-fator', type: 'number', min: '1.3', max: '5', step: '0.1', inputmode: 'decimal' });

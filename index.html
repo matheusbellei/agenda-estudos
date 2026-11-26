@@ -6,7 +6,7 @@
 <title>Agenda de Estudos</title>
 <meta name="theme-color" content="#3B2416">
 <script>/* tema escuro antes de pintar (escolha guardada neste aparelho) */
-try { if (localStorage.getItem('agenda-tema') === 'escuro') { document.documentElement.dataset.tema = 'escuro'; document.querySelector('meta[name="theme-color"]').content = '#2A1C13'; } } catch (e) {}
+try { var t = localStorage.getItem('agenda-tema'); if (t === 'escuro' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) { document.documentElement.dataset.tema = 'escuro'; document.querySelector('meta[name="theme-color"]').content = '#2A1C13'; } } catch (e) {}
 </script>
 <meta name="description" content="Agenda e controle de estudos.">
 <link rel="manifest" href="manifest.webmanifest">
