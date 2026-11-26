@@ -2,12 +2,15 @@
 // Rede primeiro: com internet, sempre a versão mais nova do GitHub Pages; a cópia guardada só abre a casca sem rede.
 // Só arquivos do próprio site passam por aqui. Supabase, fontes e CDNs vão direto para a rede, sem cópia.
 const CACHE = 'agenda-estudos-v3';
+// Guarda, para o service worker, o endereço da função, a chave pública e a inscrição deste aparelho
+// (o app grava; sem isso a troca em segundo plano não teria como saber nada com o app fechado).
+const CACHE_INSCRICAO = 'agenda-inscricao';
 
 self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    for (const nome of await caches.keys()) if (nome !== CACHE) await caches.delete(nome);
+    for (const nome of await caches.keys()) if (nome !== CACHE && nome !== CACHE_INSCRICAO) await caches.delete(nome);
     await self.clients.claim();
   })());
 });
@@ -76,5 +79,34 @@ self.addEventListener('notificationclick', (e) => {
     const aberta = janelas.find((c) => c.url.startsWith(self.registration.scope));
     if (aberta) { await aberta.focus(); aberta.postMessage({ tipo: 'abrir', url: alvo }); return; }
     await self.clients.openWindow(alvo);
+  })());
+});
+
+// ---- O navegador renovou a inscrição de push (acontece de vez em quando, com o app fechado):
+// reinscreve com a chave guardada e avisa a função, que troca o endereço no banco. Sem isso, os avisos
+// parariam até o próximo acesso ao app.
+function chaveParaBytes(texto) {
+  const s = atob(texto.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((texto.length + 3) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+
+self.addEventListener('pushsubscriptionchange', (e) => {
+  e.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE_INSCRICAO);
+      const guardado = await cache.match('dados');
+      if (!guardado) return;
+      const dados = await guardado.json();
+      const nova = e.newSubscription
+        || await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveParaBytes(dados.vapid) });
+      const { endpoint, keys } = nova.toJSON();
+      const antigo = e.oldSubscription?.endpoint || dados.endpoint;
+      const resp = await fetch(`${dados.funcao}?trocar=1`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ antigo, novo: { endpoint, p256dh: keys.p256dh, auth: keys.auth } }),
+      });
+      // Só guarda o endereço novo se a função aceitou; senão o app refaz tudo ao abrir (sincronizar).
+      if (resp.ok) await cache.put('dados', new Response(JSON.stringify({ ...dados, endpoint })));
+    } catch { /* sem rede ou sem dados: o app refaz ao abrir */ }
   })());
 });

@@ -280,6 +280,22 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
     return resposta(req, ok ? 200 : 502, { status });
   }
 
+  // O navegador renovou a inscrição com o app fechado: o service worker avisa o endereço antigo e o novo.
+  // Sem login (o app não está aberto); quem sabe o endereço antigo — que só o aparelho e o banco conhecem — pode trocá-lo.
+  async function trocar(req) {
+    let corpo = {};
+    try { corpo = await req.json(); } catch { /* sem corpo */ }
+    const { antigo, novo } = corpo || {};
+    const https = (x) => typeof x === 'string' && /^https:\/\/\S+$/.test(x);
+    if (!https(antigo) || !novo || !https(novo.endpoint) || !novo.p256dh || !novo.auth) return resposta(req, 400, { erro: 'Dados incompletos.' });
+    const [sub] = await banco.select('push_subscriptions', { endpoint: antigo });
+    if (!sub) return resposta(req, 404, { erro: 'Aparelho não encontrado.' });
+    const [ja] = await banco.select('push_subscriptions', { endpoint: novo.endpoint });
+    if (ja) await banco.remove('push_subscriptions', { id: sub.id });
+    else await banco.update('push_subscriptions', { id: sub.id }, { endpoint: novo.endpoint, p256dh: novo.p256dh, auth: novo.auth, ultimo_status: null });
+    return resposta(req, 200, { ok: true });
+  }
+
   function resposta(req, status, corpo) {
     return new Response(corpo === null ? null : JSON.stringify(corpo), { status, headers: { ...cabecalhosCors(req), 'Content-Type': 'application/json' } });
   }
@@ -291,6 +307,7 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
       if (req.method === 'GET' && url.searchParams.has('acao')) return await acao(req, url);
       if (req.method === 'POST' && url.searchParams.get('teste') === '1') return await teste(req);
       if (req.method === 'POST' && url.searchParams.get('diagnostico') === '1') return await diagnostico(req);
+      if (req.method === 'POST' && url.searchParams.get('trocar') === '1') return await trocar(req);
       if (req.method === 'POST') {
         if (req.headers.get('x-lembretes-segredo') !== env.LEMBRETES_SEGREDO || !env.LEMBRETES_SEGREDO) return resposta(req, 401, { erro: 'Sem permissão.' });
         const instante = new Date(agora()).toISOString();

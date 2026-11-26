@@ -376,3 +376,40 @@ test('diagnóstico: confere chaves, banco, agendador e este aparelho', async () 
   assert.equal(outro.aparelho.ativado, false);
   assert.equal((await diagnostico(servico, 'jwt-ruim', {})).status, 401);
 });
+
+// ---- Troca de inscrição em segundo plano (o navegador renovou o endereço com o app fechado)
+const trocar = (s, corpo) => s.tratar(new Request('https://proj.supabase.co/functions/v1/lembretes?trocar=1', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+}));
+const NOVO = { endpoint: 'https://push/novo', p256dh: 'k2', auth: 'a2' };
+
+test('troca: o endereço antigo vira o novo, sem login, e o aparelho continua o mesmo', async () => {
+  const { servico, banco } = montar();
+  const r = await trocar(servico, { antigo: 'https://push/a', novo: NOVO });
+  assert.equal(r.status, 200);
+  const linha = banco.dados.push_subscriptions.find((l) => l.id === 's1');
+  assert.deepEqual([linha.endpoint, linha.p256dh, linha.auth, linha.owner_id], ['https://push/novo', 'k2', 'a2', DONO]);
+  assert.equal(banco.dados.push_subscriptions.length, 2);
+});
+
+test('troca: se o endereço novo já existe, só apaga o antigo', async () => {
+  const dados = base();
+  dados.push_subscriptions.push({ id: 's3', owner_id: DONO, endpoint: 'https://push/novo', p256dh: 'k2', auth: 'a2' });
+  const { servico, banco } = montar({ dados });
+  assert.equal((await trocar(servico, { antigo: 'https://push/a', novo: NOVO })).status, 200);
+  assert.deepEqual(banco.dados.push_subscriptions.map((l) => l.id).sort(), ['s2', 's3']);
+});
+
+test('troca: endereço antigo que não existe responde 404 e não grava nada', async () => {
+  const { servico, banco } = montar();
+  assert.equal((await trocar(servico, { antigo: 'https://push/zzz', novo: NOVO })).status, 404);
+  assert.equal(banco.escritas.length, 0);
+});
+
+test('troca: corpo inválido (sem https, campos vazios) responde 400', async () => {
+  const { servico, banco } = montar();
+  for (const corpo of [{}, { antigo: 'https://push/a', novo: { ...NOVO, endpoint: 'http://push/novo' } }, { antigo: 'https://push/a', novo: { endpoint: 'https://push/novo' } }, { antigo: 'x', novo: NOVO }]) {
+    assert.equal((await trocar(servico, corpo)).status, 400);
+  }
+  assert.equal(banco.escritas.length, 0);
+});

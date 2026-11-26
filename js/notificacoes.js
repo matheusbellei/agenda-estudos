@@ -7,6 +7,20 @@ function deB64u(texto) {
   return Uint8Array.from(s, (c) => c.charCodeAt(0));
 }
 
+// O service worker precisa saber, com o app fechado, para onde avisar se o navegador trocar a inscrição.
+const CACHE_INSCRICAO = 'agenda-inscricao';
+
+export async function guardarParaOSW(store, endpoint) {
+  try {
+    const cache = await caches.open(CACHE_INSCRICAO);
+    await cache.put('dados', new Response(JSON.stringify({ funcao: store.urlDaFuncao('lembretes'), vapid: await store.vapidPublica(), endpoint })));
+  } catch { /* sem cache no navegador: a troca em segundo plano não funciona, mas o app refaz ao abrir */ }
+}
+
+export async function esquecerParaOSW() {
+  try { await (await caches.open(CACHE_INSCRICAO)).delete('dados'); } catch { /* idem */ }
+}
+
 export async function suporte(store) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'sem-suporte';
   if (!(await store.vapidPublica())) return 'sem-chave';
@@ -56,6 +70,7 @@ export async function ativar(store) {
   if (!existentes.some((l) => l.endpoint === endpoint)) {
     await store.insert(TABELA, { endpoint, p256dh: keys.p256dh, auth: keys.auth, aparelho: nomeDoAparelho() });
   }
+  await guardarParaOSW(store, endpoint);
   return endpoint;
 }
 
@@ -65,6 +80,7 @@ export async function desativar(store) {
   const linha = (await store.list(TABELA)).find((l) => l.endpoint === sub.endpoint);
   if (linha) await store.remove(TABELA, linha.id);
   await sub.unsubscribe();
+  await esquecerParaOSW();
 }
 
 export async function remover(store, id) {
@@ -119,8 +135,10 @@ export async function sincronizar(store) {
     if (velha) await store.remove(TABELA, velha.id);
   }
   const { endpoint, keys } = sub.toJSON();
-  if (existentes.some((l) => l.endpoint === endpoint)) return;
-  await store.insert(TABELA, { endpoint, p256dh: keys.p256dh, auth: keys.auth, aparelho: nomeDoAparelho() });
+  if (!existentes.some((l) => l.endpoint === endpoint)) {
+    await store.insert(TABELA, { endpoint, p256dh: keys.p256dh, auth: keys.auth, aparelho: nomeDoAparelho() });
+  }
+  await guardarParaOSW(store, endpoint);
 }
 
 // Pergunta à função o que ela enxerga: chaves, banco, agendador e este aparelho.

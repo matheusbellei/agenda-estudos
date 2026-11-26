@@ -154,3 +154,10 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - `POST ?diagnostico=1` (com a sessão do usuário) devolve o que a função enxerga: chaves (sem revelar segredos), acesso ao banco, agendador e este aparelho. O botão "Verificar" das Notificações traduz isso em itens com o que fazer.
 - Ao entrar, se a inscrição deste aparelho foi feita com outra chave pública, o app refaz a inscrição com a chave atual e troca a linha.
 - Um bloco criado depois do horário do lembrete dele (ex.: começa em 12 min com lembrete de 30 min) não recebe lembrete: a hora de avisar já passou.
+
+## Troca de inscrição em segundo plano (25/11/2026)
+- O navegador pode renovar a inscrição de push com o app fechado (`pushsubscriptionchange`). Antes, o banco ficava com o endereço velho e os avisos paravam até o próximo acesso.
+- `sw.js` trata o evento: reinscreve com a chave pública guardada e chama `lembretes?trocar=1` com o endereço antigo e o novo. A função troca o endereço da mesma linha (ou só apaga a antiga se a nova já existe; 404 se a antiga não existe; 400 se os dados vierem incompletos).
+- Sem login: o app não está aberto. Quem conhece o endereço antigo (só o aparelho e o banco) pode trocá-lo.
+- O app grava função, chave pública e endereço no cache `agenda-inscricao` ao ativar e ao abrir (`sincronizar`), e apaga ao desativar. O `activate` do service worker não apaga esse cache.
+- Se a função não responder, nada é perdido: ao abrir, o app reconcilia (`sincronizar`).
