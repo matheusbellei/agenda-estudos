@@ -44,6 +44,10 @@ const banco = {
   }),
   update: (t, f, campos) => pedir(`${t}?${consulta(f)}`, { method: 'PATCH', body: JSON.stringify(campos), headers: { Prefer: 'return=representation' } }),
   remove: (t, f) => pedir(`${t}?${consulta(f)}`, { method: 'DELETE' }),
+  // Grava ou atualiza pela chave primária (id), mudando só as colunas enviadas.
+  salvar: (t, linha) => pedir(`${t}?on_conflict=id`, {
+    method: 'POST', body: JSON.stringify(linha), headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+  }),
   async usuarioDoJwt(jwt) {
     const r = await fetch(`${URL_PROJETO}/auth/v1/user`, { headers: { apikey: CHAVE_SERVICO, Authorization: `Bearer ${jwt}` } });
     if (!r.ok) return null;
@@ -56,7 +60,7 @@ const vapid = { publica: env('VAPID_PUBLIC_KEY'), privada: env('VAPID_PRIVATE_KE
 const servico = criarServico({
   banco,
   enviar: (inscricao, payload) => enviarPush({ inscricao, payload, vapid }),
-  env: { SUPABASE_URL: URL_PROJETO, LEMBRETES_SEGREDO: env('LEMBRETES_SEGREDO') },
+  env: { SUPABASE_URL: URL_PROJETO, LEMBRETES_SEGREDO: env('LEMBRETES_SEGREDO'), VAPID_PUBLIC_KEY: vapid.publica, VAPID_PRIVADA_OK: Boolean(vapid.privada) },
 });
 
 Deno.serve((req) => servico.tratar(req));

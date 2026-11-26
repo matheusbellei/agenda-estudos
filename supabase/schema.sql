@@ -585,3 +585,16 @@ grant execute on all functions in schema public to service_role;
 alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
 alter default privileges in schema public grant usage, select on sequences to service_role;
 alter default privileges in schema public grant execute on functions to service_role;
+
+-- Diagnóstico das notificações (migracao-2026-11-diagnostico.sql).
+create table if not exists public.lembretes_status (
+  id           int primary key default 1 check (id = 1),
+  ultimo_tique timestamptz,
+  ultimo_erro  text,
+  erro_em      timestamptz
+);
+alter table public.lembretes_status enable row level security;
+revoke all on public.lembretes_status from anon, authenticated;
+grant select, insert, update, delete on public.lembretes_status to service_role;
+
+alter table public.push_subscriptions add column if not exists ultimo_status int;

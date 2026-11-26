@@ -61,7 +61,7 @@ function blocosDoPeriodo(commitments, blocks, de, ate) {
 }
 
 // js/regras/lembretes.js
-var TOLERANCIA_MIN = 2;
+var TOLERANCIA_MIN = 5;
 var MAX_ITENS_RESUMO = 4;
 function agoraNoFuso(instanteMs, fuso) {
   const partes = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
@@ -99,6 +99,7 @@ function devidos({ instanteMs, fuso, ajustes, blocos, adiamentos = [], enviadas 
     const alvo = base2 + b.start_min - antes;
     const chave = `antes:${refDoBloco(b)}:${b.date}:${b.start_min}`;
     if (!vence(alvo, minuto) || !pode(chave, alvo)) continue;
+    const falta = base2 + b.start_min - minuto;
     saida.push({
       chave,
       tipo: "antes",
@@ -106,7 +107,7 @@ function devidos({ instanteMs, fuso, ajustes, blocos, adiamentos = [], enviadas 
       ref: refDoBloco(b),
       data: b.date,
       acoes: ["cumprir", "adiar"],
-      corpo: antes === 0 ? "Começa agora" : `Começa às ${horaTexto(b.start_min)} (em ${antes} min)`
+      corpo: falta > 0 ? `Começa às ${horaTexto(b.start_min)} (em ${falta} min)` : falta === 0 ? "Começa agora" : `Começou às ${horaTexto(b.start_min)}`
     });
   }
   for (const a of adiamentos) {
@@ -503,6 +504,8 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
     return { titulo: n.titulo, corpo: n.corpo, tag: n.chave, url, acoes };
   }
   async function enviarParaAparelhos(aparelhos, payload) {
+    let aceitos = 0;
+    let passageiras = 0;
     for (const sub of aparelhos) {
       let status = 0;
       try {
@@ -510,9 +513,19 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
       } catch {
         status = 0;
       }
-      if (status === 404 || status === 410) await banco2.remove("push_subscriptions", { id: sub.id });
-      else if (status >= 200 && status < 300) await banco2.update("push_subscriptions", { id: sub.id }, { ultimo_ok: new Date(agora()).toISOString() });
+      if (status === 404 || status === 410) {
+        await banco2.remove("push_subscriptions", { id: sub.id });
+        continue;
+      }
+      const ok = status >= 200 && status < 300;
+      if (ok) aceitos += 1;
+      else if (status === 0 || status === 429 || status >= 500) passageiras += 1;
+      try {
+        await banco2.update("push_subscriptions", { id: sub.id }, { ultimo_status: status, ...ok ? { ultimo_ok: new Date(agora()).toISOString() } : {} });
+      } catch {
+      }
     }
+    return { aceitos, passageiras };
   }
   async function tique() {
     const inscricoes = await banco2.select("push_subscriptions", {});
@@ -582,7 +595,8 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
         }
         const gravou = await banco2.insert("notificacoes_enviadas", { owner_id: dono, chave: n.chave, enviada_em: new Date(agora()).toISOString() }, { ignorarConflito: true });
         if (!gravou.length) continue;
-        await enviarParaAparelhos(aparelhos, await payloadDe(dono, n));
+        const { aceitos, passageiras } = await enviarParaAparelhos(aparelhos, await payloadDe(dono, n));
+        if (!aceitos && passageiras) await banco2.remove("notificacoes_enviadas", { owner_id: dono, chave: n.chave });
         total += 1;
       }
       if (fimDoFoco.esperando) {
@@ -660,6 +674,53 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
     if (pedida === "proxima") return resposta(req, 200, await proximaDoFoco(t.dono, t.data));
     return resposta(req, 400, { erro: "Ação desconhecida." });
   }
+  async function registrarTique(campos) {
+    try {
+      await banco2.salvar("lembretes_status", { id: 1, ...campos });
+    } catch {
+    }
+  }
+  async function diagnostico(req) {
+    const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const usuario = jwt ? await banco2.usuarioDoJwt(jwt) : null;
+    if (!usuario) return resposta(req, 401, { erro: "Entre no app de novo." });
+    let corpo = {};
+    try {
+      corpo = await req.json();
+    } catch {
+    }
+    const chaves = {
+      publica: Boolean(env2.VAPID_PUBLIC_KEY),
+      publicaIgual: Boolean(env2.VAPID_PUBLIC_KEY) && corpo.vapidPublica === env2.VAPID_PUBLIC_KEY,
+      privada: Boolean(env2.VAPID_PRIVADA_OK),
+      segredo: Boolean(env2.LEMBRETES_SEGREDO)
+    };
+    let bancoOk = "ok";
+    let status = null;
+    let sub = null;
+    try {
+      [sub] = await banco2.select("push_subscriptions", { owner_id: usuario.id, endpoint: corpo.endpoint || "" });
+      try {
+        [status] = await banco2.select("lembretes_status", { id: 1 });
+      } catch {
+        status = null;
+      }
+    } catch (err) {
+      bancoOk = String(err?.message || err);
+    }
+    const ultimo = status?.ultimo_tique ? Date.parse(status.ultimo_tique) : null;
+    return resposta(req, 200, {
+      chaves,
+      banco: bancoOk,
+      agendador: {
+        ultimoTique: status?.ultimo_tique || null,
+        segundosDesdeUltimo: ultimo ? Math.round((agora() - ultimo) / 1e3) : null,
+        ultimoErro: status?.ultimo_erro || null,
+        erroEm: status?.erro_em || null
+      },
+      aparelho: { ativado: Boolean(sub), ultimoOk: sub?.ultimo_ok || null, ultimoStatus: sub?.ultimo_status ?? null }
+    });
+  }
   async function teste(req) {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const usuario = jwt ? await banco2.usuarioDoJwt(jwt) : null;
@@ -672,7 +733,12 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
     const [sub] = await banco2.select("push_subscriptions", { owner_id: usuario.id, endpoint: corpo.endpoint || "" });
     if (!sub) return resposta(req, 404, { erro: "Este aparelho não está ativado." });
     const { status } = await enviar(sub, { titulo: "Teste", corpo: "As notificações da Agenda de Estudos estão funcionando.", tag: "teste", url: "./", acoes: [] });
-    return resposta(req, status >= 200 && status < 300 ? 200 : 502, { status });
+    const ok = status >= 200 && status < 300;
+    try {
+      await banco2.update("push_subscriptions", { id: sub.id }, { ultimo_status: status, ...ok ? { ultimo_ok: new Date(agora()).toISOString() } : {} });
+    } catch {
+    }
+    return resposta(req, ok ? 200 : 502, { status });
   }
   function resposta(req, status, corpo) {
     return new Response(corpo === null ? null : JSON.stringify(corpo), { status, headers: { ...cabecalhosCors(req), "Content-Type": "application/json" } });
@@ -683,9 +749,18 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
     try {
       if (req.method === "GET" && url.searchParams.has("acao")) return await acao(req, url);
       if (req.method === "POST" && url.searchParams.get("teste") === "1") return await teste(req);
+      if (req.method === "POST" && url.searchParams.get("diagnostico") === "1") return await diagnostico(req);
       if (req.method === "POST") {
         if (req.headers.get("x-lembretes-segredo") !== env2.LEMBRETES_SEGREDO || !env2.LEMBRETES_SEGREDO) return resposta(req, 401, { erro: "Sem permissão." });
-        return resposta(req, 200, await tique());
+        const instante = new Date(agora()).toISOString();
+        try {
+          const r = await tique();
+          await registrarTique({ ultimo_tique: instante, ultimo_erro: null });
+          return resposta(req, 200, r);
+        } catch (err) {
+          await registrarTique({ ultimo_erro: String(err?.message || err).slice(0, 500), erro_em: instante });
+          throw err;
+        }
       }
       return resposta(req, 404, { erro: "Não encontrado." });
     } catch (err) {
@@ -740,6 +815,12 @@ var banco = {
   }),
   update: (t, f, campos) => pedir(`${t}?${consulta(f)}`, { method: "PATCH", body: JSON.stringify(campos), headers: { Prefer: "return=representation" } }),
   remove: (t, f) => pedir(`${t}?${consulta(f)}`, { method: "DELETE" }),
+  // Grava ou atualiza pela chave primária (id), mudando só as colunas enviadas.
+  salvar: (t, linha) => pedir(`${t}?on_conflict=id`, {
+    method: "POST",
+    body: JSON.stringify(linha),
+    headers: { Prefer: "return=representation,resolution=merge-duplicates" }
+  }),
   async usuarioDoJwt(jwt) {
     const r = await fetch(`${URL_PROJETO}/auth/v1/user`, { headers: { apikey: CHAVE_SERVICO, Authorization: `Bearer ${jwt}` } });
     if (!r.ok) return null;
@@ -751,6 +832,6 @@ var vapid = { publica: env("VAPID_PUBLIC_KEY"), privada: env("VAPID_PRIVATE_KEY"
 var servico = criarServico({
   banco,
   enviar: (inscricao, payload) => enviarPush({ inscricao, payload, vapid }),
-  env: { SUPABASE_URL: URL_PROJETO, LEMBRETES_SEGREDO: env("LEMBRETES_SEGREDO") }
+  env: { SUPABASE_URL: URL_PROJETO, LEMBRETES_SEGREDO: env("LEMBRETES_SEGREDO"), VAPID_PUBLIC_KEY: vapid.publica, VAPID_PRIVADA_OK: Boolean(vapid.privada) }
 });
 Deno.serve((req) => servico.tratar(req));

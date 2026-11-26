@@ -22,10 +22,15 @@ test('lembrete padrão de 10 min sai às 21:20 para bloco das 21:30', () => {
   assert.deepEqual(n.acoes, ['cumprir', 'adiar']);
 });
 
-test('tolerância de 2 min: 21:21 ainda envia, 21:22 não', () => {
-  assert.equal(antes(rodar('21:21', [bloco()])).length, 1);
-  assert.equal(antes(rodar('21:22', [bloco()])).length, 0);
+test('tolerância de 5 min (o agendador pode atrasar): 21:24 ainda envia, 21:25 não', () => {
+  assert.equal(antes(rodar('21:24', [bloco()])).length, 1);
+  assert.equal(antes(rodar('21:25', [bloco()])).length, 0);
   assert.equal(antes(rodar('21:19', [bloco()])).length, 0);
+});
+
+test('lembrete que sai atrasado diz quanto falta de verdade', () => {
+  assert.equal(antes(rodar('21:23', [bloco()]))[0].corpo, 'Começa às 21:30 (em 7 min)');
+  assert.equal(antes(rodar('21:32', [bloco({ lembrete_min: 0 })]))[0].corpo, 'Começou às 21:30');
 });
 
 test('lembrete do bloco vence o padrão: nenhum e na hora', () => {
@@ -114,10 +119,11 @@ test('adiado vence no horário e respeita o estado do bloco', () => {
 const REV = { ...PADRAO, revisao: true, revisao_dia: 7, revisao_min: 1200 };
 const rev = (hhmm, dia, ajustes = {}, enviadas = new Set()) => revisaoVence({ instanteMs: em(hhmm, dia), fuso: FUSO, ajustes: { ...REV, ...ajustes }, enviadas });
 
-test('revisaoVence: domingo 20:00 e 20:01; não na segunda, nem enviada, nem em silêncio, nem desligada', () => {
+test('revisaoVence: domingo 20:00 a 20:04; não na segunda, nem enviada, nem em silêncio, nem desligada', () => {
   assert.deepEqual(rev('20:00', '2026-11-22'), { chave: 'revisao:2026-11-22', data: '2026-11-22' });
   assert.ok(rev('20:01', '2026-11-22'));
-  assert.equal(rev('20:02', '2026-11-22'), null);
+  assert.ok(rev('20:04', '2026-11-22'));
+  assert.equal(rev('20:05', '2026-11-22'), null);
   assert.equal(rev('20:00', '2026-11-23'), null);
   assert.equal(rev('20:00', '2026-11-22', {}, new Set(['revisao:2026-11-22'])), null);
   assert.equal(rev('20:00', '2026-11-22', { notif_silencio: true, notif_silencio_de: 1140, notif_silencio_ate: 420 }), null);
@@ -129,10 +135,11 @@ test('revisaoVence: domingo 20:00 e 20:01; não na segunda, nem enviada, nem em 
 const FL = { ...PADRAO, flash_aviso: true, flash_aviso_min: 1140 };
 const fl = (hhmm, ajustes = {}, enviadas = new Set()) => flashVence({ instanteMs: em(hhmm, '2026-11-24'), fuso: FUSO, ajustes: { ...FL, ...ajustes }, enviadas });
 
-test('flashVence: 19:00 e 19:01; nada desligado, enviado, em silêncio ou fora da hora', () => {
+test('flashVence: 19:00 a 19:04; nada desligado, enviado, em silêncio ou fora da hora', () => {
   assert.deepEqual(fl('19:00'), { chave: 'flash:2026-11-24', data: '2026-11-24' });
   assert.ok(fl('19:01'));
-  assert.equal(fl('19:03'), null);
+  assert.ok(fl('19:04'));
+  assert.equal(fl('19:05'), null);
   assert.equal(fl('19:00', { flash_aviso: false }), null);
   assert.equal(fl('19:00', {}, new Set(['flash:2026-11-24'])), null);
   assert.equal(fl('19:00', { notif_silencio: true, notif_silencio_de: 1080, notif_silencio_ate: 420 }), null);

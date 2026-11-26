@@ -145,3 +145,12 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 ## Bloco sem card (24/11/2026)
 
 - A escolha "Bloco sem card" saiu das Configurações. O bloco novo sem card sempre mostra "Criar card para este bloco" (desmarcado), com a lista ativa sugerida; sem marcar, nada é criado no Quadro. As colunas antigas `auto_card` e `auto_card_list_id` ficam no banco, sem uso.
+
+## Notificações: reforços e diagnóstico (25/11/2026)
+
+- Tolerância do lembrete: 5 minutos (o agendador pode atrasar ou pular minutos). O texto usa o tempo que falta de verdade ("em 7 min", "Começou às 21:30").
+- Se nenhum aparelho aceitou um aviso por falha passageira (rede, 429, 5xx), o registro em `notificacoes_enviadas` é apagado e o próximo minuto tenta de novo.
+- `push_subscriptions.ultimo_status` guarda a resposta do serviço de push no último envio (tique ou teste); `lembretes_status` (uma linha, só a chave de serviço lê e grava) guarda o último tique e o último erro.
+- `POST ?diagnostico=1` (com a sessão do usuário) devolve o que a função enxerga: chaves (sem revelar segredos), acesso ao banco, agendador e este aparelho. O botão "Verificar" das Notificações traduz isso em itens com o que fazer.
+- Ao entrar, se a inscrição deste aparelho foi feita com outra chave pública, o app refaz a inscrição com a chave atual e troca a linha.
+- Um bloco criado depois do horário do lembrete dele (ex.: começa em 12 min com lembrete de 30 min) não recebe lembrete: a hora de avisar já passou.

@@ -85,20 +85,68 @@ export async function enviarTeste(store, endpoint) {
     throw new Error('Não deu para falar com a função "lembretes". Confira se ela foi criada no Supabase.');
   }
   if (!resp.ok) {
-    let msg = '';
-    try { msg = (await resp.json()).erro || ''; } catch { /* sem corpo */ }
-    throw new Error(msg || `A função respondeu ${resp.status}.`);
+    let corpo = {};
+    try { corpo = await resp.json(); } catch { /* sem corpo */ }
+    // 502: a função enviou, mas o serviço de push recusou — explica o porquê.
+    if (resp.status === 502 && corpo.status !== undefined) throw new Error(explicarStatusDoPush(corpo.status));
+    throw new Error(corpo.erro || `A função respondeu ${resp.status}.`);
   }
 }
 
+// A inscrição foi feita com outra chave pública (a chave do app mudou)? O serviço de push recusaria tudo.
+function chaveDiferente(sub, chave) {
+  const atual = sub?.options?.applicationServerKey;
+  if (!atual || !chave) return false;
+  const a = new Uint8Array(atual);
+  const b = deB64u(chave);
+  return a.length !== b.length || a.some((x, i) => x !== b[i]);
+}
+
 // Ao entrar no app: se o navegador trocou a inscrição deste aparelho (acontece de tempos em tempos)
-// e ela não está gravada, grava de novo — senão os avisos param sem ninguém perceber.
+// e ela não está gravada, grava de novo; se ela foi feita com uma chave antiga, refaz com a atual
+// e troca a linha — senão os avisos param sem ninguém perceber.
 export async function sincronizar(store) {
   if ((await suporte(store)) !== 'ok' || Notification.permission !== 'granted') return;
-  const sub = await inscricaoDoNavegador();
+  let sub = await inscricaoDoNavegador();
   if (!sub) return;
-  const { endpoint, keys } = sub.toJSON();
   const existentes = await store.list(TABELA);
+  const chave = await store.vapidPublica();
+  if (chaveDiferente(sub, chave)) {
+    const velha = existentes.find((l) => l.endpoint === sub.endpoint);
+    await sub.unsubscribe();
+    const reg = await navigator.serviceWorker.ready;
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: deB64u(chave) });
+    if (velha) await store.remove(TABELA, velha.id);
+  }
+  const { endpoint, keys } = sub.toJSON();
   if (existentes.some((l) => l.endpoint === endpoint)) return;
   await store.insert(TABELA, { endpoint, p256dh: keys.p256dh, auth: keys.auth, aparelho: nomeDoAparelho() });
+}
+
+// Pergunta à função o que ela enxerga: chaves, banco, agendador e este aparelho.
+// Devolve { http, dados } — `http` é o status da resposta (0 = não respondeu).
+export async function diagnosticar(store, endpoint) {
+  const token = await store.tokenDeAcesso();
+  if (!token) throw new Error('Entre no app de novo para verificar.');
+  let resp;
+  try {
+    resp = await fetch(`${await store.urlDaFuncao('lembretes')}?diagnostico=1`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: endpoint || '', vapidPublica: await store.vapidPublica() }),
+    });
+  } catch {
+    return { http: 0, dados: null };
+  }
+  let dados = null;
+  try { dados = await resp.json(); } catch { /* sem corpo */ }
+  return { http: resp.status, dados };
+}
+
+// O que significa a resposta do serviço de push (Google, Mozilla, Apple) ao último envio.
+export function explicarStatusDoPush(status) {
+  if (status >= 200 && status < 300) return null;
+  if (status === 401 || status === 403) return `O serviço de push recusou o aviso (${status}): a chave da função não é a mesma com que este aparelho foi ativado. Toque em "Desativar neste aparelho" e depois em "Ativar neste aparelho".`;
+  if (status === 400 || status === 413) return `O serviço de push recusou o aviso (${status}). Desative e ative este aparelho de novo.`;
+  if (status === 0) return 'O último envio não chegou ao serviço de push (rede). A função tenta de novo no minuto seguinte.';
+  return `O serviço de push respondeu ${status} no último envio; a função tenta de novo no minuto seguinte.`;
 }

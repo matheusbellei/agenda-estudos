@@ -73,14 +73,23 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
     return { titulo: n.titulo, corpo: n.corpo, tag: n.chave, url, acoes };
   }
 
+  // Devolve quantos aparelhos aceitaram e quantos falharam por algo passageiro (rede, 429, 5xx).
+  // O status de cada tentativa fica na inscrição (o diagnóstico do app mostra).
   async function enviarParaAparelhos(aparelhos, payload) {
+    let aceitos = 0; let passageiras = 0;
     for (const sub of aparelhos) {
       let status = 0;
       try { ({ status } = await enviar(sub, payload)); } catch { status = 0; }
       // 404/410: o navegador cancelou a inscrição; não adianta tentar de novo.
-      if (status === 404 || status === 410) await banco.remove('push_subscriptions', { id: sub.id });
-      else if (status >= 200 && status < 300) await banco.update('push_subscriptions', { id: sub.id }, { ultimo_ok: new Date(agora()).toISOString() });
+      if (status === 404 || status === 410) { await banco.remove('push_subscriptions', { id: sub.id }); continue; }
+      const ok = status >= 200 && status < 300;
+      if (ok) aceitos += 1;
+      else if (status === 0 || status === 429 || status >= 500) passageiras += 1;
+      try {
+        await banco.update('push_subscriptions', { id: sub.id }, { ultimo_status: status, ...(ok ? { ultimo_ok: new Date(agora()).toISOString() } : {}) });
+      } catch { /* registro opcional: não impede o envio */ }
     }
+    return { aceitos, passageiras };
   }
 
   async function tique() {
@@ -145,7 +154,10 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
         }
         const gravou = await banco.insert('notificacoes_enviadas', { owner_id: dono, chave: n.chave, enviada_em: new Date(agora()).toISOString() }, { ignorarConflito: true });
         if (!gravou.length) continue;
-        await enviarParaAparelhos(aparelhos, await payloadDe(dono, n));
+        const { aceitos, passageiras } = await enviarParaAparelhos(aparelhos, await payloadDe(dono, n));
+        // Ninguém recebeu por falha passageira: apaga o registro para o próximo minuto tentar de novo
+        // (dentro da tolerância do lembrete).
+        if (!aceitos && passageiras) await banco.remove('notificacoes_enviadas', { owner_id: dono, chave: n.chave });
         total += 1;
       }
       if (fimDoFoco.esperando) {
@@ -217,6 +229,41 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
     return resposta(req, 400, { erro: 'Ação desconhecida.' });
   }
 
+  // Registro do agendador (uma linha só): quando rodou por último e o último erro.
+  async function registrarTique(campos) {
+    try { await banco.salvar('lembretes_status', { id: 1, ...campos }); } catch { /* sem a tabela ainda: segue */ }
+  }
+
+  // Diagnóstico para a tela de Notificações: o que a função enxerga (sem revelar segredo nenhum).
+  async function diagnostico(req) {
+    const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    const usuario = jwt ? await banco.usuarioDoJwt(jwt) : null;
+    if (!usuario) return resposta(req, 401, { erro: 'Entre no app de novo.' });
+    let corpo = {};
+    try { corpo = await req.json(); } catch { /* sem corpo */ }
+    const chaves = {
+      publica: Boolean(env.VAPID_PUBLIC_KEY),
+      publicaIgual: Boolean(env.VAPID_PUBLIC_KEY) && corpo.vapidPublica === env.VAPID_PUBLIC_KEY,
+      privada: Boolean(env.VAPID_PRIVADA_OK),
+      segredo: Boolean(env.LEMBRETES_SEGREDO),
+    };
+    let bancoOk = 'ok'; let status = null; let sub = null;
+    try {
+      [sub] = await banco.select('push_subscriptions', { owner_id: usuario.id, endpoint: corpo.endpoint || '' });
+      try { [status] = await banco.select('lembretes_status', { id: 1 }); } catch { status = null; }
+    } catch (err) { bancoOk = String(err?.message || err); }
+    const ultimo = status?.ultimo_tique ? Date.parse(status.ultimo_tique) : null;
+    return resposta(req, 200, {
+      chaves, banco: bancoOk,
+      agendador: {
+        ultimoTique: status?.ultimo_tique || null,
+        segundosDesdeUltimo: ultimo ? Math.round((agora() - ultimo) / 1000) : null,
+        ultimoErro: status?.ultimo_erro || null, erroEm: status?.erro_em || null,
+      },
+      aparelho: { ativado: Boolean(sub), ultimoOk: sub?.ultimo_ok || null, ultimoStatus: sub?.ultimo_status ?? null },
+    });
+  }
+
   async function teste(req) {
     const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     const usuario = jwt ? await banco.usuarioDoJwt(jwt) : null;
@@ -226,7 +273,11 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
     const [sub] = await banco.select('push_subscriptions', { owner_id: usuario.id, endpoint: corpo.endpoint || '' });
     if (!sub) return resposta(req, 404, { erro: 'Este aparelho não está ativado.' });
     const { status } = await enviar(sub, { titulo: 'Teste', corpo: 'As notificações da Agenda de Estudos estão funcionando.', tag: 'teste', url: './', acoes: [] });
-    return resposta(req, status >= 200 && status < 300 ? 200 : 502, { status });
+    const ok = status >= 200 && status < 300;
+    try {
+      await banco.update('push_subscriptions', { id: sub.id }, { ultimo_status: status, ...(ok ? { ultimo_ok: new Date(agora()).toISOString() } : {}) });
+    } catch { /* registro opcional */ }
+    return resposta(req, ok ? 200 : 502, { status });
   }
 
   function resposta(req, status, corpo) {
@@ -239,9 +290,18 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
     try {
       if (req.method === 'GET' && url.searchParams.has('acao')) return await acao(req, url);
       if (req.method === 'POST' && url.searchParams.get('teste') === '1') return await teste(req);
+      if (req.method === 'POST' && url.searchParams.get('diagnostico') === '1') return await diagnostico(req);
       if (req.method === 'POST') {
         if (req.headers.get('x-lembretes-segredo') !== env.LEMBRETES_SEGREDO || !env.LEMBRETES_SEGREDO) return resposta(req, 401, { erro: 'Sem permissão.' });
-        return resposta(req, 200, await tique());
+        const instante = new Date(agora()).toISOString();
+        try {
+          const r = await tique();
+          await registrarTique({ ultimo_tique: instante, ultimo_erro: null });
+          return resposta(req, 200, r);
+        } catch (err) {
+          await registrarTique({ ultimo_erro: String(err?.message || err).slice(0, 500), erro_em: instante });
+          throw err;
+        }
       }
       return resposta(req, 404, { erro: 'Não encontrado.' });
     } catch (err) {

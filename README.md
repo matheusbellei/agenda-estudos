@@ -110,6 +110,17 @@ O que muda: uma subtag por card e a tag do card já vem no bloco; editor com neg
 2. Publique o código novo no GitHub.
 3. Atualize a função dos avisos: em **Edge Functions › lembretes**, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy** (o aviso "flashcards para hoje" passa a contar com os limites do grupo).
 
+### Notificações mais seguras e o botão "Verificar" (25/11/2026)
+
+1. No **SQL Editor**, rode `supabase/migracao-2026-11-diagnostico.sql` (e, se ainda não rodou, `migracao-2026-11-servico.sql`).
+2. Publique o código novo no GitHub.
+3. Em **Edge Functions › lembretes**, cole o `index.ts` novo e clique em **Deploy**.
+4. No celular: **Configurações › Notificações › Verificar se está tudo funcionando**. Cada linha diz o que está certo e, se algo estiver errado, o que fazer.
+
+O que mudou na função: se o serviço de push falhar por um instante, o aviso é tentado de novo no minuto seguinte; um atraso de até 5 minutos do agendador não perde o lembrete (e o texto diz quanto falta de verdade); cada envio guarda a resposta do celular, e cada execução do agendador fica registrada para o "Verificar".
+
+Teste de ponta a ponta da função (opcional, fora do `npm test`): com os binários do PostgREST e do Deno, `POSTGREST=… DENO=… npm run e2e-funcao` monta um banco igual ao do projeto, roda a própria `index.ts` e confere que o aparelho recebe e decifra o aviso.
+
 ## Notificações (lembretes com o app fechado)
 
 O Supabase roda, a cada minuto, a função `lembretes`, que confere a agenda e manda os avisos para os aparelhos onde você ativou. Faça isto uma vez, nesta ordem:

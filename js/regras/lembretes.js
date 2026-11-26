@@ -2,8 +2,9 @@
 // Regra pura: roda no app (testes) e na função "lembretes" do Supabase, que a recebe pronta em index.ts.
 import { horaTexto, diaDaSemana } from './datas.js';
 
-// Um minuto do agendador pode falhar: o que venceu nos últimos 2 minutos e não foi enviado ainda sai.
-const TOLERANCIA_MIN = 2;
+// O agendador pode atrasar ou pular minutos: o que venceu nos últimos 5 minutos e ainda não foi enviado sai
+// (atrasado, mas sai; o texto diz quanto falta de verdade).
+const TOLERANCIA_MIN = 5;
 const MAX_ITENS_RESUMO = 4;
 
 export function agoraNoFuso(instanteMs, fuso) {
@@ -44,9 +45,10 @@ export function devidos({ instanteMs, fuso, ajustes, blocos, adiamentos = [], en
     const alvo = base + b.start_min - antes;
     const chave = `antes:${refDoBloco(b)}:${b.date}:${b.start_min}`;
     if (!vence(alvo, minuto) || !pode(chave, alvo)) continue;
+    const falta = base + b.start_min - minuto;
     saida.push({
       chave, tipo: 'antes', titulo: titulo(b), ref: refDoBloco(b), data: b.date, acoes: ['cumprir', 'adiar'],
-      corpo: antes === 0 ? 'Começa agora' : `Começa às ${horaTexto(b.start_min)} (em ${antes} min)`,
+      corpo: falta > 0 ? `Começa às ${horaTexto(b.start_min)} (em ${falta} min)` : falta === 0 ? 'Começa agora' : `Começou às ${horaTexto(b.start_min)}`,
     });
   }
 

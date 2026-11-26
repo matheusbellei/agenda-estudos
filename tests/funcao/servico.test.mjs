@@ -4,7 +4,7 @@ import { criarServico, assinarToken } from '../../supabase/functions/lembretes/s
 
 const SEG = '2026-11-23';
 const em = (hhmm, dia = SEG) => Date.parse(`${dia}T${hhmm}:00-03:00`);
-const ENV = { LEMBRETES_SEGREDO: 'segredo-de-teste', SUPABASE_URL: 'https://proj.supabase.co' };
+const ENV = { LEMBRETES_SEGREDO: 'segredo-de-teste', SUPABASE_URL: 'https://proj.supabase.co', VAPID_PUBLIC_KEY: 'PUB', VAPID_PRIVADA_OK: true };
 const DONO = 'u1';
 
 // Banco falso com os mesmos filtros que a entrada traduz para o PostgREST: valor = igual; {in}, {lt}.
@@ -29,6 +29,11 @@ function bancoFalso(dados) {
       t(n).push(nova); escritas.push(['insert', n, nova]); return [nova];
     },
     async update(n, f, campos) { const ls = t(n).filter((l) => casa(l, f)); ls.forEach((l) => Object.assign(l, campos)); escritas.push(['update', n, f, campos]); return ls; },
+    async salvar(n, linha) {
+      const atual = t(n).find((l) => l.id === linha.id);
+      if (atual) Object.assign(atual, linha); else t(n).push({ ...linha });
+      escritas.push(['salvar', n, linha]); return [linha];
+    },
     async remove(n, f) { const antes = t(n).length; dados[n] = t(n).filter((l) => !casa(l, f)); escritas.push(['remove', n, f]); return antes - dados[n].length; },
     async usuarioDoJwt(jwt) { return jwt === 'jwt-bom' ? { id: DONO } : null; },
   };
@@ -157,6 +162,14 @@ test('teste: sem JWT válido 401; com JWT envia só para o aparelho pedido, com 
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('access-control-allow-origin'), 'https://matheusbellei.github.io');
   assert.deepEqual(enviados.map((e) => [e.endpoint, e.payload.titulo]), [['https://push/b', 'Teste']]);
+});
+
+test('teste guarda a resposta do serviço de push no aparelho (o diagnóstico mostra)', async () => {
+  const { servico, banco } = montar({ status: { 'https://push/b': 403 } });
+  const r = await teste(servico, 'jwt-bom', 'https://push/b');
+  assert.equal(r.status, 502);
+  assert.deepEqual(await r.json(), { status: 403 });
+  assert.equal(banco.dados.push_subscriptions[1].ultimo_status, 403);
 });
 
 test('CORS: OPTIONS 204 para a origem do app e localhost; origem estranha não é liberada', async () => {
@@ -293,4 +306,73 @@ test('fora do minuto do aviso a função não lê os flashcards', async () => {
   banco.select = async (n, f) => { lidas.push(n); return sel(n, f); };
   await tique(servico);
   assert.ok(!lidas.includes('flashcards'));
+});
+
+// ---- reforços: nova tentativa, registro do agendador e diagnóstico
+test('nenhum aparelho aceitou (falha passageira): o próximo minuto tenta de novo', async () => {
+  const status = { 'https://push/a': 500, 'https://push/b': 503 };
+  const { servico, enviados, relogio } = montar({ status });
+  await tique(servico);
+  assert.equal(enviados.length, 2);
+  // um minuto depois o serviço de push volta: o mesmo lembrete sai (uma vez)
+  delete status['https://push/a']; delete status['https://push/b'];
+  relogio.agora = em('21:21');
+  enviados.length = 0;
+  await tique(servico);
+  await tique(servico);
+  assert.equal(enviados.length, 2);
+});
+
+test('um aparelho aceitou: não repete para ninguém', async () => {
+  const { servico, enviados, relogio } = montar({ status: { 'https://push/a': 500 } });
+  await tique(servico);
+  relogio.agora = em('21:21');
+  enviados.length = 0;
+  await tique(servico);
+  assert.equal(enviados.length, 0);
+});
+
+test('guarda o status do último envio de cada aparelho', async () => {
+  const { servico, banco } = montar({ status: { 'https://push/a': 403 } });
+  await tique(servico);
+  const [a, b] = banco.dados.push_subscriptions;
+  assert.equal(a.ultimo_status, 403);
+  assert.equal(b.ultimo_status, 201);
+  assert.ok(b.ultimo_ok);
+});
+
+test('cada tique fica registrado; um tique que falha guarda o erro', async () => {
+  const { servico, banco, relogio } = montar();
+  await tique(servico);
+  assert.equal(banco.dados.lembretes_status[0].ultimo_tique, new Date(em('21:20')).toISOString());
+  assert.equal(banco.dados.lembretes_status[0].ultimo_erro, null);
+  const select = banco.select;
+  banco.select = async (n, f) => { if (n === 'commitments') throw new Error('GET commitments: 403 permission denied'); return select(n, f); };
+  relogio.agora = em('21:21');
+  assert.equal((await tique(servico)).status, 500);
+  const st = banco.dados.lembretes_status[0];
+  assert.equal(st.ultimo_erro, 'GET commitments: 403 permission denied');
+  assert.equal(st.erro_em, new Date(em('21:21')).toISOString());
+  assert.equal(st.ultimo_tique, new Date(em('21:20')).toISOString());
+});
+
+const diagnostico = (s, jwt, corpo) => s.tratar(new Request('https://proj.supabase.co/functions/v1/lembretes?diagnostico=1', {
+  method: 'POST', headers: { Authorization: `Bearer ${jwt}`, Origin: 'https://matheusbellei.github.io' }, body: JSON.stringify(corpo),
+}));
+
+test('diagnóstico: confere chaves, banco, agendador e este aparelho', async () => {
+  const { servico, banco } = montar();
+  banco.dados.lembretes_status = [{ id: 1, ultimo_tique: new Date(em('21:19')).toISOString(), ultimo_erro: null }];
+  banco.dados.push_subscriptions[0].ultimo_status = 201;
+  const r = await diagnostico(servico, 'jwt-bom', { endpoint: 'https://push/a', vapidPublica: 'PUB' });
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.deepEqual(d.chaves, { publica: true, publicaIgual: true, privada: true, segredo: true });
+  assert.equal(d.banco, 'ok');
+  assert.equal(d.agendador.segundosDesdeUltimo, 60);
+  assert.deepEqual([d.aparelho.ativado, d.aparelho.ultimoStatus], [true, 201]);
+  const outro = await (await diagnostico(servico, 'jwt-bom', { endpoint: 'https://push/zzz', vapidPublica: 'OUTRA' })).json();
+  assert.equal(outro.chaves.publicaIgual, false);
+  assert.equal(outro.aparelho.ativado, false);
+  assert.equal((await diagnostico(servico, 'jwt-ruim', {})).status, 401);
 });

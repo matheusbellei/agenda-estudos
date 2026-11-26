@@ -7,7 +7,7 @@ const DB = 'estudos_test';
 const A = '11111111-1111-1111-1111-111111111111';
 const B = '22222222-2222-2222-2222-222222222222';
 const TABELAS = ['attachments', 'blocks', 'card_categories', 'cards', 'categories', 'commitments', 'items', 'lists', 'occurrences', 'settings'];
-const TABELAS_NOTIF = ['adiamentos', 'baralhos', 'flash_dias', 'flash_lados', 'flashcards', 'focos', 'modelos', 'notificacoes_enviadas', 'push_subscriptions', 'revisoes'];
+const TABELAS_NOTIF = ['adiamentos', 'baralhos', 'flash_dias', 'flash_lados', 'flashcards', 'focos', 'modelos', 'notificacoes_enviadas', 'push_subscriptions', 'revisoes', 'lembretes_status'];
 
 function psql(db, sql) {
   return execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', db,
@@ -38,7 +38,7 @@ before(() => {
 // Dados de A usados pelos testes seguintes.
 const a = {};
 
-test('as 20 tabelas existem em public com RLS ligado', () => {
+test('as 21 tabelas existem em public com RLS ligado', () => {
   const out = psql(DB, "select tablename||':'||rowsecurity from pg_tables where schemaname='public' order by 1");
   assert.equal(out, [...TABELAS, ...TABELAS_NOTIF].sort().map((t) => `${t}:true`).join('\n'));
 });
@@ -509,4 +509,14 @@ test('a função dos avisos (service_role) lê e grava as tabelas que usa', () =
     comoServico(`select count(*) from public.${t}`);
   }
   comoServico(`delete from public.notificacoes_enviadas where false`);
+});
+
+test('diagnóstico: só a função grava e lê o status do agendador; a migração roda 2×', () => {
+  psqlFile(DB, 'supabase/migracao-2026-11-diagnostico.sql');
+  psqlFile(DB, 'supabase/migracao-2026-11-diagnostico.sql');
+  psql(DB, `begin; set local role service_role; insert into public.lembretes_status (id, ultimo_tique) values (1, now())
+    on conflict (id) do update set ultimo_tique = excluded.ultimo_tique; commit;`);
+  assert.throws(() => as(A, `select * from lembretes_status`));
+  assert.throws(() => psql(DB, `begin; set local role service_role; insert into public.lembretes_status (id) values (2); commit;`));
+  assert.equal(psql(DB, `select count(*) from information_schema.columns where table_name = 'push_subscriptions' and column_name = 'ultimo_status'`), '1');
 });
