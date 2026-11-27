@@ -43,7 +43,6 @@ self.addEventListener('push', (e) => {
     body: d.corpo || '',
     tag: d.tag || undefined,
     icon: 'icones/icone-192.png',
-    badge: 'icones/icone-192.png',
     data: { url: d.url || './', acoes },
     actions: acoes.map((a) => ({ action: a.acao, title: a.titulo })),
   });

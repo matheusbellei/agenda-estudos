@@ -137,3 +137,10 @@ test('troca de inscrição: sem dados guardados ou com a função fora do ar, n�
   await trocou(fora.ouvintes, { oldSubscription: { endpoint: 'https://push/velho' } });
   assert.equal(JSON.parse(caches.mapa.get('dados')).endpoint, 'https://push/velho');
 });
+
+test('notificação mostra o logo uma vez só: ícone grande, sem selo repetido', async () => {
+  const { ouvintes, mostradas } = carregar(async () => ({ ok: true }));
+  await receber(ouvintes, { titulo: 'Vocabulário', corpo: 'Começa às 21:30', tag: 'b1', url: './' });
+  assert.equal(mostradas[0].o.icon, 'icones/icone-192.png');
+  assert.equal('badge' in mostradas[0].o, false);
+});

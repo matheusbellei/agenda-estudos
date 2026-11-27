@@ -151,11 +151,11 @@ export { criar };
 
 const semAcento = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
-// type="time" não representa 24:00: 23:59 no fim vale "até a meia-noite".
+// type="time" não representa 24:00: no fim, 23:59 e 00:00 valem "até a meia-noite".
 function lerHora(texto, ehFim = false) {
   if (!/^\d{2}:\d{2}$/.test(texto)) return null;
   const min = minutosDe(texto);
-  return ehFim && min === 1439 ? 1440 : min;
+  return ehFim && (min === 1439 || min === 0) ? 1440 : min;
 }
 const textoHora = (min) => (min >= 1440 ? '23:59' : horaTexto(min));
 
@@ -344,8 +344,6 @@ export function abrirBloco(arg) {
   const botaoEstado = (id, texto, valor) => criar('button', { type: 'button', class: `btn estado-btn estado-${valor}`, id, 'aria-pressed': String(estadoAtual === valor), texto });
   const btnCumprido = botaoEstado('bloco-cumprido', 'Cumprido', 'done');
   const btnNaoFeito = botaoEstado('bloco-nao-feito', 'Não feito', 'missed');
-  const btnPlanejado = botaoEstado('bloco-planejado', 'Voltar a planejado', 'planned');
-  btnPlanejado.hidden = estadoAtual === 'planned';
   // Não feito: o porquê e o que fez no lugar. Cumprido: o diário. Os três gravam sozinhos ao sair do campo
   // (e ao fechar a folha); não há botão de confirmar.
   const motivo = criar('textarea', { id: 'bloco-motivo', rows: '2', placeholder: 'Opcional' });
@@ -360,7 +358,7 @@ export function abrirBloco(arg) {
   const caixaDiario = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-diario-caixa' }, campo('Diário', diario));
   caixaDiario.hidden = estadoAtual !== 'done';
   const areaEstado = criar('div', { class: 'bloco-area-estado' },
-    criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito, btnPlanejado), caixaNoLugar, caixaDiario);
+    criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito), caixaNoLugar, caixaDiario);
   areaEstado.hidden = novo;
 
   const campoData = campo('Data', data);
@@ -377,7 +375,8 @@ export function abrirBloco(arg) {
   const escopo = criar('div', { id: 'bloco-escopo', class: 'bloco-escopo', hidden: '' });
 
   function atualizarTipo() {
-    const podeRepetir = novo || Boolean(regra);
+    // Também o compromisso já salvo (sem regra) pode passar a repetir toda semana.
+    const podeRepetir = novo || Boolean(regra) || !arg.commitment_id;
     rotuloRepetir.hidden = !podeRepetir;
     atualizarRepeticao();
   }
@@ -385,7 +384,7 @@ export function abrirBloco(arg) {
     const ligado = repetir.checked && !rotuloRepetir.hidden;
     painelRepeticao.hidden = !ligado;
     // Ocorrência de compromisso repetido: a data é a da ocorrência e não muda por aqui.
-    campoData.hidden = ligado && novo;
+    campoData.hidden = ligado && !regra;
     data.disabled = Boolean(regra);
   }
 
@@ -506,6 +505,17 @@ export function abrirBloco(arg) {
       });
       return;
     }
+    if (repetindo && !regra) {
+      // Bloco que já existe passa a repetir: cria a regra e, se ele cai nela, vira a ocorrência daquele dia
+      // (mantém estado, anotações e card; assim a regra não gera uma cópia no mesmo dia).
+      executar(async () => {
+        const nova = await estado.criar('commitments', regraNova());
+        const cai = arg.date >= de.value && (!ate.value || arg.date <= ate.value) && dias.has(diaDaSemana(arg.date));
+        if (cai) await estado.alterar('blocks', arg.id, { ...v, ...doCard(), ...patchNota(), commitment_id: nova.id });
+        return nova;
+      });
+      return;
+    }
     if (regra) {
       perguntar('Alterar quais dias?', [['dia', 'Só este dia'], ['todos', 'Todos']], async (esc) => {
         const nota = patchNota();
@@ -553,10 +563,9 @@ export function abrirBloco(arg) {
   cancelar.addEventListener('click', () => fecharGravandoTextos());
 
   // Cumprido e não feito gravam na hora, sem passar pelo Salvar, e a folha fica aberta para o texto do estado.
-  // "Voltar a planejado" fecha. O card só é oferecido depois de tudo gravado.
+  // Voltar a planejado (tocar de novo no estado marcado) fecha. O card só é oferecido depois de tudo gravado.
   function mostrarEstado(valor) {
-    for (const [b, v] of [[btnCumprido, 'done'], [btnNaoFeito, 'missed'], [btnPlanejado, 'planned']]) b.setAttribute('aria-pressed', String(valor === v));
-    btnPlanejado.hidden = valor === 'planned';
+    for (const [b, v] of [[btnCumprido, 'done'], [btnNaoFeito, 'missed']]) b.setAttribute('aria-pressed', String(valor === v));
     caixaNoLugar.hidden = valor !== 'missed';
     caixaDiario.hidden = valor !== 'done';
     // Depois de marcar não há o que cancelar: o botão vira "Fechar".
@@ -585,9 +594,9 @@ export function abrirBloco(arg) {
       }, { semVoltar: true });
     return MANTER_ABERTA;
   });
-  btnCumprido.addEventListener('click', () => { if (arg.status === 'done') diario.focus(); else aplicarEstado('done'); });
-  btnNaoFeito.addEventListener('click', () => { if (arg.status === 'missed') motivo.focus(); else aplicarEstado('missed'); });
-  btnPlanejado.addEventListener('click', () => aplicarEstado('planned'));
+  // Tocar no estado que já está marcado desfaz: o bloco volta a planejado (e fecha).
+  btnCumprido.addEventListener('click', () => aplicarEstado(arg.status === 'done' ? 'planned' : 'done'));
+  btnNaoFeito.addEventListener('click', () => aplicarEstado(arg.status === 'missed' ? 'planned' : 'missed'));
 
   // Grava um texto do estado (uma gravação de cada vez). Só a coluna do texto muda na cópia da folha:
   // a resposta do banco nunca desfaz um estado gravado depois. Devolve false se não deu para gravar.
@@ -650,7 +659,8 @@ export function abrirBloco(arg) {
   else if (novo) sugerirTitulo();
   atualizarTipo();
   atualizarNovoCard();
-  titulo.focus();
+  // Bloco novo já abre no título; um que já existe abre sem teclado (para ler, marcar ou mexer em outro campo).
+  if (novo) titulo.focus();
 }
 
 // Blocos com menos de 2 h são só cabeça: qualquer toque abre (um estudo de 1 h é tocado para marcar cumprido).

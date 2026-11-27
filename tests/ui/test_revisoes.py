@@ -81,7 +81,7 @@ class TestRevisaoNaFila(RevisoesBase):
         p.wait_for_function("window.__memdb.revisoes.find(r => r.id === 'r1').status === 'feita'")
         self.fechar_folha()
         p.click(f'.bloco[data-bloco="{b["id"]}"] .bloco-cabeca'); p.wait_for_selector('#folha-bloco', state='visible')
-        p.click('#bloco-planejado')
+        p.click('#bloco-cumprido')  # tocar de novo no estado marcado volta a planejado
         p.wait_for_function("window.__memdb.revisoes.find(r => r.id === 'r1').status === 'pendente'")
 
 

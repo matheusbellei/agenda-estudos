@@ -161,3 +161,9 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Sem login: o app não está aberto. Quem conhece o endereço antigo (só o aparelho e o banco) pode trocá-lo.
 - O app grava função, chave pública e endereço no cache `agenda-inscricao` ao ativar e ao abrir (`sincronizar`), e apaga ao desativar. O `activate` do service worker não apaga esse cache.
 - Se a função não responder, nada é perdido: ao abrir, o app reconcilia (`sincronizar`).
+
+## Folha do bloco: repetir, teclado, meia-noite e estado (26/11/2026)
+- "Repetir toda semana" também aparece em compromisso já salvo. Ao salvar, cria a regra e, se o bloco cai nela (data, dia da semana, período), ele vira a ocorrência daquele dia (mantém estado, anotações e card; a regra não duplica o dia).
+- Bloco que já existe abre sem teclado; bloco novo continua abrindo no título.
+- No fim, 00:00 vale "até a meia-noite" (como 23:59). Início 00:00 e fim 00:00 = dia inteiro.
+- Sai o botão "Voltar a planejado": tocar no estado já marcado (Cumprido ou Não feito) volta o bloco a planejado e fecha a folha.

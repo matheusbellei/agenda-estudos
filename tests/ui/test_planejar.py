@@ -201,7 +201,9 @@ class TestEstado(PlanejarBase):
         self.semear(blocos=[self.estudo()])
         p = self.page
         self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.fechar_folha()
-        self.abrir_bloco_de_terca(); p.click('#bloco-planejado'); self.folha_fechada()
+        self.abrir_bloco_de_terca()
+        self.assertEqual(p.locator('#bloco-planejado').count(), 0)
+        p.click('#bloco-cumprido'); self.folha_fechada()
         p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco[data-status="planned"]')
         item = [i for i in self.db()['items'] if i['id'] == 'i2'][0]
         self.assertFalse(item['done']); self.assertIsNone(item['done_at'])
@@ -255,14 +257,11 @@ class TestEstado(PlanejarBase):
         card = [c for c in self.db()['cards'] if c['id'] == 'cA'][0]
         self.assertEqual(card['list_id'], 'L1'); self.assertIsNone(card['completed_at'])
 
-    def test_cumprido_de_novo_nao_pergunta_outra_vez(self):
+    def test_cumprido_de_novo_desfaz_sem_perguntar_do_card(self):
         self.semear(blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140, status='done')])
         p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido')
-        self.assertEqual(p.locator('#bloco-escopo:not([hidden])').count(), 0)
-        self.assertEqual(p.evaluate('document.activeElement.id'), 'bloco-diario')
-        self.fechar_folha()
-        self.assertEqual(self.db()['blocks'][0]['status'], 'done')
+        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.folha_fechada()
+        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
 
     def test_sem_lista_de_conclusao_nao_pergunta(self):
         self.semear(concluido=False, blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140)])
@@ -303,7 +302,7 @@ class TestEstado(PlanejarBase):
         self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.fechar_folha()
         self.assertEqual(self.db()['blocks'][0]['instead_note'], 'Revisei outra matéria')
         self.assertEqual(p.locator(f'.dia[data-data="{TER}"] .bloco-nota').count(), 0)
-        self.abrir_bloco_de_terca(); p.click('#bloco-planejado'); self.folha_fechada()
+        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.folha_fechada()
         self.assertEqual(self.db()['blocks'][0]['instead_note'], 'Revisei outra matéria')
         self.abrir_bloco_de_terca(); p.click('#bloco-nao-feito')
         self.assertEqual(p.input_value('#bloco-no-lugar'), 'Revisei outra matéria')
