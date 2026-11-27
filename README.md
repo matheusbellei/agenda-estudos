@@ -91,7 +91,7 @@ O app instalado no celular pode demorar uma abertura para pegar a versão nova; 
 3. Atualize a função dos avisos: em **Edge Functions › lembretes**, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy** (sem isso, o aviso "flashcards para hoje" não chega).
 4. No app: **☰ › Flashcards** para criar baralhos; os flashcards de cada card ficam no próprio card. O horário do aviso fica em **Configurações › Notificações**.
 
-Nesta mesma atualização, o card ganhou os campos **Tag** e **Subtags** (listas clicáveis, uma tag por card) e a seção **Na agenda** (Marcar sessão, Revisões espaçadas e Repetir toda semana). Isso não precisa de nada no Supabase.
+Nesta mesma atualização, o card ganhou os campos **Tag** e **Subtags** (listas clicáveis, uma tag por card) (a seção "Na agenda" foi retirada depois: agende pela Semana). Isso não precisa de nada no Supabase.
 
 ### Ajustes de 24/11/2026: card, Arquivo, agenda, Cumprido/Não feito e grupos de baralhos
 

@@ -3,11 +3,10 @@
 import { criar } from './bloco.js';
 import { itensOrdenados } from './quadro.js';
 import { paraEncaixar, progresso } from '../regras/fila.js';
-import { revisoesParaEncaixar } from '../regras/revisoes.js';
 import { DIAS_CURTOS, diaDaSemana } from '../regras/datas.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const chave = (e) => `${e.card_id}|${e.item_id || ''}|${e.fixed_date || ''}|${e.revisao_id || ''}`;
+const chave = (e) => `${e.card_id}|${e.item_id || ''}|${e.fixed_date || ''}`;
 
 let selecao = null;
 let barra = null;
@@ -18,9 +17,7 @@ let bloquearClique = false;
 export const selecaoAtual = () => selecao;
 
 // Itens vão sempre ordenados por position: as regras da fila dependem dessa ordem.
-// As revisões vencidas vêm primeiro (são as mais atrasadas por natureza).
 export const entradasDaFila = (estado, hoje) => [
-  ...revisoesParaEncaixar({ revisoes: estado.dados.revisoes, cards: estado.dados.cards, blocks: estado.dados.blocks, hoje }),
   ...paraEncaixar({
     cards: estado.dados.cards, items: itensOrdenados(estado), lists: estado.dados.lists,
     blocks: estado.dados.blocks, occurrences: estado.dados.occurrences, hoje,
@@ -83,14 +80,12 @@ export async function agendarEntrada(estado, entrada, { date, start_min, end_min
   const card = estado.dados.cards.find((c) => c.id === entrada.card_id);
   if (!card) return false;
   const item = entrada.item_id ? estado.dados.items.find((i) => i.id === entrada.item_id) : null;
-  const revisao = entrada.revisao_id || null;
   const ids = estado.dados.card_categories.filter((cc) => cc.card_id === card.id).map((cc) => cc.category_id);
   const categoria = estado.dados.categories.find((c) => ids.includes(c.id) && !c.archived);
   try {
     await estado.criar('blocks', {
-      date, start_min, end_min, kind: 'study', title: revisao ? `Revisão · ${card.title}` : item ? `${card.title} · ${item.title}` : card.title,
-      category_id: categoria?.id || null, card_id: card.id, item_id: revisao ? null : item?.id || null, fixed_date: entrada.fixed_date || null,
-      ...(revisao ? { revisao_id: revisao } : {}),
+      date, start_min, end_min, kind: 'study', title: item ? `${card.title} · ${item.title}` : card.title,
+      category_id: categoria?.id || null, card_id: card.id, item_id: item?.id || null, fixed_date: entrada.fixed_date || null,
     });
   } catch (err) {
     mostrarErro(err.message || 'Não foi possível agendar.');
@@ -192,20 +187,17 @@ function itemDaFila(estado, e) {
   const card = estado.dados.cards.find((c) => c.id === e.card_id);
   const item = e.item_id ? estado.dados.items.find((i) => i.id === e.item_id) : null;
   const sub = [];
-  if (e.revisao_id) sub.push(`revisão de ${e.data.slice(8)}/${e.data.slice(5, 7)}`);
   if (e.fixed_date) sub.push(`${DIAS_CURTOS[diaDaSemana(e.fixed_date) - 1]} ${e.fixed_date.slice(8)}/${e.fixed_date.slice(5, 7)}`);
   if (item) sub.push(item.title);
   const { feitos, total } = progresso(e.card_id, estado.dados.items);
-  if (total && !e.revisao_id) sub.push(`${feitos} de ${total}`);
+  if (total) sub.push(`${feitos} de ${total}`);
   const el = criar('div', {
     class: `fila-item${selecao && chave(selecao) === chave(e) ? ' selecionado' : ''}`, role: 'button', tabindex: '0',
     'aria-pressed': String(Boolean(selecao && chave(selecao) === chave(e))),
     'data-card': e.card_id, 'data-item': e.item_id || '', 'data-fixa-data': e.fixed_date || '', 'data-chave': chave(e),
-    ...(e.revisao_id ? { 'data-revisao': e.revisao_id } : {}),
   },
   criar('div', { class: 'fila-topo' },
     criar('span', { class: 'fila-card', texto: card?.title || '' }),
-    ...(e.revisao_id ? [criar('span', { class: 'fila-etiqueta fila-revisar', texto: 'Revisar' })] : []),
     ...(e.reagendar ? [criar('span', { class: 'fila-etiqueta', texto: 'Reagendar' })] : [])),
   ...(sub.length ? [criar('div', { class: 'fila-sub', texto: sub.join(' · ') })] : []));
   const cor = corDoCard(estado, e.card_id);

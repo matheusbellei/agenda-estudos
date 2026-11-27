@@ -1,0 +1,4 @@
+Apague estas pastas/arquivos do repositório:
+js/regras/revisoes.js
+js/regras/sessoes.js
+js/telas/revisoes.js

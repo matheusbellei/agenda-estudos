@@ -4,7 +4,7 @@ import { registrarTela, irPara } from './casca.js';
 import { criar, elementoBloco, abrirBloco, ligarCabecaECorpo, idDoBloco } from './bloco.js';
 import { mostrarDia } from './hoje.js';
 import { diasDaSemana, somaDias, isoDe, horaTexto, rotuloSemana, DIAS_CURTOS, inicioDaSemana } from '../regras/datas.js';
-import { blocosDoPeriodo, faixasDaSemana, limitesDoDia, horariosLivres, posicionar, inicioMaisUmaHora } from '../regras/calendario.js';
+import { blocosDoPeriodo, faixasDaSemana, limitesDoDia, horariosLivres, posicionar, inicioMaisUmaHora, trechoLivreNoMinuto } from '../regras/calendario.js';
 import { montarFila, selecaoAtual, agendarSelecionada, agendarEntrada, umaHoraLivre, avisarSelecao } from './fila.js';
 
 // Altura de cada faixa da grade: os blocos são desenhados numa camada por cima, proporcionais à duração.
@@ -111,8 +111,12 @@ export function iniciarSemana({ estado }) {
           });
           faixa.append(livre);
         });
-        faixa.addEventListener('click', () => {
-          if (selecaoAtual()) { if (slot) agendarSelecionada(estado, { date: iso, ...slot }); else avisarSelecao('Sem espaço livre nesta faixa.'); }
+        faixa.addEventListener('click', (ev) => {
+          if (selecaoAtual()) { if (slot) agendarSelecionada(estado, { date: iso, ...slot }); else avisarSelecao('Sem espaço livre nesta faixa.'); return; }
+          // Vão entre dois blocos (curto demais para ganhar o "Livre"): tocar nele marca um compromisso ali.
+          const minuto = f.start_min + (ev.clientY - faixa.getBoundingClientRect().top) / pxPorMin;
+          const trecho = trechoLivreNoMinuto(doDia, minuto, inicio, fim);
+          if (trecho) abrirBloco({ novo: true, date: iso, start_min: trecho.start_min, end_min: Math.min(trecho.end_min, trecho.start_min + 60) });
         });
         coluna.append(faixa);
       });

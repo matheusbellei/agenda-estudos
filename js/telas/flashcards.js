@@ -2,7 +2,7 @@
 import { registrarTela } from './casca.js';
 import { criar } from './bloco.js';
 import { abrirJanela } from './janela.js';
-import { hojeDoApp } from './revisoes.js';
+import { hojeDoApp } from './hoje-do-app.js';
 import { estudar } from './flash-sessao.js';
 import { marcacaoParaHtml, limparSaidaDoEditor } from '../regras/marcacao.js';
 import { criarEditor } from '../editor.js';
@@ -25,8 +25,10 @@ const contar = (c) => [c.novos ? `${c.novos} ${c.novos === 1 ? 'novo' : 'novos'}
 // Frente e verso usam o editor das Anotações só com Negrito, Itálico e Lista; a resposta do "digitar" é uma linha simples.
 const BARRA_FLASH = [['bold', 'italic'], ['ul']];
 export function abrirFormularioFlash(estado, { baralhoId = null, cardId = null, flashcard = null }) {
-  const tipo = criar('select', { id: 'flash-tipo' }, ...TIPOS.map(([v, r]) => criar('option', { value: v, texto: r })));
-  tipo.value = flashcard?.tipo || 'basico';
+  // Cartão novo é sempre "Digitar a resposta". Cartão antigo de outro tipo mantém o seu tipo como opção, para poder ser editado.
+  const tiposDoForm = TIPOS.filter(([v]) => v === 'digitar' || v === flashcard?.tipo);
+  const tipo = criar('select', { id: 'flash-tipo' }, ...tiposDoForm.map(([v, r]) => criar('option', { value: v, texto: r })));
+  tipo.value = flashcard?.tipo || 'digitar';
   const ajuda = criar('p', { class: 'suave flash-ajuda' });
   const caixaFrente = criar('div', { class: 'flash-editor notas-editor' });
   const caixaVerso = criar('div', { class: 'flash-editor notas-editor' });
@@ -42,7 +44,7 @@ export function abrirFormularioFlash(estado, { baralhoId = null, cardId = null, 
   const salvar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'flash-salvar', texto: 'Salvar' });
   const cancelar = criar('button', { type: 'button', class: 'btn', texto: 'Cancelar' });
   const janela = abrirJanela('flash-janela', flashcard ? 'Editar flashcard' : 'Novo flashcard',
-    criar('label', { class: 'campo' }, criar('span', { texto: 'Tipo' }), tipo), ajuda,
+    ...(tiposDoForm.length > 1 ? [criar('label', { class: 'campo' }, criar('span', { texto: 'Tipo' }), tipo)] : []), ajuda,
     criar('div', { class: 'campo' }, criar('span', { texto: 'Frente' }), caixaFrente),
     campoVerso, campoResposta, campoPrevia,
     erro, criar('div', { class: 'linha-botoes' }, salvar, cancelar));

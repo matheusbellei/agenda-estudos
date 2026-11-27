@@ -50,6 +50,13 @@ export function horariosLivres(blocosDoDia, inicio, fim) {
   return livres.filter((l) => l.end_min > l.start_min);
 }
 
+// Trecho livre do dia (entre blocos) que contém o minuto tocado; null se o toque caiu num bloco
+// ou num vão menor que `minimo` minutos. É o que deixa marcar algo num espaço entre dois blocos.
+export function trechoLivreNoMinuto(blocosDoDia, minuto, inicio, fim, minimo = 15) {
+  const achado = horariosLivres(blocosDoDia, inicio, fim).find((l) => minuto >= l.start_min && minuto < l.end_min);
+  return achado && achado.end_min - achado.start_min >= minimo ? achado : null;
+}
+
 export function faixasDaSemana(blocosDoDia, inicio, fim, faixa) {
   const faixas = [];
   for (let ini = inicio; ini < fim; ini += faixa) {

@@ -114,12 +114,13 @@ export function iniciarTags({ estado }) {
           });
           return b;
         })))));
-    // Só a tag mãe escolhe se conta como estudo; a subtag segue a mãe.
+    // A subtag segue a mãe quando a mãe conta como estudo; se a mãe não conta, a subtag pode entrar nos Dashboards sozinha.
     const maeDaTag = parentId ? estado.dados.categories.find((c) => c.id === parentId) : null;
     const estudo = criar('input', { type: 'checkbox', id: 'tag-estudo' });
     estudo.checked = !!tag?.conta_estudo;
-    const campoEstudo = parentId
-      ? criar('div', { class: 'suave', id: 'tag-estudo-herdado', texto: `Herdado de ${maeDaTag?.name || 'tag mãe'}: ${maeDaTag?.conta_estudo ? 'conta como estudo' : 'não conta como estudo'}` })
+    const herdaDaMae = Boolean(parentId && maeDaTag?.conta_estudo);
+    const campoEstudo = herdaDaMae
+      ? criar('div', { class: 'suave', id: 'tag-estudo-herdado', texto: `Herdado de ${maeDaTag.name}: conta como estudo` })
       : criar('label', { class: 'campo-check' }, estudo, criar('span', { texto: 'Conta como estudo (entra nos Dashboards)' }));
     const metaAtual = tag?.meta_semanal_min || 0;
     const metaH = criar('input', { id: 'tag-meta-h', type: 'number', min: '0', max: '168', inputmode: 'numeric', placeholder: 'h' });
@@ -156,7 +157,7 @@ export function iniciarTags({ estado }) {
       if (meta > 168 * 60) { erro.textContent = 'A meta passa de 168h por semana.'; return; }
       ocupado = true; salvar.disabled = true; erro.textContent = '';
       try {
-        const campos = { name: texto, color: cor.valor(), icon: icone, meta_semanal_min: meta || null, ...(parentId ? {} : { conta_estudo: estudo.checked }) };
+        const campos = { name: texto, color: cor.valor(), icon: icone, meta_semanal_min: meta || null, ...(herdaDaMae ? {} : { conta_estudo: estudo.checked }) };
         if (tag) await estado.alterar('categories', tag.id, campos);
         else {
           const criada = await estado.criar('categories', { ...campos, parent_id: parentId });

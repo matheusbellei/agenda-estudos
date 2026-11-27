@@ -1,5 +1,6 @@
 // Blocos do calendário: elemento visual, gravação e (mais abaixo) a folha de criar/editar.
-import { corDoTexto } from './ajustes.js';
+import { corDoTexto, chipCategoria } from './ajustes.js';
+import { criarEscolha } from './escolha.js';
 import { OPCOES_LEMBRETE, textoDoLembrete } from './notificacoes.js';
 import { emOrdem, categoriaParaBloco } from '../regras/tags.js';
 import { criarTagPeloBloco } from './tags.js';
@@ -8,7 +9,6 @@ import { efeitosDeEstado } from '../regras/fila.js';
 import { moverCard, cardsDaLista, posicaoNoFim } from './quadro.js';
 import { registrarTextoNaoSalvo, pedirDescarte } from './folhas.js';
 import { focarNoBloco } from './foco.js';
-import { statusDaRevisao } from '../regras/revisoes.js';
 
 let estado = null;
 let abrirCardFn = () => {};
@@ -120,11 +120,6 @@ export async function mudarEstado(est, bloco, novo, { instead_note = '', diario,
     const comDiario = novo === 'done' && typeof diario === 'string' ? { diario: diario.trim() } : {};
     const comMotivo = typeof motivo === 'string' ? { motivo: motivo.trim() } : {};
     gravado = await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim(), ...comMotivo } : { status: novo, ...comDiario });
-    // Sessão de revisão: cumprida conclui a revisão; desfazer o cumprido devolve a revisão para a fila.
-    const rev = statusDaRevisao(bloco, novo);
-    if (rev && est.dados.revisoes.some((r) => r.id === bloco.revisao_id && r.status !== 'cancelada')) {
-      await est.alterar('revisoes', bloco.revisao_id, { status: rev, feita_em: rev === 'feita' ? new Date().toISOString() : null });
-    }
   } catch (err) {
     if (desfazer) {
       try { await desfazer(); } catch {
@@ -176,45 +171,57 @@ export function abrirBloco(arg) {
   // Categoria em dois passos, como no controle financeiro: a tag e, se quiser, uma subtag dela.
   // As duas listas terminam com a opção de criar, que abre a janela da tela Tags por cima do bloco.
   const NOVA = '__nova__';
-  const tagSel = criar('select', { id: 'bloco-tag' });
-  const subSel = criar('select', { id: 'bloco-subtag' });
-  const campoSub = campo('Subtag', subSel);
   const catPorId = (id) => estado.dados.categories.find((c) => c.id === id) || null;
   const inicial = catPorId(arg.category_id);
   let escolhaTag = inicial ? inicial.parent_id || inicial.id : '';
   let escolhaSub = inicial?.parent_id ? inicial.id : '';
-  const opcao = (valor, texto) => { const o = criar('option', { value: valor }); o.textContent = texto; return o; };
-  function preencherTags() {
-    const maes = emOrdem(estado.dados.categories, { incluir: new Set([escolhaTag].filter(Boolean)) }).filter((c) => !c.parent_id);
-    tagSel.replaceChildren(opcao('', 'Sem tag'), ...maes.map((c) => opcao(c.id, c.name)), opcao(NOVA, '+ Nova tag…'));
-    tagSel.value = escolhaTag;
-  }
-  function preencherSub() {
+  const nada = (texto) => criar('span', { class: 'escolha-nada', texto });
+  const criarOpcao = nada;
+  const tagEscolha = criarEscolha({
+    id: 'bloco-tag', rotulo: 'Tag', chave: 'cat',
+    opcoes: () => {
+      const maes = emOrdem(estado.dados.categories, { incluir: new Set([escolhaTag].filter(Boolean)) }).filter((c) => !c.parent_id);
+      return [{ id: '', conteudo: nada('Sem tag'), selecionada: !escolhaTag },
+        ...maes.map((c) => ({ id: c.id, conteudo: chipCategoria(c), selecionada: c.id === escolhaTag })),
+        { id: NOVA, conteudo: criarOpcao('+ Nova tag…'), selecionada: false }];
+    },
+    resumo: () => { const c = catPorId(escolhaTag); return c ? chipCategoria(c) : 'Sem tag'; },
+    aoEscolher: (v) => {
+      if (v !== NOVA) { escolhaTag = v; escolhaSub = ''; atualizarEscolhas(); return; }
+      criarTagPeloBloco({ aoCriar: (c) => definirCategoria(c.id), aoCancelar: atualizarEscolhas });
+    },
+  });
+  const subFilhas = () => estado.dados.categories.filter((c) => c.parent_id === escolhaTag && (!c.archived || c.id === escolhaSub))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const subEscolha = criarEscolha({
+    id: 'bloco-subtag', rotulo: 'Subtag', chave: 'cat',
+    opcoes: () => [{ id: '', conteudo: nada('Sem subtag'), selecionada: !escolhaSub },
+      ...subFilhas().map((c) => ({ id: c.id, conteudo: chipCategoria(c), selecionada: c.id === escolhaSub })),
+      { id: NOVA, conteudo: criarOpcao('+ Nova subtag…'), selecionada: false }],
+    resumo: () => { const c = catPorId(escolhaSub); return c ? chipCategoria(c) : 'Sem subtag'; },
+    aoEscolher: (v) => {
+      if (v !== NOVA) { escolhaSub = v; atualizarEscolhas(); return; }
+      criarTagPeloBloco({ mae: catPorId(escolhaTag), aoCriar: (c) => definirCategoria(c.id), aoCancelar: atualizarEscolhas });
+    },
+  });
+  const campoTag = tagEscolha.el;
+  const campoSub = subEscolha.el;
+  function atualizarEscolhas() {
+    if (!escolhaTag) escolhaSub = '';
     campoSub.hidden = !escolhaTag;
-    if (!escolhaTag) { escolhaSub = ''; return; }
-    const filhas = estado.dados.categories.filter((c) => c.parent_id === escolhaTag && (!c.archived || c.id === escolhaSub))
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-    subSel.replaceChildren(opcao('', 'Sem subtag'), ...filhas.map((c) => opcao(c.id, c.name)), opcao(NOVA, '+ Nova subtag…'));
-    subSel.value = escolhaSub;
+    tagEscolha.atualizar(); subEscolha.atualizar();
+    // O valor atual fica no botão, para leitura (e testes).
+    campoTag.querySelector('#bloco-tag').dataset.valor = escolhaTag;
+    campoSub.querySelector('#bloco-subtag').dataset.valor = escolhaSub;
   }
   function definirCategoria(id) {
     const c = catPorId(id);
     escolhaTag = c ? c.parent_id || c.id : '';
     escolhaSub = c?.parent_id ? c.id : '';
-    preencherTags(); preencherSub();
+    atualizarEscolhas();
   }
   const categoriaValor = () => escolhaSub || escolhaTag || null;
-  tagSel.addEventListener('change', () => {
-    if (tagSel.value !== NOVA) { escolhaTag = tagSel.value; escolhaSub = ''; preencherSub(); return; }
-    tagSel.value = escolhaTag;
-    criarTagPeloBloco({ aoCriar: (c) => definirCategoria(c.id), aoCancelar: preencherTags });
-  });
-  subSel.addEventListener('change', () => {
-    if (subSel.value !== NOVA) { escolhaSub = subSel.value; return; }
-    subSel.value = escolhaSub;
-    criarTagPeloBloco({ mae: catPorId(escolhaTag), aoCriar: (c) => definirCategoria(c.id), aoCancelar: preencherSub });
-  });
-  preencherTags(); preencherSub();
+  atualizarEscolhas();
   const data = criar('input', { id: 'bloco-data', type: 'date', value: arg.date });
   const inicio = criar('input', { id: 'bloco-inicio', type: 'time', value: textoHora(arg.start_min) });
   const fim = criar('input', { id: 'bloco-fim', type: 'time', value: textoHora(arg.end_min) });
@@ -645,7 +652,7 @@ export function abrirBloco(arg) {
   fundo.addEventListener('click', () => fecharPeloFundo());
   const painel = criar('form', { class: 'menu-folha bloco-painel', novalidate: '' },
     criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado,
-    campo('Título', titulo), caixaEstudo, campo('Tag', tagSel), campoSub, campoData,
+    campo('Título', titulo), caixaEstudo, campoTag, campoSub, campoData,
     criar('div', { class: 'linha-campos' }, campo('Início', inicio), campo('Fim', fim)),
     campo('Lembrete', lembrete),
     rotuloRepetir, painelRepeticao, erro, botoes, escopo);

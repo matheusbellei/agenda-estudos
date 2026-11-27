@@ -1,12 +1,12 @@
 // Dados em memória + ações que gravam no store e avisam os ouvintes.
-export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings'];
+export const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings'];
 
 const AJUSTES_PADRAO = { day_start_min: 0, day_end_min: 1440, week_slot_min: 120, day_slot_min: 30, last_rollover: null, auto_card: 'perguntar', auto_card_list_id: null,
   notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
   notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
   sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
   foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
-  revisoes_dias: [7, 30], modelos_com_fixas: false,
+  modelos_com_fixas: false,
   flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140 };
 
 export function criarEstado(store) {
@@ -33,7 +33,6 @@ export function criarEstado(store) {
     dados.occurrences = dados.occurrences.filter((o) => o.card_id !== id);
     dados.card_categories = dados.card_categories.filter((cc) => cc.card_id !== id);
     dados.commitments = dados.commitments.map((c) => (c.card_id === id ? { ...c, card_id: null } : c));
-    dados.revisoes = dados.revisoes.filter((r) => r.card_id !== id);
     cascataFlashcards((f) => f.card_id === id);
     dados.blocks = dados.blocks.map((b) => (b.card_id === id || itens.has(b.item_id)
       ? { ...b, card_id: b.card_id === id ? null : b.card_id, item_id: itens.has(b.item_id) ? null : b.item_id }

@@ -1,7 +1,7 @@
 // Modelos de semana: salvar a semana mostrada e aplicar um modelo nela (de hoje em diante), com aviso do que sai.
 import { criar } from './bloco.js';
 import { abrirJanela } from './janela.js';
-import { hojeDoApp } from './revisoes.js';
+import { hojeDoApp } from './hoje-do-app.js';
 import { itensDoModelo, planoDeAplicacao, textoDaContagem } from '../regras/modelos.js';
 import { somaDias, rotuloSemana } from '../regras/datas.js';
 

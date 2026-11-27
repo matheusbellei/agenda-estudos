@@ -1,22 +1,19 @@
 // Card aberto numa folha sobre a tela: título, categorias, lista, anotações, itens, anexos e ações.
 import { criar, itensOrdenados, moverCard, posicaoNoFim, trocarPosicoes, cardsDaLista, restaurarCard, arquivarCard, excluirCard, PERGUNTA_EXCLUIR_CARD } from './quadro.js';
-import { emOrdem, nomeCompleto, categoriaDoCard, trocarTag, escolherSubtag, categoriaParaBloco } from '../regras/tags.js';
+import { emOrdem, nomeCompleto, categoriaDoCard, trocarTag, escolherSubtag } from '../regras/tags.js';
 import { criarEscolha, fecharEscolhaAberta } from './escolha.js';
 import { chipCategoria } from './ajustes.js';
-import { progresso, proximoItem } from '../regras/fila.js';
+import { progresso } from '../regras/fila.js';
 import { abrirBloco } from './bloco.js';
-import { isoDe, somaDias } from '../regras/datas.js';
 import { horasDoCard, formatarHoras } from '../regras/acompanhamento.js';
 import { agoraNoFuso } from '../regras/lembretes.js';
 import { registrosDoDiario } from '../regras/diario.js';
 import { itemDoDiario } from './diario.js';
-import { abrirAgendarRevisao, cancelarRevisoes } from './revisoes.js';
-import { textoDasRevisoes } from '../regras/revisoes.js';
 import { abrirFormularioFlash, itemDeFlash } from './flashcards.js';
 import { estudar } from './flash-sessao.js';
 import { irPara as irParaTela } from './casca.js';
 import { paraHoje } from '../regras/flash.js';
-import { hojeDoApp } from './revisoes.js';
+import { hojeDoApp } from './hoje-do-app.js';
 import { caminhosNoMarkdown, comEnderecos, semEnderecos, nomeParaCaminho } from '../regras/anexos.js';
 import { criarEditor, modoVisual } from '../editor.js';
 import { registrarTextoNaoSalvo } from './folhas.js';
@@ -57,8 +54,6 @@ export function iniciarCard({ estado, store }) {
 
   let cardId = null;
   let nodos = null; // referências do que foi montado para o card aberto
-  let painelFixa = false;
-  let dias = new Set();
   const pendentes = new Map(); // chave da anotação -> { reg, timer, emCurso }
   let notasCard = null;        // editor das anotações gerais
   let notasItem = null;        // { id, reg }: só um editor de item montado por vez
@@ -596,28 +591,7 @@ export function iniciarCard({ estado, store }) {
         criar('label', { class: 'campo' }, criar('span', { texto: 'Voltar para a lista' }), select), voltar);
       return;
     }
-    const botao = criar('button', { type: 'button', class: 'btn', id: 'card-fixa', texto: 'Repetir toda semana' });
-    const painel = criar('div', { class: 'painel-fixa', hidden: '' }, criar('p', { class: 'suave', texto: 'Dias da semana (opcional):' }));
-    painel.hidden = !painelFixa;
-    const grade = criar('div', { class: 'dias-fixa', id: 'card-fixa-dias' }, ...DIAS.map(([n, t]) => {
-      const b = criar('button', { type: 'button', class: 'chip', 'data-dia': n, 'aria-pressed': String(dias.has(n)), texto: t });
-      b.classList.toggle('ativo', dias.has(n));
-      b.addEventListener('click', () => {
-        if (dias.has(n)) dias.delete(n); else dias.add(n);
-        b.classList.toggle('ativo', dias.has(n));
-        b.setAttribute('aria-pressed', String(dias.has(n)));
-      });
-      return b;
-    }));
-    const confirmar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'card-fixa-confirmar', texto: 'Confirmar' });
-    confirmar.addEventListener('click', () => tentar(async () => {
-      painelFixa = false;
-      await estado.alterar('cards', c.id, { is_fixed: true, fixed_days: [...dias].sort((a, b) => a - b), list_id: null, completed_at: null });
-    }));
-    painel.append(grade, confirmar);
-    botao.addEventListener('click', () => { painelFixa = !painelFixa; painel.hidden = !painelFixa; });
-    el.replaceChildren(criar('div', { class: 'agenda-linha' }, botao,
-      criar('p', { class: 'suave', texto: 'Vira um card fixo, nos dias que você escolher.' })), painel);
+    el.replaceChildren(); // sem botão para tornar fixo: a agenda é montada na própria agenda
   }
 
   // Flashcards deste card: estudados só aqui (os baralhos do menu são outra coisa).
@@ -670,10 +644,6 @@ export function iniciarCard({ estado, store }) {
     desenharMeta(c);
     desenharDiario(c);
     desenharFlash(c);
-    const textoRev = textoDasRevisoes(estado.dados.revisoes, c.id);
-    nodos.revisoesTexto.textContent = textoRev || '';
-    nodos.revisoesTexto.hidden = !textoRev;
-    nodos.revisoesCancelar.hidden = !estado.dados.revisoes.some((r) => r.card_id === c.id && r.status === 'pendente');
     desenharItens();
     desenharAnexos();
   }
@@ -681,7 +651,6 @@ export function iniciarCard({ estado, store }) {
   // ---- montagem
   function montar(c) {
     linhas.clear(); grupos.clear();
-    painelFixa = false; dias = new Set();
     const fecharBtn = criar('button', { type: 'button', class: 'btn-icone', id: 'card-fechar', 'aria-label': 'Fechar', title: 'Fechar', texto: '←' });
     const titulo = criar('input', { type: 'text', id: 'card-titulo', 'aria-label': 'Título do card', autocomplete: 'off' });
     const barra = criar('span');
@@ -692,12 +661,6 @@ export function iniciarCard({ estado, store }) {
     const lista = criar('select', { id: 'card-lista', 'aria-label': 'Lista do card' });
     const blocoLista = criar('label', { class: 'campo' }, criar('span', { texto: 'Lista' }), lista);
     const fixa = criar('div', { id: 'card-estado-fixa' });
-    const agendar = criar('button', { type: 'button', class: 'btn', id: 'card-sessao', texto: 'Marcar sessão' });
-    const revisaoBtn = criar('button', { type: 'button', class: 'btn', id: 'card-revisao' }, criar('i', { class: 'ti ti-repeat', 'aria-hidden': 'true' }), ' Revisões espaçadas');
-    revisaoBtn.addEventListener('click', () => abrirAgendarRevisao(estado, cardId));
-    const revisoesTexto = criar('div', { id: 'card-revisoes-texto', class: 'suave', hidden: '' });
-    const revisoesCancelar = criar('button', { type: 'button', class: 'btn btn-mini', id: 'card-revisoes-cancelar', texto: 'Cancelar as que faltam', hidden: '' });
-    revisoesCancelar.addEventListener('click', () => tentar(() => cancelarRevisoes(estado, cardId)));
     const notas = criar('div', { id: 'card-notas' });
     const itens = criar('div', { id: 'card-itens' });
     const novoGrupoBtn = criar('button', { type: 'button', class: 'btn', id: 'card-novo-grupo', texto: 'Novo grupo' });
@@ -727,8 +690,6 @@ export function iniciarCard({ estado, store }) {
     const metaTexto = criar('div', { id: 'card-meta-texto', class: 'suave' });
     const metaBarraFill = criar('span');
     const metaBarra = criar('span', { class: 'barra-mini card-meta-barra' }, metaBarraFill);
-    const arquivoEntrada = criar('input', { type: 'file', id: 'anexo-arquivo', hidden: '', 'aria-label': 'Arquivo para anexar' });
-    const anexarBtn = criar('button', { type: 'button', class: 'btn', id: 'anexo-arquivo-abrir', texto: 'Anexar arquivo' });
     const linkAbrir = criar('button', { type: 'button', class: 'btn', id: 'anexo-link-abrir', texto: 'Adicionar link' });
     const linkNome = criar('input', { id: 'anexo-link-nome', type: 'text', placeholder: 'Nome (opcional)', 'aria-label': 'Nome do link', autocomplete: 'off' });
     const linkUrl = criar('input', { id: 'anexo-link-url', type: 'url', placeholder: 'https://…', 'aria-label': 'Endereço do link', autocomplete: 'off', inputmode: 'url' });
@@ -742,11 +703,7 @@ export function iniciarCard({ estado, store }) {
         criar('section', { class: 'card-categoria' }, criar('h3', { texto: 'Categoria' }),
           criar('div', { class: 'card-escolhas' }, escolhaTag.el, escolhaSub.el), tagOutras),
         criar('section', {}, blocoLista),
-        criar('section', { id: 'card-na-agenda', class: 'card-na-agenda' }, criar('h3', { texto: 'Na agenda' }),
-          criar('div', { class: 'agenda-linha' }, agendar, criar('p', { class: 'suave', texto: 'Coloca este card num horário da agenda.' })),
-          criar('div', { class: 'agenda-linha' }, revisaoBtn, criar('p', { class: 'suave', texto: 'Marca revisões em datas futuras, como 7 e 30 dias depois.' })),
-          criar('div', { class: 'card-revisoes' }, revisoesTexto, revisoesCancelar),
-          fixa),
+        criar('section', { id: 'card-na-agenda', class: 'card-na-agenda' }, fixa),
         criar('section', {}, criar('h3', { texto: 'Meta de horas' }),
           criar('div', { class: 'tag-meta-campos' }, metaH, criar('span', { texto: 'h' }), metaM, criar('span', { texto: 'min' })),
           metaTexto, metaBarra),
@@ -756,10 +713,10 @@ export function iniciarCard({ estado, store }) {
           criar('div', { class: 'linha-botoes' }, flashEstudar, flashAdicionar), flashLista),
         criar('section', {}, criar('h3', { texto: 'Diário' }), diarioCard),
         criar('section', {}, criar('h3', { texto: 'Anexos' }), anexos,
-          criar('div', { class: 'linha-botoes' }, anexarBtn, linkAbrir), arquivoEntrada, linkForm),
+          criar('div', { class: 'linha-botoes' }, linkAbrir), linkForm),
         erroEl,
         criar('div', { class: 'card-acoes' }, arquivar, excluir)));
-    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, revisoesTexto, revisoesCancelar, flashEstudar, flashLista, flashResumo };
+    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, flashEstudar, flashLista, flashResumo };
 
     fecharBtn.addEventListener('click', fechar);
     // Meta do card em minutos: vazio ou zero = sem meta.
@@ -771,17 +728,6 @@ export function iniciarCard({ estado, store }) {
     };
     metaH.addEventListener('change', gravarMeta);
     metaM.addEventListener('change', gravarMeta);
-    // Abre a folha de bloco de estudo com o card e o próximo item; a hora sugerida é a próxima hora cheia de hoje.
-    agendar.addEventListener('click', () => {
-      const agora = new Date();
-      const a = estado.ajustes();
-      let data = isoDe(agora);
-      let inicio = Math.max(a.day_start_min, Math.ceil((agora.getHours() * 60 + agora.getMinutes() + 1) / 60) * 60);
-      if (inicio + 60 > a.day_end_min) { data = somaDias(data, 1); inicio = a.day_start_min; }
-      const cat = categoriaParaBloco(estado.dados.categories, idsDoCard());
-      const categoria = estado.dados.categories.find((k) => k.id === cat && !k.archived) ? cat : null;
-      abrirBloco({ novo: true, kind: 'study', date: data, start_min: inicio, end_min: Math.min(inicio + 60, 1440), card_id: cardId, category_id: categoria, item_id: proximoItem(cardId, itensOrdenados(estado))?.id || null });
-    });
     const renomear = () => {
       const novo = titulo.value.trim();
       if (!novo) { titulo.value = card().title; return; }
@@ -794,13 +740,6 @@ export function iniciarCard({ estado, store }) {
       tentar(() => moverCard(estado, card(), lista.value, posicaoNoFim(cardsDaLista(estado, lista.value).filter((x) => x.id !== cardId))));
     });
     notasCard = montarNotas(notas, 'cards', c.id);
-    anexarBtn.addEventListener('click', () => arquivoEntrada.click());
-    arquivoEntrada.addEventListener('change', () => {
-      const arquivo = arquivoEntrada.files[0];
-      if (!arquivo) return;
-      const idDoCard = cardId;
-      tentar(() => criarAnexoDeArquivo(arquivo, idDoCard)).finally(() => { arquivoEntrada.value = ''; });
-    });
     linkAbrir.addEventListener('click', () => { linkForm.hidden = !linkForm.hidden; if (!linkForm.hidden) linkUrl.focus(); });
     linkForm.addEventListener('submit', async (e) => {
       e.preventDefault();

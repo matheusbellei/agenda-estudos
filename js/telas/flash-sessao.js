@@ -2,7 +2,7 @@
 // Cada resposta grava na hora (sair no meio é seguro). Errados voltam no fim da sessão.
 import { registrarTela, irPara } from './casca.js';
 import { criar } from './bloco.js';
-import { hojeDoApp } from './revisoes.js';
+import { hojeDoApp } from './hoje-do-app.js';
 import { marcacaoParaHtml } from '../regras/marcacao.js';
 import { filaDaSessao, filaDoGrupo, limitesDe, responder, pergunta, resposta, confereDigitado } from '../regras/flash.js';
 

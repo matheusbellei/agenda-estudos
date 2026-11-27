@@ -17,6 +17,14 @@ export async function guardarParaOSW(store, endpoint) {
   } catch { /* sem cache no navegador: a troca em segundo plano não funciona, mas o app refaz ao abrir */ }
 }
 
+// O que este aparelho ativou antes (endereço da inscrição); vazio se nunca ativou ou se desativou.
+export async function lembradoPeloOSW() {
+  try {
+    const r = await (await caches.open(CACHE_INSCRICAO)).match('dados');
+    return r ? await r.json() : null;
+  } catch { return null; }
+}
+
 export async function esquecerParaOSW() {
   try { await (await caches.open(CACHE_INSCRICAO)).delete('dados'); } catch { /* idem */ }
 }
@@ -67,6 +75,10 @@ export async function ativar(store) {
     || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: deB64u(await store.vapidPublica()) });
   const { endpoint, keys } = sub.toJSON();
   const existentes = await store.list(TABELA);
+  // Inscrição antiga deste mesmo aparelho (que o navegador perdeu): sai da lista para não ficar repetida.
+  const lembrado = await lembradoPeloOSW();
+  const velha = lembrado?.endpoint && lembrado.endpoint !== endpoint && existentes.find((l) => l.endpoint === lembrado.endpoint);
+  if (velha) await store.remove(TABELA, velha.id);
   if (!existentes.some((l) => l.endpoint === endpoint)) {
     await store.insert(TABELA, { endpoint, p256dh: keys.p256dh, auth: keys.auth, aparelho: nomeDoAparelho() });
   }
@@ -124,9 +136,18 @@ function chaveDiferente(sub, chave) {
 export async function sincronizar(store) {
   if ((await suporte(store)) !== 'ok' || Notification.permission !== 'granted') return;
   let sub = await inscricaoDoNavegador();
-  if (!sub) return;
   const existentes = await store.list(TABELA);
   const chave = await store.vapidPublica();
+  if (!sub) {
+    // O navegador (Android, principalmente) às vezes derruba a inscrição sem avisar. Se este aparelho já tinha
+    // ativado os avisos e a permissão segue valendo, refaz a inscrição na hora e troca a linha antiga.
+    const lembrado = await lembradoPeloOSW();
+    if (!lembrado?.endpoint) return;
+    const reg = await navigator.serviceWorker.ready;
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: deB64u(chave) });
+    const velha = existentes.find((l) => l.endpoint === lembrado.endpoint);
+    if (velha && velha.endpoint !== sub.endpoint) await store.remove(TABELA, velha.id);
+  }
   if (chaveDiferente(sub, chave)) {
     const velha = existentes.find((l) => l.endpoint === sub.endpoint);
     await sub.unsubscribe();

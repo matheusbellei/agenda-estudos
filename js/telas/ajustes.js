@@ -6,7 +6,6 @@ import { paisPrimeiro } from '../regras/baralhos.js';
 import { horaTexto, minutosDe, inicioDaSemana, isoDe } from '../regras/datas.js';
 import { planoDeImportacao } from '../regras/trello.js';
 import { TABELAS } from '../estado.js';
-import { validarDias } from '../regras/revisoes.js';
 import { temaAtual, aplicarTema } from '../tema.js';
 
 const PALETA = [
@@ -304,14 +303,6 @@ export function iniciarAjustes({ estado, store }) {
     catch (err) { erroFoco.textContent = err.message || 'Não foi possível salvar.'; }
   });
 
-  const revisoesDias = criar('input', { id: 'aj-revisoes-dias', type: 'text', inputmode: 'numeric', placeholder: '7, 30' });
-  const erroRevisoes = criar('div', { class: 'erro', id: 'aj-revisoes-erro', role: 'alert' });
-  const salvarRevisoes = criar('button', { class: 'btn btn-principal', id: 'aj-revisoes-salvar', type: 'button', texto: 'Salvar' });
-  const cartaoRevisoes = criar('div', { class: 'cartao', id: 'aj-revisoes' },
-    criar('h2', { texto: 'Revisão espaçada' }),
-    criar('label', { class: 'campo' }, criar('span', { texto: 'Dias depois do agendamento (padrão do botão "Agendar revisão")' }), revisoesDias),
-    criar('p', { class: 'suave', texto: 'Números separados por vírgula, do menor para o maior. Ex.: 7, 30 ou 3, 10, 30.' }),
-    erroRevisoes, salvarRevisoes);
   // Aparência: Automático (segue o aparelho), Claro ou Escuro, em botões como no controle financeiro.
   const tema = criar('div', { id: 'aj-tema', class: 'chips-escolha', role: 'group', 'aria-label': 'Tema' },
     ...[['auto', 'Automático', 'ti-device-mobile'], ['claro', 'Claro', 'ti-sun'], ['escuro', 'Escuro', 'ti-moon']].map(([v, t, i]) => {
@@ -350,12 +341,6 @@ export function iniciarAjustes({ estado, store }) {
   modelosFixas.addEventListener('change', () => estado.alterar('settings', null, { modelos_com_fixas: modelosFixas.checked }).catch(() => {
     modelosFixas.checked = !modelosFixas.checked;
   }));
-  salvarRevisoes.addEventListener('click', async () => {
-    const r = validarDias(revisoesDias.value);
-    if (r.erro) { erroRevisoes.textContent = r.erro; return; }
-    erroRevisoes.textContent = '';
-    try { await estado.alterar('settings', null, { revisoes_dias: r.dias }); } catch (err) { erroRevisoes.textContent = err.message || 'Não foi possível salvar.'; }
-  });
 
   // Duas abas: Geral (horários, bloco sem card, importação e backup) e Notificações.
   const painelNotif = montarPainelNotificacoes({ estado, store });
@@ -364,7 +349,6 @@ export function iniciarAjustes({ estado, store }) {
     cartaoTema,
     cartaoAcomp,
     cartaoFoco,
-    cartaoRevisoes,
     cartaoModelos,
     cartaoFlash,
     cartaoImportar,
@@ -397,7 +381,6 @@ export function iniciarAjustes({ estado, store }) {
     if (!cartaoFlash.contains(document.activeElement)) {
       fcNovos.value = String(a.flash_card_novos_dia); fcRevisoes.value = String(a.flash_card_revisoes_dia); fcFator.value = String(Number(a.flash_card_fator));
     }
-    if (document.activeElement !== revisoesDias) revisoesDias.value = (a.revisoes_dias || []).join(', ');
     if (!cartaoFoco.contains(document.activeElement)) {
       focoMin.value = String(a.foco_min); pausaMin.value = String(a.pausa_min);
       pausaLongaMin.value = String(a.pausa_longa_min); ciclosLonga.value = String(a.ciclos_longa); focoSom.checked = !!a.foco_som;
@@ -478,7 +461,7 @@ export function iniciarAjustes({ estado, store }) {
   function mostrarRestauracao({ inseridos }) {
     const nomes = { categories: ['categoria', 'categorias'], lists: ['lista', 'listas'], cards: ['card', 'cards'], card_categories: ['vínculo', 'vínculos'],
       items: ['item', 'itens'], attachments: ['anexo', 'anexos'], commitments: ['compromisso', 'compromissos'], blocks: ['bloco', 'blocos'],
-      occurrences: ['ocorrência', 'ocorrências'], revisoes: ['revisão', 'revisões'], modelos: ['modelo de semana', 'modelos de semana'],
+      occurrences: ['ocorrência', 'ocorrências'], modelos: ['modelo de semana', 'modelos de semana'],
       baralhos: ['baralho', 'baralhos'], flashcards: ['flashcard', 'flashcards'], flash_lados: ['lado de flashcard', 'lados de flashcard'],
       flash_dias: ['dia de flashcards', 'dias de flashcards'],
       settings: ['ajuste', 'ajustes'] };
