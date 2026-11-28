@@ -1,9 +1,0 @@
-js/foco.js
-js/regras/foco.js
-js/telas/foco.js
-js/regras/diario.js
-js/telas/diario.js
-js/telas/fixas.js
-js/telas/revisao.js
-tests/ui/test_fixas.py
-tests/ui/test_revisao.py

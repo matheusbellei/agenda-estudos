@@ -41,8 +41,17 @@ export function abrirModelos({ estado, segunda }) {
     if (ocupado) return;
     const texto = nome.value.trim();
     if (!texto) { erro.textContent = 'Dê um nome ao modelo.'; return; }
-    const itens = itensDoModelo(estado.dados, segunda, !!estado.ajustes().modelos_com_fixas);
-    if (!itens.length) { erro.textContent = 'Esta semana não tem blocos para salvar.'; return; }
+    // Compromissos fixos só entram se a opção das Configurações estiver ligada; aqui pergunta em vez de salvar em silêncio.
+    const sem = itensDoModelo(estado.dados, segunda, false);
+    const com = itensDoModelo(estado.dados, segunda, true);
+    if (!com.length) { erro.textContent = 'Esta semana não tem blocos para salvar.'; return; }
+    let itens = sem;
+    if (!sem.length) {
+      if (!window.confirm('Esta semana só tem compromissos fixos, e a opção de modelos não os inclui. Salvar o modelo com eles?')) return;
+      itens = com;
+    } else if (com.length > sem.length && !window.confirm(`${com.length - sem.length} compromisso(s) fixo(s) desta semana ficam de fora do modelo. Salvar assim mesmo?`)) {
+      return;
+    }
     const existente = estado.dados.modelos.find((m) => mesmoNome(m.nome, texto));
     if (existente && !window.confirm('Já existe um modelo com esse nome. Substituir?')) return;
     ocupado = true; erro.textContent = '';

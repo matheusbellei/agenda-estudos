@@ -173,17 +173,33 @@ class TestSemana(CalendarioBase):
         self.assertAlmostEqual(alt(SEG) * 2 / 3, alt(QUA), delta=2)
         self.assertEqual(self.db()['commitments'][0]['start_min'], 540)
 
-    def test_editar_todos_muda_a_regra(self):
+    def test_editar_este_e_os_proximos_parte_a_regra(self):
         self.login(); p = self.page
         self.criar_repetido()
         p.click(f'.dia[data-data="{SEX}"] .bloco .bloco-cabeca')
         self.folha_aberta()
         p.fill('#bloco-titulo', 'Plantão')
         p.click('#bloco-salvar')
-        p.click('[data-escopo="todos"]')
-        p.wait_for_function("window.__memdb.commitments[0].title === 'Plantão'")
-        self.assertEqual(self.db()['blocks'], [])
-        self.assertIn('Plantão', p.inner_text(f'.dia[data-data="{SEG}"]'))
+        p.click('[data-escopo="proximos"]')
+        p.wait_for_function("window.__memdb.commitments.length === 2")
+        antiga, nova = self.db()['commitments'][0], self.db()['commitments'][1]
+        self.assertEqual(antiga['valid_to'], '2026-11-19')  # véspera de sexta
+        self.assertEqual((nova['title'], nova['valid_from']), ('Plantão', SEX))
+        self.assertIn('Trabalho', p.inner_text(f'.dia[data-data="{SEG}"]'))
+        self.assertIn('Plantão', p.inner_text(f'.dia[data-data="{SEX}"]'))
+
+    def test_desmarcar_repetir_a_partir_deste_dia(self):
+        self.login(); p = self.page
+        self.criar_repetido()
+        p.click(f'.dia[data-data="{SEX}"] .bloco .bloco-cabeca')
+        self.folha_aberta()
+        p.uncheck('#bloco-repetir')
+        p.click('#bloco-salvar')
+        p.wait_for_function("window.__memdb.blocks.length === 1")
+        b = self.db()['blocks'][0]
+        self.assertEqual((b['date'], b['commitment_id']), (SEX, None))
+        self.assertEqual(self.db()['commitments'][0]['valid_to'], '2026-11-19')  # véspera de sexta
+        self.assertEqual(len(self.ids_na_coluna(SEG)), 1)
 
     def test_excluir_so_este_dia(self):
         self.login(); p = self.page

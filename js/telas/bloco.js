@@ -316,7 +316,7 @@ export function abrirBloco(arg) {
   function marcarDias() {
     chipsDias.forEach((b) => { const on = dias.has(Number(b.dataset.dia)); b.classList.toggle('ativo', on); b.setAttribute('aria-pressed', String(on)); });
   }
-  if (regra) { repetir.checked = true; repetir.disabled = true; }
+  if (regra) repetir.checked = true;
 
   // Cumprido / não feito: só em bloco que já existe. É uma escolha da folha: só vale ao tocar em Salvar.
   const estadoAntes = arg.status || 'planned';
@@ -494,6 +494,20 @@ export function abrirBloco(arg) {
       });
       return;
     }
+    if (regra && !repetir.checked) {
+      // Desmarcar repetição: a partir deste dia o compromisso vira avulso; os dias anteriores continuam repetindo.
+      executar(async () => {
+        const { kind, ...vinculos } = doCard();
+        await gravarBloco(estado, arg, { ...v, ...vinculos, ...patchEstado(), commitment_id: null });
+        for (const b of estado.dados.blocks.filter((x) => x.commitment_id === regra.id && x.date >= arg.date)) {
+          if (b.status === 'planned') await estado.excluir('blocks', b.id);
+          else await estado.alterar('blocks', b.id, { commitment_id: null });
+        }
+        if (arg.date > regra.valid_from) await estado.alterar('commitments', regra.id, { valid_to: somaDias(arg.date, -1) });
+        else await estado.excluir('commitments', regra.id);
+      });
+      return;
+    }
     if (regra) {
       const camposIguais = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k])
         && (arg.card_id || null) === cardId && (arg.baralho_id || null) === baralhoId && (arg.lembrete_min ?? null) === v.lembrete_min;
@@ -503,16 +517,25 @@ export function abrirBloco(arg) {
         executar(async () => { const p = patchEstado(); if (Object.keys(p).length) await gravarBloco(estado, arg, p); });
         return;
       }
-      perguntar('Alterar quais dias?', [['dia', 'Só este dia'], ['todos', 'Todos']], async (esc) => {
+      perguntar('Alterar a partir de quando?', [['dia', 'Este dia'], ['proximos', 'Este e os próximos']], async (esc) => {
         const patch = patchEstado();
-        if (esc === 'todos') {
+        const { kind, ...vinculos } = doCard();
+        // Ocorrência virtual sem nenhuma mudança não vira linha gravada.
+        const mudou = !(arg.virtual && camposIguais && !Object.keys(patch).length);
+        if (esc === 'dia') { if (mudou) await gravarBloco(estado, arg, { ...v, ...vinculos, ...patch }); return; }
+        if (arg.date <= regra.valid_from) {
           await estado.alterar('commitments', regra.id, regraNova());
           if (Object.keys(patch).length) await gravarBloco(estado, arg, patch);
           return;
         }
-        // Ocorrência virtual sem nenhuma mudança não vira linha gravada.
-        const { kind, ...vinculos } = doCard();
-        if (!(arg.virtual && camposIguais && !Object.keys(patch).length)) await gravarBloco(estado, arg, { ...v, ...vinculos, ...patch });
+        // Este e os próximos: a regra antiga termina na véspera; a nova começa neste dia com a mudança.
+        const nova = await estado.criar('commitments', { ...regraNova(), valid_from: arg.date });
+        if (mudou) await gravarBloco(estado, arg, { ...v, ...vinculos, ...patch, commitment_id: nova.id });
+        for (const b of estado.dados.blocks.filter((x) => x.commitment_id === regra.id && x.date >= arg.date)) {
+          if (b.status === 'planned') await estado.excluir('blocks', b.id);
+          else await estado.alterar('blocks', b.id, { commitment_id: nova.id });
+        }
+        await estado.alterar('commitments', regra.id, { valid_to: somaDias(arg.date, -1) });
       });
       return;
     }
