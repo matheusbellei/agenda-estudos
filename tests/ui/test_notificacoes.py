@@ -197,32 +197,11 @@ class TestSincronizar(UITest):
 
 
 class TestAvisoRevisao(NotifBase):
-    def test_revisao_da_semana_grava_dia_e_horario(self):
-        self.abrir(); p = self.page
-        self.assertTrue(p.is_checked('#notif-revisao'))
-        self.assertEqual(p.get_attribute('#notif-revisao-dia [data-dia="7"]', 'aria-pressed'), 'true')
-        self.assertEqual(p.locator('#notif-revisao-dia [data-dia]').all_inner_texts(), ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'])
-        self.assertEqual(p.input_value('#notif-revisao-hora'), '20:00')
-        p.click('#notif-revisao-dia [data-dia="1"]'); p.fill('#notif-revisao-hora', '08:30')
-        self.assertEqual(p.get_attribute('#notif-revisao-dia [data-dia="7"]', 'aria-pressed'), 'false')
-        p.click('#notif-salvar')
-        p.wait_for_function("window.__memdb.settings.length === 1 && window.__memdb.settings[0].revisao_dia === 1")
-        s = self.db()['settings'][0]
-        self.assertEqual((s['revisao'], s['revisao_min']), (True, 510))
-        p.uncheck('#notif-revisao'); self.assertTrue(p.is_hidden('#notif-revisao-hora'))
-        p.click('#notif-salvar')
-        p.wait_for_function("window.__memdb.settings[0].revisao === false")
-
     def test_silencio_vem_desligado_e_avisa_que_nada_chega(self):
         self.abrir(); p = self.page
         self.assertFalse(p.is_checked('#notif-silencio'))
         self.assertIn('nenhum aviso', p.inner_text('#notif-silencio-aviso'))
-        self.assertIn('revisão da semana', p.inner_text('#notif-silencio-aviso'))
-        self.assertTrue(p.is_hidden('#notif-revisao-no-silencio'))
         p.check('#notif-silencio'); p.fill('#notif-silencio-de', '19:00'); p.dispatch_event('#notif-silencio-de', 'input')
-        self.assertTrue(p.is_visible('#notif-revisao-no-silencio'))
-        p.fill('#notif-revisao-hora', '18:00'); p.dispatch_event('#notif-revisao-hora', 'input')
-        self.assertTrue(p.is_hidden('#notif-revisao-no-silencio'))
 
 
 class TestAvisoFlash(NotifBase):

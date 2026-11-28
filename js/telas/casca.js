@@ -2,7 +2,7 @@
 const telas = {};
 // Agenda (item do menu) = Semana; o dia (tela "hoje") abre tocando no nome do dia e volta para a Semana.
 const AGENDA = ['hoje', 'semana'];
-const TITULOS = { hoje: 'Agenda', semana: 'Agenda', quadro: 'Quadro', fixas: 'Fixas', busca: 'Busca', tags: 'Tags', dashboards: 'Dashboards', revisao: 'Revisão da semana', flashcards: 'Flashcards', 'flash-sessao': 'Estudar flashcards', ajustes: 'Configurações' };
+const TITULOS = { hoje: 'Agenda', semana: 'Agenda', quadro: 'Quadro', busca: 'Busca', tags: 'Tags', dashboards: 'Dashboards', flashcards: 'Flashcards', 'flash-sessao': 'Estudar flashcards', ajustes: 'Configurações' };
 const $ = (s) => document.querySelector(s);
 
 export function registrarTela(nome, { mostrar }) {

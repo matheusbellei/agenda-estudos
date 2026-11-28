@@ -40,25 +40,12 @@ class TestImportar(UITest):
         self.ir('quadro')
         p.wait_for_selector('.coluna[data-lista]')
         self.assertEqual(p.locator('.coluna[data-lista]').count(), 3)
-        self.ir('fixas')
-        p.wait_for_selector('#tela-fixas', state='visible')
 
     def test_primeira_importacao_marca_a_virada_na_segunda_da_semana(self):
         self.abrir_ajustes()
         self.importar()
         self.page.wait_for_function("window.__memdb.settings.length === 1")
         self.assertEqual(self.db()['settings'][0]['last_rollover'], '2026-11-16')
-
-    def test_virada_ja_existente_nao_e_alterada(self):
-        self.abrir_ajustes()
-        # Uma fixa pendente mantém a virada em 02/11 até alguém responder; "Depois" não grava nada.
-        self.seed('settings', [{'last_rollover': '2026-11-02'}])
-        self.seed('cards', [{'title': 'Revisão semanal', 'is_fixed': True, 'fixed_days': [1], 'created_at': '2026-08-01T12:00:00Z'}])
-        self.page.reload(); self.page.wait_for_selector('#app', state='visible')
-        self.page.click('#virada-depois')
-        self.ir('ajustes')
-        self.importar()
-        self.assertEqual(self.db()['settings'][0]['last_rollover'], '2026-11-02')
 
     def test_reimportar_nao_duplica_nem_sobrescreve(self):
         self.abrir_ajustes(); p = self.page

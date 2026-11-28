@@ -104,48 +104,7 @@ class TestExcluirRegraComHistorico(CalendarioBase):
         p.wait_for_function("window.__memdb.commitments.length === 0")
 
 
-from test_fixas import FixasBase
 from test_quadro import QuadroBase
-
-
-class TestDescartarVirada(FixasBase):
-    def fixa(self):
-        return dict(id='cL', title='Revisão semanal', is_fixed=True, fixed_days=[1], created_at='2026-11-01T12:00:00Z')
-
-    def test_virada_com_resposta_pergunta_antes_de_fechar(self):
-        self.entrar(cards=[self.fixa()]); p = self.page
-        self.folha_aberta()
-        self.responder('cL', '2026-11-09', 'missed')
-        p.fill('#folha-virada .virada-nota', 'Estudei outra matéria')
-        p.click('#folha-virada .menu-fundo', position={'x': 5, 'y': 5})
-        self.assertFalse(p.evaluate("document.querySelector('#folha-virada').hidden"))
-        self.assertIn('Descartar o que você escreveu?', p.inner_text('#folha-virada'))
-        p.click('#folha-virada [data-continuar]')
-        p.keyboard.press('Escape')
-        self.assertFalse(p.evaluate("document.querySelector('#folha-virada').hidden"))
-        self.assertEqual(p.input_value('#folha-virada .virada-nota'), 'Estudei outra matéria')
-        p.click('#folha-virada [data-descartar]')
-        self.folha_fechada()
-        self.assertEqual(self.db()['occurrences'], [])
-
-    def test_virada_sem_resposta_fecha_pelo_fundo(self):
-        self.entrar(cards=[self.fixa()]); p = self.page
-        self.folha_aberta()
-        p.click('#folha-virada .menu-fundo', position={'x': 5, 'y': 5})
-        self.folha_fechada()
-
-    def test_nova_fixa_com_titulo_pergunta(self):
-        self.entrar(rollover='2026-11-16'); p = self.page
-        self.ir_fixas(); p.click('#fixas-nova')
-        p.wait_for_selector('#folha-fixa:not([hidden])')
-        p.fill('#fixa-titulo', 'Exercícios de álgebra')
-        p.keyboard.press('Escape')
-        self.assertIn('Descartar o que você escreveu?', p.inner_text('#folha-fixa'))
-        p.click('#folha-fixa [data-descartar]')
-        p.wait_for_function("document.querySelector('#folha-fixa').hidden")
-        p.click('#fixas-nova'); p.wait_for_selector('#folha-fixa:not([hidden])')
-        p.click('#folha-fixa .menu-fundo', position={'x': 5, 'y': 5})
-        p.wait_for_function("document.querySelector('#folha-fixa').hidden")
 
 
 class TestDescartarNovoCard(QuadroBase):

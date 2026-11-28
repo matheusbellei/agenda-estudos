@@ -177,13 +177,6 @@ export function corDaMeta(cumpridoMin, metaMin) {
   return pct >= 0.5 ? 'meio' : 'baixo';
 }
 
-// Semana revisada: a que contém a véspera do dia da revisão; antes do horário, a semana anterior a essa.
-export function semanaDaRevisao(agora, ajustes) {
-  const diaRevisao = somaDias(inicioDaSemana(agora.data), ajustes.revisao_dia - 1);
-  const chegou = agora.data > diaRevisao || (agora.data === diaRevisao && agora.minuto >= ajustes.revisao_min);
-  return inicioDaSemana(somaDias(diaRevisao, chegou ? -1 : -8));
-}
-
 // Todos os blocos do card desde sempre; fixa sem data final conta só até o domingo desta semana.
 export function horasDoCard(cardId, { commitments, blocks }, hoje) {
   const fixas = commitments.filter((c) => c.card_id === cardId);
@@ -200,14 +193,6 @@ export function horasDoCard(cardId, { commitments, blocks }, hoje) {
     if (b.status === 'done') r.cumprido_min += duracao(b);
   }
   return r;
-}
-
-export function textoDaRevisao({ categories, commitments, blocks }, segunda, agora) {
-  const domingo = somaDias(segunda, 6);
-  const estudo = blocosDeEstudo(blocosDoPeriodo(commitments, blocks, segunda, domingo), tagsDeEstudo(categories));
-  const r = resumo(estudo, agora);
-  if (!r.planejado_min) return 'Semana sem estudo planejado. Toque para revisar.';
-  return `Semana: ${formatarHoras(r.cumprido_min)} de ${formatarHoras(r.planejado_min)} de estudo. Toque para revisar.`;
 }
 
 export function formatarHoras(min) {

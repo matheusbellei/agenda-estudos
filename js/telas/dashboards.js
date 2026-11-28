@@ -5,9 +5,9 @@ import { agoraNoFuso } from '../regras/lembretes.js';
 import { somaDias, diaDaSemana, horaTexto, MESES } from '../regras/datas.js';
 import {
   tagsDeEstudo, blocosDeEstudo, situacao, resumo, periodo, deslocar, graoDoIntervalo, serie,
-  mapaNaoFeito, horasPorTag, corDaMeta, formatarHoras, semanasDoPeriodo, sequenciaDosDados, intervaloValido,
+  horasPorTag, corDaMeta, formatarHoras, semanasDoPeriodo, sequenciaDosDados, intervaloValido,
 } from '../regras/acompanhamento.js';
-import { graficoBarras, graficoMapa } from './graficos.js';
+import { graficoBarras } from './graficos.js';
 import { serieFlash, acertoDoPeriodo } from '../regras/flash.js';
 
 function criar(tag, atributos = {}, ...filhos) {
@@ -97,7 +97,6 @@ export function iniciarDashboards({ estado }) {
   const numeros = criar('div', { class: 'dash-numeros' });
   const tags = criar('div', { id: 'dash-tags' });
   const serieEl = criar('div', { id: 'dash-serie' });
-  const mapa = criar('div', { id: 'dash-mapa' });
   const lista = criar('ul', { id: 'dash-nao-feitos', class: 'dash-lista' });
   const tituloSerie = criar('h3');
   const conteudo = criar('div', { class: 'dash-conteudo' },
@@ -105,9 +104,7 @@ export function iniciarDashboards({ estado }) {
     criar('div', { class: 'cartao' }, criar('h3', { texto: 'Metas e horas por tag' }), tags),
     criar('div', { class: 'cartao' }, tituloSerie, serieEl,
       criar('div', { class: 'dash-legenda' }, criar('span', { class: 'leg-cumprido', texto: 'Cumprido' }), criar('span', { class: 'leg-planejado', texto: 'Planejado' }))),
-    criar('div', { class: 'cartao' }, criar('h3', { texto: 'Onde mais fica "não feito"' }), mapa,
-      criar('div', { class: 'dash-legenda' }, criar('span', { class: 'leg-ok', texto: 'Quase tudo cumprido' }), criar('span', { class: 'leg-ruim', texto: 'Mais não feito' }), criar('span', { class: 'leg-vazio', texto: 'Sem estudo' })),
-      lista));
+    criar('div', { class: 'cartao' }, criar('h3', { texto: 'Não feitos no período' }), lista));
   const irTags = criar('button', { type: 'button', class: 'btn btn-principal', id: 'dash-ir-tags', texto: 'Abrir Tags' });
   irTags.addEventListener('click', () => irPara('tags'));
   const vazio = criar('div', { class: 'cartao vazio', id: 'dash-vazio' },
@@ -158,7 +155,6 @@ export function iniciarDashboards({ estado }) {
     tituloSerie.textContent = { dia: 'Horas de estudo por dia', semana: 'Horas de estudo por semana', mes: 'Horas de estudo por mês' }[grao];
     if (!estudo.length) {
       serieEl.replaceChildren(criar('p', { class: 'suave', texto: 'Nenhum estudo neste período.' }));
-      mapa.replaceChildren(criar('p', { class: 'suave', texto: 'Nenhum estudo neste período.' }));
       lista.replaceChildren();
       return;
     }
@@ -166,7 +162,6 @@ export function iniciarDashboards({ estado }) {
       rotulo: grao === 'mes' ? MESES[Number(x.inicio.slice(5, 7)) - 1].slice(0, 3) : grao === 'semana' ? dm(x.inicio)
         : tipo === 'semana' ? INICIAIS[diaDaSemana(x.inicio) - 1] : String(Number(x.inicio.slice(8))) }));
     serieEl.innerHTML = graficoBarras(barras, `${tituloSerie.textContent}: barra clara planejado, verde cumprido`);
-    mapa.innerHTML = graficoMapa(mapaNaoFeito(estudo, agora), 'Não feito por dia da semana e horário');
     lista.replaceChildren(...itensNaoFeitos(estado, estudo, agora));
   }
 

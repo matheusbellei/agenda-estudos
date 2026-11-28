@@ -79,16 +79,6 @@ export function devidos({ instanteMs, fuso, ajustes, blocos, adiamentos = [], en
   return saida;
 }
 
-// Aviso da revisão da semana: no dia e horário escolhidos, uma vez, fora do silêncio.
-export function revisaoVence({ instanteMs, fuso, ajustes, enviadas = new Set() }) {
-  if (!ajustes.revisao) return null;
-  const { data, minuto } = agoraNoFuso(instanteMs, fuso);
-  const chave = `revisao:${data}`;
-  if (diaDaSemana(data) !== ajustes.revisao_dia || !vence(ajustes.revisao_min, minuto)) return null;
-  if (enviadas.has(chave) || emSilencio(ajustes.revisao_min, ajustes)) return null;
-  return { chave, data };
-}
-
 // Aviso dos flashcards do dia: no horário escolhido, uma vez por dia, fora do silêncio (se houver algo, decide o serviço).
 export function flashVence({ instanteMs, fuso, ajustes, enviadas = new Set() }) {
   if (!ajustes.flash_aviso) return null;

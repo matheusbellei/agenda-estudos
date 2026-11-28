@@ -604,18 +604,6 @@ export function iniciarCard({ estado, store }) {
     nodos.flashLista.replaceChildren(...fs.map((f) => itemDeFlash(estado, f)));
   }
 
-  function desenharMeta(c) {
-    const meta = c.meta_min || 0;
-    if (document.activeElement !== nodos.metaH && document.activeElement !== nodos.metaM) {
-      nodos.metaH.value = meta ? String(Math.floor(meta / 60)) : '';
-      nodos.metaM.value = meta % 60 ? String(meta % 60) : '';
-    }
-    const h = horasDoCard(c.id, estado.dados, agoraNoFuso(Date.now(), estado.ajustes().fuso).data);
-    nodos.metaTexto.textContent = `Planejadas ${formatarHoras(h.planejado_min)} · Cumpridas ${formatarHoras(h.cumprido_min)}${meta ? ` / meta ${formatarHoras(meta)}` : ''}`;
-    nodos.metaBarra.hidden = !meta;
-    nodos.metaBarraFill.style.width = meta ? `${Math.min(100, Math.round((h.cumprido_min / meta) * 100))}%` : '0%';
-  }
-
   function atualizar() {
     const c = card();
     if (!c) { ocultar(); return; }
@@ -630,7 +618,6 @@ export function iniciarCard({ estado, store }) {
     const chaveFixa = `${c.is_fixed}|${c.fixed_days}|${estado.dados.lists.map((l) => l.id + l.name)}`;
     if (nodos.chaveFixa !== chaveFixa) { nodos.chaveFixa = chaveFixa; desenharFixa(c); }
     nodos.arquivar.textContent = c.archived ? 'Desarquivar' : 'Arquivar';
-    desenharMeta(c);
     desenharFlash(c);
     desenharItens();
     desenharAnexos();
@@ -672,11 +659,6 @@ export function iniciarCard({ estado, store }) {
     flashAdicionar.addEventListener('click', () => abrirFormularioFlash(estado, { cardId }));
     const flashLista = criar('div', { class: 'flash-lista' });
     const flashResumo = criar('p', { class: 'suave' });
-    const metaH = criar('input', { id: 'card-meta-h', type: 'number', min: '0', max: '9999', inputmode: 'numeric', 'aria-label': 'Meta em horas' });
-    const metaM = criar('input', { id: 'card-meta-m', type: 'number', min: '0', max: '59', step: '5', inputmode: 'numeric', 'aria-label': 'Meta em minutos' });
-    const metaTexto = criar('div', { id: 'card-meta-texto', class: 'suave' });
-    const metaBarraFill = criar('span');
-    const metaBarra = criar('span', { class: 'barra-mini card-meta-barra' }, metaBarraFill);
     const linkAbrir = criar('button', { type: 'button', class: 'btn', id: 'anexo-link-abrir', texto: 'Adicionar link' });
     const linkNome = criar('input', { id: 'anexo-link-nome', type: 'text', placeholder: 'Nome (opcional)', 'aria-label': 'Nome do link', autocomplete: 'off' });
     const linkUrl = criar('input', { id: 'anexo-link-url', type: 'url', placeholder: 'https://…', 'aria-label': 'Endereço do link', autocomplete: 'off', inputmode: 'url' });
@@ -691,9 +673,6 @@ export function iniciarCard({ estado, store }) {
           criar('div', { class: 'card-escolhas' }, escolhaTag.el, escolhaSub.el), tagOutras),
         criar('section', {}, blocoLista),
         criar('section', { id: 'card-na-agenda', class: 'card-na-agenda' }, fixa),
-        criar('section', {}, criar('h3', { texto: 'Meta de horas' }),
-          criar('div', { class: 'tag-meta-campos' }, metaH, criar('span', { texto: 'h' }), metaM, criar('span', { texto: 'min' })),
-          metaTexto, metaBarra),
         criar('section', {}, criar('h3', { texto: 'Anotações' }), notas),
         criar('section', {}, criar('h3', { texto: 'Itens' }), itens, criar('div', { class: 'linha-botoes' }, novoGrupoBtn), grupoForm),
         criar('section', { id: 'card-flash' }, criar('h3', { texto: 'Flashcards' }), flashResumo,
@@ -702,18 +681,9 @@ export function iniciarCard({ estado, store }) {
           criar('div', { class: 'linha-botoes' }, linkAbrir), linkForm),
         erroEl,
         criar('div', { class: 'card-acoes' }, arquivar, excluir)));
-    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, flashEstudar, flashLista, flashResumo };
+    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, flashEstudar, flashLista, flashResumo };
 
     fecharBtn.addEventListener('click', fechar);
-    // Meta do card em minutos: vazio ou zero = sem meta.
-    const gravarMeta = () => {
-      const total = Math.round(Number(metaH.value || 0) * 60 + Number(metaM.value || 0));
-      if (!Number.isFinite(total) || total < 0) { erro('Meta inválida.'); return; }
-      const novo = total || null;
-      if (novo !== (card().meta_min ?? null)) tentar(() => estado.alterar('cards', cardId, { meta_min: novo }));
-    };
-    metaH.addEventListener('change', gravarMeta);
-    metaM.addEventListener('change', gravarMeta);
     const renomear = () => {
       const novo = titulo.value.trim();
       if (!novo) { titulo.value = card().title; return; }

@@ -12,7 +12,7 @@ class TestCasca(UITest):
         self.login(); p = self.page
         self.assertTrue(p.is_visible('#tela-semana'))
         self.assertEqual(p.inner_text('#cabecalho-titulo'), 'Agenda')
-        for tela in ['hoje', 'quadro', 'fixas', 'busca', 'tags', 'dashboards', 'ajustes']:
+        for tela in ['hoje', 'quadro', 'busca', 'tags', 'dashboards', 'ajustes']:
             self.ir(tela)
             self.assertTrue(p.is_hidden('#tela-semana'))
         self.ir('semana')
@@ -125,7 +125,7 @@ class TestMenu(UITest):
         self.assertTrue(p.is_visible('#menu'))
         self.assertEqual(p.get_attribute('#menu-botao', 'aria-expanded'), 'true')
         itens = [t.strip() for t in p.locator('#menu button').all_inner_texts()]
-        self.assertEqual(itens, ['Agenda', 'Quadro', 'Fixas', 'Busca', 'Tags', 'Dashboards', 'Revisão da semana', 'Flashcards', 'Configurações', 'Sair'])
+        self.assertEqual(itens, ['Agenda', 'Quadro', 'Busca', 'Tags', 'Dashboards', 'Flashcards', 'Configurações', 'Sair'])
 
     def test_escolher_item_troca_tela_titulo_e_fecha(self):
         self.login(); p = self.page

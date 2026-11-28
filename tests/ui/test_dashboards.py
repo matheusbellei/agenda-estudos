@@ -48,7 +48,6 @@ class TestDashboards(UITest):
         self.assertEqual(tag.locator('.dash-barra').get_attribute('data-cor'), 'baixo')
         self.assertEqual(p.locator('#dash-tags .dash-tag[data-tag="W"]').count(), 0)
         self.assertEqual(p.locator('#dash-serie .g-planejado').count(), 7)
-        self.assertEqual(p.locator('#dash-mapa [data-celula="0-2"]').get_attribute('class'), 'g-mapa-3')
         itens = p.locator('#dash-nao-feitos .dash-nao-feito')
         self.assertEqual(itens.count(), 2)
         textos = ' | '.join(itens.all_inner_texts())

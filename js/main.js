@@ -7,7 +7,6 @@ import { iniciarCasca, irPara } from './telas/casca.js';
 import { iniciarAjustes } from './telas/ajustes.js';
 import { iniciarTags } from './telas/tags.js';
 import { iniciarDashboards } from './telas/dashboards.js';
-import { iniciarRevisao } from './telas/revisao.js';
 import { iniciarFlashcards } from './telas/flashcards.js';
 import { iniciarSessao } from './telas/flash-sessao.js';
 import { iniciarQuadro } from './telas/quadro.js';
@@ -19,7 +18,6 @@ import { sincronizar as sincronizarAparelho } from './notificacoes.js';
 import { iniciarSemana } from './telas/semana.js';
 import { iniciarHoje, mostrarDia } from './telas/hoje.js';
 import { iniciarBusca } from './telas/busca.js';
-import { iniciarFixas, verificarVirada } from './telas/fixas.js';
 import { isoDe } from './regras/datas.js';
 import { haTextoNaoSalvo } from './telas/folhas.js';
 import { prepararLogin } from './telas/login.js';
@@ -44,7 +42,6 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   iniciarAjustes({ estado, store });
   iniciarTags({ estado });
   iniciarDashboards({ estado });
-  iniciarRevisao({ estado });
   iniciarFlashcards({ estado });
   iniciarSessao({ estado });
   iniciarQuadro({ estado, abrirCard });
@@ -52,7 +49,6 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   iniciarBloco({ estado, abrirCard });
   iniciarSemana({ estado, abrirCard });
   iniciarHoje({ estado, abrirCard });
-  iniciarFixas({ estado, abrirCard });
   iniciarBusca({ estado, abrirCard, mostrarDia });
   let dentro = false;
   let ultimoDia = null;
@@ -69,7 +65,6 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
         const antes = ultimoDia;
         ultimoDia = hoje;
         document.dispatchEvent(new CustomEvent('dia-mudou', { detail: { antes, agora: hoje } }));
-        await verificarVirada({ estado, hoje });
       }
     } catch (err) {
       console.warn('Não foi possível atualizar os dados:', err);
@@ -82,10 +77,9 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   // Toque na notificação: ./?bloco=<ref>&data=<AAAA-MM-DD> abre o dia no Hoje e o bloco por cima.
   function abrirDoLink(endereco) {
     const u = new URL(endereco, location.href);
-    // Aviso da revisão da semana: abre a tela da revisão.
-    // Avisos da revisão da semana e dos flashcards: abrem a tela.
+    // Aviso dos flashcards: abre a tela.
     const tela = u.searchParams.get('tela');
-    if (tela === 'revisao' || tela === 'flashcards') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
+    if (tela === 'flashcards') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
     const data = u.searchParams.get('data');
     const ref = u.searchParams.get('bloco');
     if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
@@ -101,7 +95,6 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
     aoEntrar: async () => {
       await estado.carregar();
       ultimoDia = isoDe(new Date());
-      await verificarVirada({ estado, hoje: ultimoDia });
       dentro = true;
       // Depois de a casca mostrar a tela inicial (Semana), para o dia do link não ser sobrescrito.
       setTimeout(() => abrirDoLink(location.href), 0);

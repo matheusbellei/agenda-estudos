@@ -4,9 +4,8 @@
 //   GET   ?acao=cumprir|adiar&t=<token>    → botões da notificação (o token prova quem pediu)
 //   POST  ?teste=1 (Authorization: Bearer <sessão>) → notificação de teste para um aparelho
 import { blocosDoPeriodo, ocorrenciasDeCompromissos } from '../../../js/regras/calendario.js';
-import { devidos, agoraNoFuso, refDoBloco, revisaoVence, flashVence } from '../../../js/regras/lembretes.js';
+import { devidos, agoraNoFuso, refDoBloco, flashVence } from '../../../js/regras/lembretes.js';
 import { paraHoje, textoDoAvisoFlash } from '../../../js/regras/flash.js';
-import { semanaDaRevisao, textoDaRevisao } from '../../../js/regras/acompanhamento.js';
 import { somaDias } from '../../../js/regras/datas.js';
 import { paraB64u, deB64u } from './webpush.js';
 
@@ -110,19 +109,6 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
         enviadas: new Set(enviadasLinhas.map((e) => e.chave)),
       });
       const enviadas = new Set(enviadasLinhas.map((e) => e.chave));
-      const revisao = revisaoVence({ instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
-      if (revisao) {
-        // Só neste minuto a função lê a semana inteira e as tags.
-        const agoraLocal = agoraNoFuso(agora(), ajustes.fuso);
-        const segunda = semanaDaRevisao(agoraLocal, ajustes);
-        const domingo = somaDias(segunda, 6);
-        const [categories, semana] = await Promise.all([
-          banco.select('categories', { owner_id: dono }),
-          banco.select('blocks', { owner_id: dono, date: { gte: segunda, lte: domingo } }),
-        ]);
-        lista.push({ ...revisao, tipo: 'revisao', titulo: 'Revisão da semana', acoes: [], url: './?tela=revisao',
-          corpo: textoDaRevisao({ categories, commitments, blocks: semana }, segunda, agoraLocal) });
-      }
       // Flashcards do dia: só neste minuto a função lê baralhos, flashcards e lados.
       const avisoFlash = flashVence({ instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
       if (avisoFlash) {

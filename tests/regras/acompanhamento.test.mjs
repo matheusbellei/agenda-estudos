@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tagsDeEstudo, blocosDeEstudo, situacao, resumo, sequencia, periodo, deslocar, graoDoIntervalo, serie,
-  mapaNaoFeito, piorHorario, classeDaCelula, horasPorTag, corDaMeta, semanaDaRevisao, horasDoCard,
-  textoDaRevisao, formatarHoras, semanasDoPeriodo, sequenciaDosDados, horasDosCards, intervaloValido,
+  mapaNaoFeito, piorHorario, classeDaCelula, horasPorTag, corDaMeta, horasDoCard,
+  formatarHoras, semanasDoPeriodo, sequenciaDosDados, horasDosCards, intervaloValido,
 } from '../../js/regras/acompanhamento.js';
 
 const HOJE = '2026-11-18'; // quarta
@@ -123,26 +123,11 @@ test('corDaMeta', () => {
   assert.equal(corDaMeta(299, 600), 'baixo');
 });
 
-test('semanaDaRevisao', () => {
-  const dom = { revisao_dia: 7, revisao_min: 1200 };
-  assert.equal(semanaDaRevisao({ data: '2026-11-22', minuto: 1260 }, dom), '2026-11-16');
-  assert.equal(semanaDaRevisao({ data: '2026-11-22', minuto: 1140 }, dom), '2026-11-09');
-  assert.equal(semanaDaRevisao({ data: '2026-11-23', minuto: 600 }, dom), '2026-11-16');
-  assert.equal(semanaDaRevisao({ data: '2026-11-23', minuto: 1260 }, { revisao_dia: 1, revisao_min: 1200 }), '2026-11-16');
-});
-
 test('horasDoCard: gravados sem cancelados + fixa sem fim só até o domingo desta semana', () => {
   const blocks = [b({ card_id: 'K', status: 'done', start_min: 0, end_min: 60 }), b({ card_id: 'K', cancelled: true }),
     b({ card_id: 'K', date: '2026-11-25', start_min: 0, end_min: 30 }), b({ card_id: 'Z' })];
   const commitments = [{ id: 'F', title: 'f', days: [1], start_min: 600, end_min: 660, valid_from: '2026-11-09', valid_to: null, card_id: 'K', category_id: null }];
   assert.deepEqual(horasDoCard('K', { commitments, blocks }, HOJE), { planejado_min: 60 + 30 + 60 * 2, cumprido_min: 60 });
-});
-
-test('textoDaRevisao', () => {
-  const categories = [cat('E', { conta_estudo: true })];
-  const blocks = [b({ date: '2026-11-16', start_min: 0, end_min: 570, status: 'done' }), b({ date: '2026-11-17', start_min: 0, end_min: 270 })];
-  assert.equal(textoDaRevisao({ categories, commitments: [], blocks }, '2026-11-16', AGORA), 'Semana: 9h30 de 14h de estudo. Toque para revisar.');
-  assert.equal(textoDaRevisao({ categories, commitments: [], blocks: [] }, '2026-11-16', AGORA), 'Semana sem estudo planejado. Toque para revisar.');
 });
 
 test('formatarHoras', () => {

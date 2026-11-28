@@ -305,10 +305,6 @@ export function iniciarQuadro({ estado, abrirCard }) {
       barra.firstChild.style.width = `${Math.round((feitos / total) * 100)}%`;
       meta.push(barra);
     }
-    if (card.meta_min) {
-      const h = horasDeMeta().get(card.id);
-      meta.push(criar('span', { class: 'card-meta-chip', title: 'Horas cumpridas / meta', texto: `${formatarHoras(h.cumprido_min)}/${formatarHoras(card.meta_min)}` }));
-    }
     if (card.notes && card.notes.trim()) meta.push(criar('span', { class: 'cartao-nota', title: 'Tem anotações', 'aria-label': 'Tem anotações', texto: '≡' }));
     const el = criar('div', { class: 'cartao-card', 'data-card': card.id, role: 'button', tabindex: '0' },
       menu,
@@ -468,19 +464,9 @@ export function iniciarQuadro({ estado, abrirCard }) {
     if (focoNaBusca) { busca.focus(); busca.setSelectionRange(posicao, posicao); }
   }
 
-  // Horas dos cards com meta: calculadas uma vez por desenho do Quadro, não uma vez por card.
-  let horasCache = null;
-  function horasDeMeta() {
-    if (!horasCache) {
-      const ids = estado.dados.cards.filter((c) => c.meta_min).map((c) => c.id);
-      horasCache = horasDosCards(ids, estado.dados, agoraNoFuso(Date.now(), estado.ajustes().fuso).data);
-    }
-    return horasCache;
-  }
 
   function desenhar() {
     if (arrastando) { redesenharDepois = true; return; }
-    horasCache = null;
     const itens = itensOrdenados(estado);
     desenharTopo();
     const listas = listasOrdenadas();

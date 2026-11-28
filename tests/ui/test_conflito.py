@@ -147,21 +147,6 @@ class TestRecargaAoVoltar(QuadroBase):
         p.click('#card-notas .conflito [data-acao="ver-recente"]')
         self.assertEqual(p.input_value('#card-notas textarea'), 'do celular')
 
-    def test_virada_de_semana_com_o_app_aberto(self):
-        self.login(); p = self.page
-        self.seed('settings', [{'last_rollover': '2026-11-16'}])
-        self.seed('cards', [{'id': 'f1', 'title': 'Revisão semanal', 'is_fixed': True, 'fixed_days': [1], 'created_at': '2026-11-01T12:00:00Z'}])
-        p.reload(); p.wait_for_selector('#app', state='visible')
-        self.assertTrue(p.is_hidden('#folha-virada'))
-        p.evaluate("window.__agora = new Date('2026-11-23T12:00:00-03:00').getTime()")
-        self.voltar()
-        p.wait_for_selector('#folha-virada', state='visible')
-        self.assertEqual(p.inner_text('#folha-virada .virada-quem'), 'Revisão semanal · 16/11')
-        p.click('#virada-depois')
-        self.ir('semana')
-        p.wait_for_selector('.dia[data-data="2026-11-23"]')
-
-
 class TestRecargaDuranteGravacao(QuadroBase):
     def test_foco_durante_a_gravacao_nao_desfaz_a_anotacao(self):
         self.preparar(cards=[{'title': 'Curso de Python', 'lista': 'Backlog', 'position': 1024, 'notes': 'base'}]); p = self.page

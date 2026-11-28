@@ -201,22 +201,6 @@ const comEstudo = () => {
   return d;
 };
 
-test('domingo 20:00 envia a revisão da semana com o resumo e o link da tela, uma vez só', async () => {
-  const { servico, enviados } = montar({ dados: comEstudo(), instante: em('20:00', DOM) });
-  await tique(servico); await tique(servico);
-  const revisoes = enviados.filter((e) => e.payload.tag === `revisao:${DOM}`);
-  assert.equal(revisoes.length, 2);
-  const p = revisoes[0].payload;
-  assert.deepEqual([p.titulo, p.corpo, p.url, p.acoes], ['Revisão da semana', 'Semana: 9h30 de 14h de estudo. Toque para revisar.', './?tela=revisao', []]);
-});
-
-test('revisão de semana sem estudo planejado', async () => {
-  const d = base(); d.blocks = []; d.categories = [];
-  const { servico, enviados } = montar({ dados: d, instante: em('20:00', DOM) });
-  await tique(servico);
-  assert.equal(enviados[0].payload.corpo, 'Semana sem estudo planejado. Toque para revisar.');
-});
-
 test('fora do minuto da revisão a função não lê as tags', async () => {
   const { servico, banco } = montar({ dados: comEstudo(), instante: em('19:00', DOM) });
   const lidas = [];

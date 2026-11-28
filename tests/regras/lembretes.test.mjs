@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agoraNoFuso, emSilencio, devidos, refDoBloco, revisaoVence, flashVence } from '../../js/regras/lembretes.js';
+import { agoraNoFuso, emSilencio, devidos, refDoBloco, flashVence } from '../../js/regras/lembretes.js';
 
 const FUSO = 'America/Sao_Paulo';
 // 2026-11-23 é segunda; São Paulo = UTC-3 (sem horário de verão).
@@ -116,21 +116,6 @@ test('adiado vence no horário e respeita o estado do bloco', () => {
 });
 
 // ---- Revisão da semana (domingo 22/11 às 20:00 por padrão)
-const REV = { ...PADRAO, revisao: true, revisao_dia: 7, revisao_min: 1200 };
-const rev = (hhmm, dia, ajustes = {}, enviadas = new Set()) => revisaoVence({ instanteMs: em(hhmm, dia), fuso: FUSO, ajustes: { ...REV, ...ajustes }, enviadas });
-
-test('revisaoVence: domingo 20:00 a 20:04; não na segunda, nem enviada, nem em silêncio, nem desligada', () => {
-  assert.deepEqual(rev('20:00', '2026-11-22'), { chave: 'revisao:2026-11-22', data: '2026-11-22' });
-  assert.ok(rev('20:01', '2026-11-22'));
-  assert.ok(rev('20:04', '2026-11-22'));
-  assert.equal(rev('20:05', '2026-11-22'), null);
-  assert.equal(rev('20:00', '2026-11-23'), null);
-  assert.equal(rev('20:00', '2026-11-22', {}, new Set(['revisao:2026-11-22'])), null);
-  assert.equal(rev('20:00', '2026-11-22', { notif_silencio: true, notif_silencio_de: 1140, notif_silencio_ate: 420 }), null);
-  assert.equal(rev('20:00', '2026-11-22', { revisao: false }), null);
-  assert.deepEqual(rev('09:00', '2026-11-23', { revisao_dia: 1, revisao_min: 540 }), { chave: 'revisao:2026-11-23', data: '2026-11-23' });
-});
-
 // ---- Aviso dos flashcards do dia (19:00 por padrão)
 const FL = { ...PADRAO, flash_aviso: true, flash_aviso_min: 1140 };
 const fl = (hhmm, ajustes = {}, enviadas = new Set()) => flashVence({ instanteMs: em(hhmm, '2026-11-24'), fuso: FUSO, ajustes: { ...FL, ...ajustes }, enviadas });

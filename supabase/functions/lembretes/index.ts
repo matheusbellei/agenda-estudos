@@ -19,9 +19,6 @@ function diaDaSemana(iso) {
   const dia = dataDe(iso).getDay();
   return dia === 0 ? 7 : dia;
 }
-function inicioDaSemana(iso) {
-  return somaDias(iso, 1 - diaDaSemana(iso));
-}
 function horaTexto(min) {
   return `${doisDigitos(Math.floor(min / 60))}:${doisDigitos(min % 60)}`;
 }
@@ -147,14 +144,6 @@ function devidos({ instanteMs, fuso, ajustes, blocos, adiamentos = [], enviadas 
   }
   return saida;
 }
-function revisaoVence({ instanteMs, fuso, ajustes, enviadas = /* @__PURE__ */ new Set() }) {
-  if (!ajustes.revisao) return null;
-  const { data, minuto } = agoraNoFuso(instanteMs, fuso);
-  const chave = `revisao:${data}`;
-  if (diaDaSemana(data) !== ajustes.revisao_dia || !vence(ajustes.revisao_min, minuto)) return null;
-  if (enviadas.has(chave) || emSilencio(ajustes.revisao_min, ajustes)) return null;
-  return { chave, data };
-}
 function flashVence({ instanteMs, fuso, ajustes, enviadas = /* @__PURE__ */ new Set() }) {
   if (!ajustes.flash_aviso) return null;
   const { data, minuto } = agoraNoFuso(instanteMs, fuso);
@@ -242,60 +231,6 @@ function paraHoje({ baralhos = [], cards = [], flashcards = [], flash_lados: lad
 function textoDoAvisoFlash(n) {
   return `Você tem ${n} ${n === 1 ? "flashcard" : "flashcards"} para hoje.`;
 }
-
-// js/regras/acompanhamento.js
-var duracao = (b) => b.end_min - b.start_min;
-var doisDigitos2 = (n) => String(n).padStart(2, "0");
-function tagsDeEstudo(categories) {
-  const marcadas = new Set(categories.filter((c) => c.conta_estudo).map((c) => c.id));
-  return new Set(categories.filter((c) => marcadas.has(c.id) || c.parent_id && marcadas.has(c.parent_id)).map((c) => c.id));
-}
-function blocosDeEstudo(blocos, estudo) {
-  return blocos.filter((b) => !b.cancelled && b.category_id && estudo.has(b.category_id));
-}
-var terminou = (b, agora) => b.date < agora.data || b.date === agora.data && b.end_min <= agora.minuto;
-function situacao(b, agora) {
-  if (b.status === "done") return "cumprido";
-  if (b.status === "missed") return "nao_feito";
-  return terminou(b, agora) ? "sem_marcar" : "futuro";
-}
-function resumo(blocosEstudo, agora) {
-  const r = { planejado_min: 0, cumprido_min: 0, cumpridos: 0, nao_feitos: 0, nao_feito_min: 0, pct: null };
-  for (const b of blocosEstudo) {
-    r.planejado_min += duracao(b);
-    const s = situacao(b, agora);
-    if (s === "cumprido") {
-      r.cumpridos += 1;
-      r.cumprido_min += duracao(b);
-    } else if (s !== "futuro") {
-      r.nao_feitos += 1;
-      r.nao_feito_min += duracao(b);
-    }
-  }
-  const terminados = r.cumpridos + r.nao_feitos;
-  r.pct = terminados ? Math.round(r.cumpridos * 100 / terminados) : null;
-  return r;
-}
-function semanaDaRevisao(agora, ajustes) {
-  const diaRevisao = somaDias(inicioDaSemana(agora.data), ajustes.revisao_dia - 1);
-  const chegou = agora.data > diaRevisao || agora.data === diaRevisao && agora.minuto >= ajustes.revisao_min;
-  return inicioDaSemana(somaDias(diaRevisao, chegou ? -1 : -8));
-}
-function textoDaRevisao({ categories, commitments, blocks }, segunda, agora) {
-  const domingo = somaDias(segunda, 6);
-  const estudo = blocosDeEstudo(blocosDoPeriodo(commitments, blocks, segunda, domingo), tagsDeEstudo(categories));
-  const r = resumo(estudo, agora);
-  if (!r.planejado_min) return "Semana sem estudo planejado. Toque para revisar.";
-  return `Semana: ${formatarHoras(r.cumprido_min)} de ${formatarHoras(r.planejado_min)} de estudo. Toque para revisar.`;
-}
-function formatarHoras(min) {
-  const total = Math.round(min);
-  if (total < 60) return `${total} min`;
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return m ? `${h}h${doisDigitos2(m)}` : `${h}h`;
-}
-var MAX_DIAS_INTERVALO = 5 * 366;
 
 // supabase/functions/lembretes/webpush.js
 var sutil = globalThis.crypto.subtle;
@@ -493,24 +428,6 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
         enviadas: new Set(enviadasLinhas.map((e) => e.chave))
       });
       const enviadas = new Set(enviadasLinhas.map((e) => e.chave));
-      const revisao = revisaoVence({ instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
-      if (revisao) {
-        const agoraLocal = agoraNoFuso(agora(), ajustes.fuso);
-        const segunda = semanaDaRevisao(agoraLocal, ajustes);
-        const domingo = somaDias(segunda, 6);
-        const [categories, semana] = await Promise.all([
-          banco2.select("categories", { owner_id: dono }),
-          banco2.select("blocks", { owner_id: dono, date: { gte: segunda, lte: domingo } })
-        ]);
-        lista.push({
-          ...revisao,
-          tipo: "revisao",
-          titulo: "Revisão da semana",
-          acoes: [],
-          url: "./?tela=revisao",
-          corpo: textoDaRevisao({ categories, commitments, blocks: semana }, segunda, agoraLocal)
-        });
-      }
       const avisoFlash = flashVence({ instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
       if (avisoFlash) {
         const [baralhos, cards, flashcards, flash_lados] = await Promise.all([
