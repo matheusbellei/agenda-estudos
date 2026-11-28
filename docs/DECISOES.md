@@ -167,3 +167,21 @@ Uma linha por decisão que a spec não cobria, com o que acontece se estiver err
 - Bloco que já existe abre sem teclado; bloco novo continua abrindo no título.
 - No fim, 00:00 vale "até a meia-noite" (como 23:59). Início 00:00 e fim 00:00 = dia inteiro.
 - Sai o botão "Voltar a planejado": tocar no estado já marcado (Cumprido ou Não feito) volta o bloco a planejado e fecha a folha.
+
+## Vão entre blocos (26/11/2026)
+- Na Semana, tocar num vão entre dois blocos (mesmo curto, sem o "Livre" desenhado) abre um compromisso novo ali: começa no início do vão e dura até uma hora, sem passar do próximo bloco. Vão com menos de 15 min não responde. Regra: `trechoLivreNoMinuto`.
+
+## Agenda só pela agenda (27/11/2026)
+- O card não agenda mais nada: saíram Marcar/Remarcar sessão, Repetir toda semana e toda a revisão espaçada (tela, datas, fila "Revisar", Configurações). Quem agenda é a Semana. Card já fixo continua com o aviso e "Voltar ao quadro"; a tela Fixas não mudou.
+- Banco intacto, sem migração: tabela `revisoes`, `blocks.revisao_id` e `settings.revisoes_dias` ficam sem uso. Backup antigo com `revisoes` restaura (a tabela é ignorada). Blocos "Revisão · X" antigos viram blocos normais. A "Revisão da semana" e as revisões dos flashcards não mudaram.
+- Flashcards novos são só "Digitar a resposta" (sem campo Tipo). Cartão antigo de outro tipo continua estudável e editável, com o tipo dele mais "Digitar".
+- Card sem "Anexar arquivo". Links, arquivos já anexados e "anexe de novo" dos pendentes do Trello seguem.
+- Subtag cuja tag mãe não conta como estudo pode marcar "Conta como estudo" sozinha e entra nos Dashboards como linha própria; se a mãe conta, continua herdando.
+- Tag e Subtag da folha do bloco usam as mesmas listas coloridas do card (`criarEscolha` + `chipCategoria`).
+
+## Agenda simples (novembro de 2026)
+
+- Modo foco e diário foram removidos do app, da função `lembretes` e dos testes. As tabelas e colunas antigas (`focos`, `blocks.diario`, `revisoes`, `settings.foco_*`) ficam no banco sem uso, para não apagar nada. Se errado: dá para apagá-las depois com um SQL.
+- Cumprido e Não feito na folha do bloco só valem ao tocar em Salvar (fechar sem salvar descarta e pergunta). Quando só o estado ou os textos do "não feito" mudam, não aparece "Só este dia / Todos".
+- Cumprir um bloco não faz nada no card, nos itens nem no baralho: o vínculo é só organização.
+- Bloco (e compromisso repetido) pode vincular um card (busca pelo título ou "Escolher por coluna") e um baralho ou grupo de flashcards (`blocks.baralho_id`, `commitments.baralho_id`, `on delete set null`). Modelos de semana não levam o baralho. Migração: `supabase/migracao-2026-11-agenda-simples.sql`.

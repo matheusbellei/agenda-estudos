@@ -211,7 +211,7 @@ class TestEditorDoFlashcard(UITest):
         p.click('#flash-frente .toastui-editor-ww-container .ProseMirror')
         p.click('#flash-frente .toastui-editor-toolbar-icons.bold')
         p.keyboard.type('perro')
-        p.click('#flash-verso .toastui-editor-ww-container .ProseMirror'); p.keyboard.type('cachorro')
+        p.fill('#flash-resposta', 'cachorro')
         p.click('#flash-salvar')
         p.wait_for_function("window.__memdb.flashcards.length === 1")
         f = self.db()['flashcards'][0]
@@ -227,11 +227,17 @@ class TestEditorDoFlashcard(UITest):
 
     def test_linhas_vazias_nao_viram_br(self):
         self.abrir_novo_flashcard(); p = self.page
-        p.click('#flash-frente .toastui-editor-ww-container .ProseMirror'); p.keyboard.type('pergunta')
+        p.click('#flash-cancelar') if p.locator('#flash-cancelar').count() else p.keyboard.press('Escape')
+        self.seed('flashcards', [{'id': 'f0', 'baralho_id': 'B', 'card_id': None, 'tipo': 'basico', 'frente': 'x', 'verso': 'y', 'criado_em': '2026-11-01T00:00:00Z'}])
+        p.reload(); p.wait_for_selector('#app', state='visible')
+        self.ir('flashcards'); p.click('.baralho-item[data-baralho="B"] .baralho-nome'); p.wait_for_selector('#baralho-tela')
+        p.click('.flash-item[data-flash="f0"] .flash-editar'); p.wait_for_selector('#flash-frente .toastui-editor-ww-container')
+        p.click('#flash-frente .toastui-editor-ww-container .ProseMirror'); p.keyboard.press('Control+A'); p.keyboard.type('pergunta')
+        p.click('#flash-verso .toastui-editor-ww-container .ProseMirror'); p.keyboard.press('Control+A')
         p.click('#flash-verso .toastui-editor-ww-container .ProseMirror')
         p.keyboard.type('um'); [p.keyboard.press('Enter') for _ in range(4)]; p.keyboard.type('dois')
         p.click('#flash-salvar')
-        p.wait_for_function("window.__memdb.flashcards.length === 1")
+        p.wait_for_function("window.__memdb.flashcards[0].verso !== 'y'")
         verso = self.db()['flashcards'][0]['verso']
         self.assertNotIn('<br', verso)
         self.assertIn('um', verso); self.assertIn('dois', verso)

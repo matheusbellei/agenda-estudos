@@ -1,6 +1,6 @@
 // Banco em memória só para testes de interface: mesma interface do store real (js/armazenamento.js).
 (function () {
-  const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings', 'push_subscriptions', 'adiamentos', 'focos', 'revisoes', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias'];
+  const TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'settings', 'push_subscriptions', 'adiamentos', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias'];
   const USERS = [{ id: 'u1', email: 'dono@exemplo.com', password: 'senha123' }];
   const SO_DONO = 'Você só pode alterar os seus próprios dados.';
   // Padrões do banco (supabase/schema.sql) que o app costuma deixar de fora ao criar.
@@ -11,9 +11,8 @@
     items: () => ({ group_name: '', position: 0, done: false, done_at: null, notes: '', trello_id: null }),
     attachments: () => ({ item_id: null, path: null, url: null, trello_id: null }),
     commitments: () => ({ category_id: null, valid_to: null }),
-    blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, revisao_id: null, diario: '', motivo: '' }),
+    blocks: () => ({ title: '', category_id: null, card_id: null, item_id: null, commitment_id: null, fixed_date: null, status: 'planned', instead_note: '', cancelled: false, baralho_id: null, motivo: '' }),
     occurrences: () => ({ instead_note: '' }),
-    revisoes: () => ({ status: 'pendente', feita_em: null, criado_em: new Date().toISOString() }),
     baralhos: () => ({ fator: 2.5, novos_dia: 20, revisoes_dia: 200, e_grupo: false, pai_id: null, limites_do_grupo: false, criado_em: new Date().toISOString() }),
     flashcards: () => ({ baralho_id: null, card_id: null, verso: '', criado_em: new Date().toISOString() }),
     flash_lados: () => ({ intervalo: 0, vence: null, errado_em: null, introduzido_em: null, revisado_em: null }),
@@ -22,7 +21,7 @@
     settings: () => ({ day_start_min: 0, day_end_min: 1440, week_slot_min: 120, day_slot_min: 30, last_rollover: null }),
   };
   const SINCRONOS = ['currentUser', 'onAuthChange'];
-  const chaveDe = (t) => (t === 'settings' || t === 'focos' ? 'owner_id' : 'id');
+  const chaveDe = (t) => (t === 'settings' ? 'owner_id' : 'id');
 
   const db = JSON.parse(sessionStorage.getItem('memdb') || 'null') || {};
   TABELAS.forEach((t) => { db[t] = db[t] || []; });
@@ -67,7 +66,7 @@
     if (t === 'blocks' && !horarioValido(linha)) throw violaCheck(t);
     if (t === 'commitments' && (!horarioValido(linha) || !(linha.days || []).every((d) => Number.isInteger(d) && d >= 1 && d <= 7))) throw violaCheck(t);
     const igual = (cols) => outras.some((x) => cols.every((c) => x[c] === linha[c]));
-    if (t === 'settings' || t === 'focos') { if (igual(['owner_id'])) throw duplicada(`${t}_pkey`); return; }
+    if (t === 'settings') { if (igual(['owner_id'])) throw duplicada(`${t}_pkey`); return; }
     if (t === 'card_categories') { if (igual(['card_id', 'category_id'])) throw duplicada('card_categories_pkey'); return; }
     if (igual(['id'])) throw duplicada(`${t}_pkey`);
     if (COM_TRELLO.includes(t) && linha.trello_id != null && igual(['owner_id', 'trello_id'])) throw duplicada(`${t}_owner_id_trello_id_key`);
@@ -99,7 +98,6 @@
     db.attachments = db.attachments.filter((a) => a.card_id !== id);
     db.occurrences = db.occurrences.filter((o) => o.card_id !== id);
     db.card_categories = db.card_categories.filter((cc) => cc.card_id !== id);
-    db.revisoes = db.revisoes.filter((r) => r.card_id !== id);
     cascataFlash((f) => f.card_id === id);
     db.commitments.forEach((c) => { if (c.card_id === id) c.card_id = null; });
     db.blocks.forEach((b) => {
@@ -138,7 +136,7 @@
     async insert(t, linhas) {
       const dono = exigeUsuario();
       const novas = (Array.isArray(linhas) ? linhas : [linhas]).map((l) => ({
-        ...PADROES[t]?.(), ...(t === 'settings' || t === 'card_categories' || t === 'focos' ? {} : { id: uid() }), ...clonar(l), owner_id: dono,
+        ...PADROES[t]?.(), ...(t === 'settings' || t === 'card_categories' ? {} : { id: uid() }), ...clonar(l), owner_id: dono,
       }));
       checarNovas(t, novas);
       tabela(t).push(...novas);

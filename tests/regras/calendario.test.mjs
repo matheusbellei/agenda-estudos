@@ -185,3 +185,21 @@ test('ocorrências levam o lembrete da fixa', () => {
   const [p] = ocorrenciasDeCompromissos([compromisso()], '2026-11-16', '2026-11-16');
   assert.equal(p.lembrete_min, null);
 });
+
+import { trechoLivreNoMinuto } from '../../js/regras/calendario.js';
+
+test('toque entre dois blocos: devolve o trecho livre que contém o minuto', () => {
+  const dia = [{ start_min: 600, end_min: 660 }, { start_min: 720, end_min: 780 }];
+  assert.deepEqual(trechoLivreNoMinuto(dia, 690, 360, 1320), { start_min: 660, end_min: 720 });
+  assert.deepEqual(trechoLivreNoMinuto(dia, 400, 360, 1320), { start_min: 360, end_min: 600 });
+});
+
+test('toque em cima de bloco, ou em trecho curto demais, não devolve nada', () => {
+  const dia = [{ start_min: 600, end_min: 660 }, { start_min: 670, end_min: 780 }];
+  assert.equal(trechoLivreNoMinuto(dia, 630, 360, 1320), null);
+  assert.equal(trechoLivreNoMinuto(dia, 665, 360, 1320), null); // 10 min: menos que o mínimo de 15
+});
+
+test('dia sem blocos: o dia todo é livre', () => {
+  assert.deepEqual(trechoLivreNoMinuto([], 500, 360, 1320), { start_min: 360, end_min: 1320 });
+});

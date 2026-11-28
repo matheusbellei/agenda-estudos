@@ -1,7 +1,7 @@
 import json
 from harness import UITest
 
-TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'revisoes', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings']
+TABELAS = ['categories', 'lists', 'cards', 'card_categories', 'items', 'attachments', 'commitments', 'blocks', 'occurrences', 'modelos', 'baralhos', 'flashcards', 'flash_lados', 'flash_dias', 'settings']
 
 
 class BackupBase(UITest):
@@ -20,9 +20,8 @@ class BackupBase(UITest):
         ])
         self.seed('attachments', [{'id': 'an1', 'card_id': 'card1', 'kind': 'link', 'name': 'Site', 'url': 'https://exemplo.test'}])
         self.seed('commitments', [{'id': 'com1', 'title': 'Aula', 'days': [2], 'start_min': 480, 'end_min': 540, 'valid_from': '2026-11-01'}])
-        self.seed('revisoes', [{'id': 'rev1', 'card_id': 'card2', 'data': '2026-11-17', 'status': 'pendente'}])
         self.seed('blocks', [{'id': 'blo1', 'date': '2026-11-17', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card1', 'item_id': 'it1', 'title': 'Gramática'},
-                             {'id': 'blo2', 'date': '2026-11-18', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card2', 'title': 'Revisão · Flashcards', 'revisao_id': 'rev1'}])
+                             {'id': 'blo2', 'date': '2026-11-18', 'start_min': 600, 'end_min': 660, 'kind': 'study', 'card_id': 'card2', 'title': 'Revisão · Flashcards'}])
         self.seed('baralhos', [{'id': 'bar1', 'nome': 'Vocabulário'}])
         self.seed('flashcards', [{'id': 'fla1', 'baralho_id': 'bar1', 'tipo': 'basico', 'frente': 'perro', 'verso': 'cachorro'}])
         self.seed('flash_lados', [{'id': 'lad1', 'flashcard_id': 'fla1', 'lado': 'frente', 'intervalo': 1, 'vence': '2026-11-17'}])
@@ -239,12 +238,20 @@ class TestRestaurarEmOutraConta(BackupBase):
 
 
 class TestBackupAntigo(BackupBase):
-    def test_backup_sem_modelos_e_revisoes_restaura(self):
+    def test_backup_com_tabela_revisoes_antiga_restaura(self):
         self.abrir_com_dados()
         _, bruto = self.exportar()
         dados = json.loads(bruto)
-        for t in ('modelos', 'revisoes'): del dados['tabelas'][t]
-        dados['tabelas']['blocks'] = [b for b in dados['tabelas']['blocks'] if not b.get('revisao_id')]
+        dados['tabelas']['revisoes'] = [{'id': 'rev1', 'card_id': 'card2', 'data': '2026-11-17', 'status': 'pendente'}]
+        self.page.evaluate("(ts) => ts.forEach((t) => { window.__memdb[t].length = 0; })", TABELAS)
+        self.assertTrue(self.restaurar(json.dumps(dados).encode()).startswith('Restaurado:'))
+        self.assertEqual(len(self.db()['cards']), 2)
+
+    def test_backup_sem_modelos_restaura(self):
+        self.abrir_com_dados()
+        _, bruto = self.exportar()
+        dados = json.loads(bruto)
+        del dados['tabelas']['modelos']
         self.page.evaluate("(ts) => ts.forEach((t) => { window.__memdb[t].length = 0; })", TABELAS)
         self.assertTrue(self.restaurar(json.dumps(dados).encode()).startswith('Restaurado:'))
         self.assertEqual(len(self.db()['cards']), 2)

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   proximoItem, progresso, ocorrenciasDaSemana, estadoDaOcorrencia,
-  paraEncaixar, pendenciasDaVirada, efeitosDeEstado, levadasVencidas,
+  paraEncaixar, pendenciasDaVirada, levadasVencidas,
 } from '../../js/regras/fila.js';
 
 const HOJE = '2026-11-18';
@@ -143,32 +143,6 @@ test('pendenciasDaVirada com ultimaVirada nula olha só a semana anterior e igno
   assert.deepEqual(r.fecharSozinho, []);
 });
 
-test('efeitosDeEstado: done em bloco com item marca o item', () => {
-  const b = bloco({ card_id: 'T', item_id: 'i2' });
-  const r = efeitosDeEstado(b, 'done', base());
-  assert.deepEqual(r.marcarItem, { id: 'i2', done: true });
-  assert.equal(r.perguntarConcluirCard, false);
-});
-
-test('efeitosDeEstado: voltar de done desmarca o item', () => {
-  const b = bloco({ card_id: 'T', item_id: 'i2', status: 'done' });
-  assert.deepEqual(efeitosDeEstado(b, 'planned', base()).marcarItem, { id: 'i2', done: false });
-  assert.deepEqual(efeitosDeEstado(b, 'missed', base()).marcarItem, { id: 'i2', done: false });
-});
-
-test('efeitosDeEstado: done em avulso sem itens pergunta se conclui o card', () => {
-  const r = efeitosDeEstado(bloco({ card_id: 'A' }), 'done', base());
-  assert.equal(r.perguntarConcluirCard, true);
-  assert.equal(r.marcarItem, null);
-  assert.equal(efeitosDeEstado(bloco({ card_id: 'F2' }), 'done', base()).perguntarConcluirCard, false);
-  assert.equal(efeitosDeEstado(bloco({ card_id: 'F1' }), 'done', base()).perguntarConcluirCard, false);
-});
-
-test('efeitosDeEstado: missed em bloco com item que não estava feito não mexe no item', () => {
-  const r = efeitosDeEstado(bloco({ card_id: 'T', item_id: 'i2' }), 'missed', base());
-  assert.deepEqual(r, { marcarItem: null, perguntarConcluirCard: false });
-});
-
 test('proximoItem segue a ordem de aparição dos grupos e depois a position', () => {
   const items = [
     item('s2', 'X', 2, false, 'Semana'), item('s1', 'X', 1, true, 'Semana'),
@@ -273,7 +247,3 @@ test('bloco de revisão não tira o card avulso da fila nem conta para a trilha'
   assert.ok(e.some((x) => x.tipo === 'trilha' && x.card_id === 'T'));
 });
 
-test('efeitosDeEstado ignora bloco de revisão', () => {
-  const d = base();
-  assert.deepEqual(efeitosDeEstado(bloco({ card_id: 'T', item_id: 'i2', revisao_id: 'r1' }), 'done', d), { marcarItem: null, perguntarConcluirCard: false });
-});

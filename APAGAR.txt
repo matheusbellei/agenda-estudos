@@ -1,4 +1,5 @@
-Apague estas pastas/arquivos do repositório:
-js/regras/revisoes.js
-js/regras/sessoes.js
-js/telas/revisoes.js
+js/foco.js
+js/regras/foco.js
+js/telas/foco.js
+js/regras/diario.js
+js/telas/diario.js

@@ -27,35 +27,36 @@ class FlashBase(UITest):
 
 
 class TestBaralhos(FlashBase):
-    def test_criar_baralho_e_flashcards_dos_quatro_tipos(self):
+    def test_criar_baralho_e_flashcard_so_digitar_a_resposta(self):
         self.entrar(); p = self.page
         self.ir('flashcards')
         p.click('#flash-novo-baralho'); p.fill('#baralho-novo-nome', 'Espanhol'); p.click('#baralho-criar')
         p.wait_for_function("window.__memdb.baralhos.length === 1")
         bid = self.db()['baralhos'][0]['id']
         p.wait_for_selector('#baralho-tela')
-        for tipo, frente, verso in [('basico', 'perro', 'cachorro'), ('invertido', 'gato', 'gato'), ('lacuna', 'Yo {{tuve}} un perro', ''), ('digitar', 'cachorro', 'Perro')]:
-            p.click('#flash-adicionar'); p.wait_for_selector('#flash-janela')
-            p.select_option('#flash-tipo', tipo); p.fill('#flash-frente', frente)
-            p.fill('#flash-resposta' if tipo == 'digitar' else '#flash-verso', verso)
-            p.click('#flash-salvar'); p.wait_for_selector('#flash-janela', state='detached')
+        p.click('#flash-adicionar'); p.wait_for_selector('#flash-janela')
+        self.assertEqual(p.locator('#flash-tipo:visible').count(), 0)
+        p.fill('#flash-frente', 'cachorro'); p.fill('#flash-resposta', 'Perro')
+        p.click('#flash-salvar'); p.wait_for_selector('#flash-janela', state='detached')
         fs = self.db()['flashcards']
-        self.assertEqual(sorted(f['tipo'] for f in fs), ['basico', 'digitar', 'invertido', 'lacuna'])
+        self.assertEqual([f['tipo'] for f in fs], ['digitar'])
         self.assertTrue(all(f['baralho_id'] == bid and f['card_id'] is None for f in fs))
-        self.assertEqual(p.locator('#baralho-tela .flash-item').count(), 4)
+        self.assertEqual(p.locator('#baralho-tela .flash-item').count(), 1)
         self.ir('flashcards')
-        self.assertIn('5 novos', p.inner_text(f'.baralho-item[data-baralho="{bid}"] .baralho-contagem'))
-        self.assertEqual(p.inner_text('#menu-flash-contador'), '5')
+        self.assertIn('1 novo', p.inner_text(f'.baralho-item[data-baralho="{bid}"] .baralho-contagem'))
+        self.assertEqual(p.inner_text('#menu-flash-contador'), '1')
 
     def test_lacuna_sem_marcacao_da_erro(self):
-        self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
-        p.click('#flash-adicionar'); p.select_option('#flash-tipo', 'lacuna'); p.fill('#flash-frente', 'sem lacuna'); p.click('#flash-salvar')
+        self.entrar(baralhos=[BAR], flashcards=[F('l', 'Yo {{tuve}} un perro', '', 'lacuna')]); self.abrir_baralho(); p = self.page
+        p.click('.flash-item[data-flash="l"] .flash-editar'); p.wait_for_selector('#flash-janela')
+        p.fill('#flash-frente', 'sem lacuna'); p.click('#flash-salvar')
         self.assertEqual(p.inner_text('#flash-erro'), 'Marque pelo menos uma lacuna com {{ }}.')
 
     def test_formulario_sem_texto_de_formatacao_e_previa_so_na_lacuna(self):
-        self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
-        p.click('#flash-adicionar'); p.wait_for_selector('#flash-janela')
+        self.entrar(baralhos=[BAR], flashcards=[F('l', 'Yo {{tuve}} un perro', '', 'lacuna')]); self.abrir_baralho(); p = self.page
+        p.click('.flash-item[data-flash="l"] .flash-editar'); p.wait_for_selector('#flash-janela')
         self.assertNotIn('Formatação', p.inner_text('#flash-janela'))
+        p.select_option('#flash-tipo', 'digitar')
         self.assertFalse(p.is_visible('#flash-previa'))
         p.select_option('#flash-tipo', 'lacuna'); p.fill('#flash-frente', 'Yo {{tuve}} un perro')
         self.assertTrue(p.is_visible('#flash-previa'))
@@ -63,7 +64,7 @@ class TestBaralhos(FlashBase):
 
     def test_digitar_usa_caixa_de_uma_linha(self):
         self.entrar(baralhos=[BAR]); self.abrir_baralho(); p = self.page
-        p.click('#flash-adicionar'); p.select_option('#flash-tipo', 'digitar')
+        p.click('#flash-adicionar'); p.wait_for_selector('#flash-janela')
         self.assertTrue(p.is_visible('#flash-resposta'))
         self.assertFalse(p.is_visible('#flash-verso'))
         self.assertEqual(p.get_attribute('#flash-resposta', 'type'), 'text')
@@ -100,16 +101,16 @@ class TestBaralhos(FlashBase):
         p.wait_for_function("window.__memdb.baralhos.length === 0 && window.__memdb.flashcards.length === 0")
         self.assertTrue(p.is_visible('#flash-novo-baralho'))
 
-    def test_trocar_invertido_por_basico_apaga_o_lado_do_verso(self):
+    def test_trocar_invertido_por_digitar_apaga_o_lado_do_verso(self):
         self.entrar(baralhos=[BAR], flashcards=[F('i', 'perro', 'cachorro', 'invertido')],
                     flash_lados=[{'id': 'l1', 'flashcard_id': 'i', 'lado': 'frente', 'intervalo': 3, 'vence': '2026-11-20', 'introduzido_em': '2026-11-10'},
                                  {'id': 'l2', 'flashcard_id': 'i', 'lado': 'verso', 'intervalo': 3, 'vence': '2026-11-20', 'introduzido_em': '2026-11-10'}])
         self.abrir_baralho(); p = self.page
         p.click('.flash-item[data-flash="i"] .flash-editar'); p.wait_for_selector('#flash-janela')
-        p.select_option('#flash-tipo', 'basico'); p.click('#flash-salvar')
+        p.select_option('#flash-tipo', 'digitar'); p.fill('#flash-resposta', 'cachorro'); p.click('#flash-salvar')
         p.wait_for_function("window.__memdb.flash_lados.length === 1")
         self.assertEqual(self.db()['flash_lados'][0]['lado'], 'frente')
-        self.assertEqual(self.db()['flashcards'][0]['tipo'], 'basico')
+        self.assertEqual(self.db()['flashcards'][0]['tipo'], 'digitar')
 
     def test_link_do_aviso_abre_a_tela(self):
         self.entrar(); p = self.page
@@ -175,14 +176,14 @@ class TestFlashNoCard(FlashBase):
                     cards=[{'id': 'K', 'title': 'Curso', 'list_id': 'L1', 'position': 1}]); p = self.page
         self.ir('quadro'); p.click('.cartao-card[data-card="K"] .cartao-titulo'); p.wait_for_selector('#folha-card', state='visible')
         self.assertFalse(p.is_visible('#card-flash-estudar'))
-        p.click('#card-flash-adicionar'); p.fill('#flash-frente', 'pergunta'); p.fill('#flash-verso', 'resposta'); p.click('#flash-salvar')
+        p.click('#card-flash-adicionar'); p.fill('#flash-frente', 'pergunta'); p.fill('#flash-resposta', 'resposta'); p.click('#flash-salvar')
         p.wait_for_function("window.__memdb.flashcards.length === 1")
         f = self.db()['flashcards'][0]
         self.assertEqual((f['card_id'], f['baralho_id']), ('K', None))
         self.assertIn('Estudar (1)', p.inner_text('#card-flash-estudar'))
         self.assertEqual(p.inner_text('#menu-flash-contador'), '1')
         p.click('#card-flash-estudar'); p.wait_for_selector('#tela-flash-sessao', state='visible')
-        p.click('#sessao-mostrar'); p.click('#sessao-acertei'); p.wait_for_selector('#sessao-fim', state='visible')
+        p.fill('#sessao-digitado', 'resposta'); p.click('#sessao-conferir'); p.click('#sessao-continuar'); p.wait_for_selector('#sessao-fim', state='visible')
         self.assertEqual(len(self.db()['flash_lados']), 1)
         self.ir('quadro'); p.click('.cartao-card[data-card="K"] .cartao-titulo'); p.wait_for_selector('#folha-card', state='visible')
         p.click('#card-excluir')

@@ -161,27 +161,15 @@ class TestAnexos(QuadroBase):
         self.assertIn('Exemplo', p.inner_text('#card-anexos'))
         self.assertEqual(p.get_attribute('#card-anexos .anexo a', 'href'), 'https://exemplo.com')
 
-    def test_arquivo_acima_de_10_mb_e_recusado(self):
-        self.preparar_card(); p = self.page
-        p.set_input_files('#anexo-arquivo', self.arquivo('grande.pdf', 11 * 1024 * 1024))
-        p.wait_for_selector('#card-erro:has-text("10 MB")')
-        self.assertEqual(self.db()['attachments'], [])
-
-    def test_anexar_arquivo_pequeno(self):
-        self.preparar_card(); p = self.page
-        p.set_input_files('#anexo-arquivo', self.arquivo('Aula de revisão.pdf', 1024))
-        p.wait_for_function('window.__memdb.attachments.length === 1')
-        a = self.db()['attachments'][0]
-        self.assertEqual((a['kind'], a['name'], a['card_id']), ('file', 'Aula de revisão.pdf', self.cid))
-        self.assertTrue(a['path'].startswith(f'u1/{self.cid}/'), a['path'])
-        self.assertIn(a['path'], p.evaluate('window.__memArquivos'))
-        self.assertIn('Aula de revisão.pdf', p.inner_text('#card-anexos'))
+    def test_card_nao_oferece_anexar_arquivo(self):
+        self.preparar_card()
+        self.assertEqual(self.page.locator('#anexo-arquivo, #anexo-arquivo-abrir').count(), 0)
+        self.assertEqual(self.page.locator('#anexo-link-abrir').count(), 1)
 
     def test_excluir_anexo_apaga_linha_e_arquivo(self):
-        self.preparar_card(); p = self.page
-        p.set_input_files('#anexo-arquivo', self.arquivo('a.pdf', 10))
-        p.wait_for_function('window.__memdb.attachments.length === 1')
-        caminho = self.db()['attachments'][0]['path']
+        caminho = 'u1/x/a.pdf'
+        self.preparar_card(anexos=[{'kind': 'file', 'name': 'a.pdf', 'path': caminho}]); p = self.page
+        p.evaluate("(c) => { window.__memArquivos[c] = 'x'; }", caminho)
         p.click('#card-anexos .anexo [data-acao="excluir"]')
         p.wait_for_function('window.__memdb.attachments.length === 0')
         p.wait_for_function(f"!('{caminho}' in window.__memArquivos)")

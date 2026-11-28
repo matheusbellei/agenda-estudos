@@ -142,8 +142,8 @@ class TestSubtagsNasTelas(TagsBase):
         self.ir('semana')
         p.click('.dia[data-data="2026-11-17"] .faixa[data-inicio="480"]')
         p.wait_for_selector('#folha-bloco:not([hidden])')
-        p.select_option('#bloco-tag', 'm')
-        self.assertIn('Vocabulário', p.inner_text('#bloco-subtag'))
+        self.escolher('#bloco-tag', 'm')
+        self.assertIn('Vocabulário', self.opcoes_da_lista('#bloco-subtag'))
 
     def test_mae_arquivada_some_dos_filtros_e_chip_continua_no_card(self):
         self.SEED['categories'][0]['archived'] = True
@@ -186,6 +186,15 @@ class TestEstudoEMeta(TagsBase):
         p.fill('#tag-nome', 'Espanhol'); p.fill('#tag-meta-h', '3'); p.fill('#tag-meta-m', '30'); p.click('#tag-salvar')
         self.janela_fechada()
         self.assertEqual(self.cats()['Espanhol']['meta_semanal_min'], 210)
+
+    def test_subtag_de_mae_que_nao_conta_entra_nos_dashboards_sozinha(self):
+        self.abrir_tags(categories=[self.MAE]); p = self.page
+        p.click('.tag-nova-subtag'); p.wait_for_selector('#tag-janela:not([hidden])')
+        self.assertEqual(p.locator('#tag-estudo-herdado').count(), 0)
+        p.fill('#tag-nome', 'Espanhol'); p.check('#tag-estudo'); p.click('#tag-salvar')
+        self.janela_fechada()
+        self.assertTrue(self.cats()['Espanhol']['conta_estudo'])
+        self.assertFalse(self.cats()['Idiomas']['conta_estudo'])
 
     def test_apagar_meta_grava_nulo(self):
         self.abrir_tags(categories=[dict(self.MAE, meta_semanal_min=600)]); p = self.page

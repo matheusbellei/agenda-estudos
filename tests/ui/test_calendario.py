@@ -4,6 +4,7 @@ SEG, TER, QUA, QUI, SEX = '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19'
 
 
 class CalendarioBase(UITest):
+
     def preparar(self, **seeds):
         """Login, semeia (tabela=linhas) e recarrega para o estado ler tudo.
         As contas de posição destes testes usam o dia das 6h às 22h (o padrão do app agora é o dia inteiro)."""
@@ -534,6 +535,6 @@ class TestCorrecoes(CalendarioBase):
         p = self.page
         p.click(f'.dia[data-data="{SEG}"] .bloco .bloco-cabeca')
         self.folha_aberta()
-        p.click('#bloco-salvar'); p.click('[data-escopo="dia"]')
+        p.click('#bloco-salvar')
         p.wait_for_selector('#folha-bloco', state='hidden')
         self.assertEqual(self.db()['blocks'], [])

@@ -30,6 +30,10 @@ class PlanejarBase(CalendarioBase):
         self.page.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca')
         self.folha_aberta()
 
+    def salvar_folha(self):
+        self.page.click('#bloco-salvar')
+        self.folha_fechada()
+
     def folha_fechada(self):
         self.page.wait_for_function("document.querySelector('#folha-bloco').hidden")
 
@@ -142,22 +146,6 @@ class TestFila(PlanejarBase):
         b = self.db()['blocks'][0]
         self.assertEqual((b['date'], b['start_min'], b['end_min'], b['title']), (QUA, 480, 540, 'A'))
 
-    def test_agendar_pelo_card(self):
-        self.semear()
-        p = self.page
-        self.ir('quadro')
-        p.click('.cartao-card[data-card="cT"]')
-        p.click('#card-sessao')
-        self.folha_aberta()
-        self.assertEqual(p.inner_text('.card-escolhido-nome'), 'T')
-        self.assertEqual(p.input_value('#bloco-item'), 'i2')
-        self.assertIn('Aula 2', p.inner_text('#bloco-item'))
-        self.assertEqual(p.input_value('#bloco-titulo'), 'T · Aula 2')
-        p.click('#bloco-salvar')
-        p.wait_for_function("window.__memdb.blocks.length === 1")
-        b = self.db()['blocks'][0]
-        self.assertEqual((b['kind'], b['card_id'], b['item_id'], b['title']), ('study', 'cT', 'i2', 'T · Aula 2'))
-
     def test_blocos_colados_nao_deixam_o_novo_entrar_no_segundo(self):
         self.semear(blocos=[dict(kind='commitment', title='A', date=SEG, start_min=600, end_min=660),
                             dict(kind='commitment', title='B', date=SEG, start_min=660, end_min=720)])
@@ -183,167 +171,119 @@ class TestFila(PlanejarBase):
 
 
 class TestEstado(PlanejarBase):
-    def test_cumprido_marca_o_item_e_avanca_a_fila(self):
+    """Cumprido / Não feito só valem ao tocar em Salvar, e nada acontece no card nem nos itens."""
+
+    def item(self, id_='i2'):
+        return [i for i in self.db()['items'] if i['id'] == id_][0]
+
+    def test_cumprido_so_vale_ao_salvar_e_nao_mexe_no_item(self):
         self.semear(blocos=[self.estudo()])
         p = self.page
-        self.assertEqual(self.item_fila('cT').count(), 0)
+        self.abrir_bloco_de_terca()
+        p.click('#bloco-cumprido')
+        self.assertEqual(p.get_attribute('#bloco-cumprido', 'aria-pressed'), 'true')
+        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
+        self.salvar_folha()
+        p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco.bloco-cumprido[data-status="done"]')
+        db = self.db()
+        self.assertEqual(db['blocks'][0]['status'], 'done')
+        self.assertFalse(self.item()['done'])
+        self.assertEqual(self.item_fila('cT').count(), 1)
+
+    def test_cancelar_descarta_o_estado_escolhido(self):
+        self.semear(blocos=[self.estudo()])
+        p = self.page
         self.abrir_bloco_de_terca()
         p.click('#bloco-cumprido')
         self.fechar_folha()
-        p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco.bloco-cumprido[data-status="done"]')
-        db = self.db()
-        self.assertTrue([i for i in db['items'] if i['id'] == 'i2'][0]['done'])
-        self.assertIsNotNone([i for i in db['items'] if i['id'] == 'i2'][0]['done_at'])
-        self.assertEqual(db['blocks'][0]['status'], 'done')
-        self.assertIn('Aula 3', self.item_fila('cT').inner_text())
-
-    def test_voltar_a_planejado_desmarca_o_item(self):
-        self.semear(blocos=[self.estudo()])
-        p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.fechar_folha()
-        self.abrir_bloco_de_terca()
-        self.assertEqual(p.locator('#bloco-planejado').count(), 0)
-        p.click('#bloco-cumprido'); self.folha_fechada()
-        p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco[data-status="planned"]')
-        item = [i for i in self.db()['items'] if i['id'] == 'i2'][0]
-        self.assertFalse(item['done']); self.assertIsNone(item['done_at'])
         self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
 
-    def test_nao_feito_com_o_que_fiz_no_lugar(self):
+    def test_tocar_de_novo_volta_a_planejado_ao_salvar(self):
+        self.semear(blocos=[self.estudo(status='done')])
+        p = self.page
+        self.abrir_bloco_de_terca()
+        p.click('#bloco-cumprido'); self.salvar_folha()
+        p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco[data-status="planned"]')
+        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
+
+    def test_nao_feito_com_motivo_e_o_que_fiz_no_lugar(self):
         self.semear(blocos=[self.estudo()])
         p = self.page
         self.abrir_bloco_de_terca()
         self.assertEqual(p.locator('#bloco-no-lugar:visible').count(), 0)
         p.click('#bloco-nao-feito')
+        self.assertIn('Por que não fez?', p.inner_text('#bloco-no-lugar-caixa'))
+        p.fill('#bloco-motivo', 'Machuquei a perna')
         p.fill('#bloco-no-lugar', 'Revisei outra matéria <b>x</b>')
-        self.fechar_folha()
+        self.salvar_folha()
         p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco.bloco-nao-feito')
         b = self.db()['blocks'][0]
-        self.assertEqual((b['status'], b['instead_note']), ('missed', 'Revisei outra matéria <b>x</b>'))
-        self.assertFalse([i for i in self.db()['items'] if i['id'] == 'i2'][0]['done'])
-        self.assertEqual(self.item_fila('cT').locator('.fila-etiqueta').inner_text(), 'Reagendar')
+        self.assertEqual((b['status'], b['motivo'], b['instead_note']), ('missed', 'Machuquei a perna', 'Revisei outra matéria <b>x</b>'))
+        self.assertFalse(self.item()['done'])
         self.assertEqual(self.page.locator(f'.dia[data-data="{TER}"] .bloco .bloco-nota').count(), 1)
         p.click(f'.dia[data-data="{TER}"] .dia-nome')
         p.wait_for_selector('#tela-hoje .linha-do-tempo', state='visible')
         self.assertEqual(p.inner_text('#tela-hoje .bloco-nao-feito .bloco-no-lugar'), 'Revisei outra matéria <b>x</b>')
 
-    def test_nao_feito_depois_de_cumprido_desmarca_o_item(self):
-        self.semear(blocos=[self.estudo()])
-        p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.fechar_folha()
-        self.abrir_bloco_de_terca(); p.click('#bloco-nao-feito'); self.fechar_folha()
-        self.assertFalse([i for i in self.db()['items'] if i['id'] == 'i2'][0]['done'])
-        self.assertEqual(self.db()['blocks'][0]['status'], 'missed')
-
-    def test_avulso_cumprido_pergunta_se_conclui_o_card(self):
+    def test_cumprir_card_avulso_nao_pergunta_nem_conclui_o_card(self):
         self.semear(blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140)])
         p = self.page
-        self.abrir_bloco_de_terca()
-        p.click('#bloco-cumprido')
-        p.wait_for_selector('#bloco-escopo:not([hidden])')
-        self.assertIn('Concluir este card?', p.inner_text('#bloco-escopo'))
+        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); p.click('#bloco-salvar')
+        self.folha_fechada()
         self.assertEqual(self.db()['blocks'][0]['status'], 'done')
-        p.click('[data-escopo="sim"]')
-        self.fechar_folha()
-        card = [c for c in self.db()['cards'] if c['id'] == 'cA'][0]
-        self.assertEqual(card['list_id'], 'L2')
-        self.assertIsNotNone(card['completed_at'])
-
-    def test_avulso_agora_nao_mantem_o_card(self):
-        self.semear(blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140)])
-        p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); p.click('[data-escopo="nao"]')
-        self.fechar_folha()
         card = [c for c in self.db()['cards'] if c['id'] == 'cA'][0]
         self.assertEqual(card['list_id'], 'L1'); self.assertIsNone(card['completed_at'])
 
-    def test_cumprido_de_novo_desfaz_sem_perguntar_do_card(self):
-        self.semear(blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140, status='done')])
-        p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.folha_fechada()
-        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
-
-    def test_sem_lista_de_conclusao_nao_pergunta(self):
-        self.semear(concluido=False, blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140)])
-        p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido')
-        self.fechar_folha()
-        self.assertEqual(self.db()['blocks'][0]['status'], 'done')
-
-    def test_ocorrencia_de_compromisso_repetido(self):
+    def test_ocorrencia_de_compromisso_repetido_so_estado_nao_pergunta_dias(self):
         self.semear(commitments=[dict(title='Trabalho', days=[1, 3, 5], start_min=540, end_min=720, valid_from=SEG)])
         p = self.page
         p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca')
         self.folha_aberta()
-        p.click('#bloco-cumprido')
-        self.fechar_folha()
+        p.click('#bloco-cumprido'); p.click('#bloco-salvar')
+        self.folha_fechada()
         p.wait_for_selector(f'.dia[data-data="{QUA}"] .bloco.bloco-cumprido')
         blocos = self.db()['blocks']
         self.assertEqual([(b['status'], b['date'], b['commitment_id'] is not None) for b in blocos], [('done', QUA, True)])
         for dia in (SEG, SEX):
             self.assertEqual(p.locator(f'.dia[data-data="{dia}"] .bloco:not([data-status="planned"])').count(), 0)
-            self.assertEqual(len(self.ids_na_coluna(dia)), 1)
 
-    def test_falha_na_gravacao_mantem_a_folha_e_nao_marca_nada(self):
+    def test_ocorrencia_de_fixa_nao_feita_grava_o_porque_na_linha_nova(self):
+        self.semear(commitments=[dict(title='Trabalho', days=[1, 3, 5], start_min=540, end_min=720, valid_from=SEG)])
+        p = self.page
+        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca'); self.folha_aberta()
+        p.click('#bloco-nao-feito'); p.fill('#bloco-motivo', 'Feriado')
+        self.salvar_folha()
+        p.wait_for_function("window.__memdb.blocks.length === 1 && window.__memdb.blocks[0].motivo === 'Feriado'")
+        self.assertEqual(self.db()['blocks'][0]['status'], 'missed')
+
+    def test_falha_na_gravacao_mantem_a_folha_com_o_erro(self):
         self.semear(blocos=[self.estudo()])
         p = self.page
         self.abrir_bloco_de_terca()
         p.evaluate("window.__memFalhar = 'update'")
-        p.click('#bloco-cumprido')
+        p.click('#bloco-cumprido'); p.click('#bloco-salvar')
         p.wait_for_function("document.querySelector('#bloco-erro').textContent.length > 0")
         self.assertFalse(p.evaluate("document.querySelector('#folha-bloco').hidden"))
         self.assertIn('Sem conexão', p.inner_text('#bloco-erro'))
         self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
-        self.assertFalse([i for i in self.db()['items'] if i['id'] == 'i2'][0]['done'])
 
     def test_texto_do_que_fiz_no_lugar_nao_e_apagado_por_mudanca_de_estado(self):
         self.semear(blocos=[self.estudo(status='missed', instead_note='Revisei outra matéria')])
         p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.fechar_folha()
-        self.assertEqual(self.db()['blocks'][0]['instead_note'], 'Revisei outra matéria')
-        self.assertEqual(p.locator(f'.dia[data-data="{TER}"] .bloco-nota').count(), 0)
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.folha_fechada()
+        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido'); self.salvar_folha()
+        self.assertEqual(self.db()['blocks'][0]['status'], 'done')
         self.assertEqual(self.db()['blocks'][0]['instead_note'], 'Revisei outra matéria')
         self.abrir_bloco_de_terca(); p.click('#bloco-nao-feito')
         self.assertEqual(p.input_value('#bloco-no-lugar'), 'Revisei outra matéria')
 
-    def test_falha_so_no_bloco_desfaz_o_item(self):
+    def test_fechar_pelo_fundo_com_estado_nao_salvo_pergunta(self):
         self.semear(blocos=[self.estudo()])
-        p = self.page
-        self.abrir_bloco_de_terca()
-        p.evaluate("window.__memFalhar = 'update:blocks'")
-        p.click('#bloco-cumprido')
-        p.wait_for_function("document.querySelector('#bloco-erro').textContent.length > 0")
-        self.assertFalse(p.evaluate("document.querySelector('#folha-bloco').hidden"))
-        self.assertIn('Sem conexão', p.inner_text('#bloco-erro'))
-        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
-        item = [i for i in self.db()['items'] if i['id'] == 'i2'][0]
-        self.assertFalse(item['done']); self.assertIsNone(item['done_at'])
-
-    def test_falha_no_bloco_e_no_desfazer_avisa_que_o_item_ficou_marcado(self):
-        self.semear(blocos=[self.estudo()])
-        p = self.page
-        self.abrir_bloco_de_terca()
-        p.evaluate("window.__memFalhar = ['update:blocks', 'update:items']")
-        p.click('#bloco-cumprido')
-        p.wait_for_function("document.querySelector('#bloco-erro').textContent.length > 0")
-        self.assertFalse(p.evaluate("document.querySelector('#folha-bloco').hidden"))
-        self.assertEqual(p.inner_text('#bloco-erro'), 'Não foi possível salvar o compromisso, e o item ficou marcado como feito no card. Desmarque-o no card.')
-        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
-        self.assertTrue([i for i in self.db()['items'] if i['id'] == 'i2'][0]['done'])
-
-    def test_falha_ao_concluir_o_card_diz_que_o_bloco_ficou_cumprido(self):
-        self.semear(blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140)])
         p = self.page
         self.abrir_bloco_de_terca(); p.click('#bloco-cumprido')
-        p.wait_for_selector('#bloco-escopo:not([hidden])')
-        p.evaluate("window.__memFalhar = 'update:cards'")
-        p.click('[data-escopo="sim"]')
-        p.wait_for_function("document.querySelector('#bloco-erro').textContent.length > 0")
-        self.assertEqual(p.inner_text('#bloco-erro'), 'O compromisso ficou como cumprido, mas não foi possível concluir o card. Mova o card para a lista de concluídos.')
+        p.keyboard.press('Escape')
+        p.wait_for_timeout(300)
         self.assertFalse(p.evaluate("document.querySelector('#folha-bloco').hidden"))
-        self.assertEqual(self.db()['blocks'][0]['status'], 'done')
-        self.assertEqual([c for c in self.db()['cards'] if c['id'] == 'cA'][0]['list_id'], 'L1')
+        self.assertEqual(self.db()['blocks'][0]['status'], 'planned')
 
     def test_bloco_curto_no_hoje_mostra_o_icone_de_nota(self):
         self.semear(blocos=[dict(kind='commitment', title='Aula', date=SEG, start_min=600, end_min=620, status='missed', instead_note='Faltei')])
@@ -352,90 +292,30 @@ class TestEstado(PlanejarBase):
         self.assertFalse(self.page.is_visible('#tela-hoje .bloco-curto .bloco-no-lugar'))
 
 
-class TestEstadoSemBotaoExtra(PlanejarBase):
-    def test_nao_feito_marca_na_hora_e_grava_porque_e_no_lugar_sozinhos(self):
-        self.semear(blocos=[self.estudo()])
+class TestVinculos(PlanejarBase):
+    def test_escolher_card_por_coluna(self):
+        self.semear()
+        p = self.page
+        p.click(f'.dia[data-data="{TER}"] .faixa[data-inicio="480"]'); self.folha_aberta()
+        p.click('#bloco-card-colunas')
+        p.click('[data-seletor="L1"]')
+        p.click('[data-seletor="cA"]')
+        p.wait_for_selector('#bloco-card-escolhido:not([hidden])')
+        self.assertEqual(p.inner_text('#bloco-card-escolhido .card-escolhido-nome'), 'A')
+        self.assertEqual(p.input_value('#bloco-titulo'), 'A')
+        p.click('#bloco-salvar'); self.folha_fechada()
+        self.assertEqual(self.db()['blocks'][0]['card_id'], 'cA')
+
+    def test_vincular_baralho_e_so_organizacao(self):
+        self.semear(blocos=[dict(kind='commitment', title='Revisar', date=TER, start_min=1080, end_min=1140)],
+                    baralhos=[dict(id='bX', nome='Verbos', e_grupo=False, pai_id=None)])
         p = self.page
         self.abrir_bloco_de_terca()
-        p.click('#bloco-nao-feito')
-        p.wait_for_function("window.__memdb.blocks[0].status === 'missed'")
-        self.assertEqual(p.locator('#bloco-nao-feito-ok').count(), 0)
-        self.assertFalse(p.evaluate("document.querySelector('#folha-bloco').hidden"))
-        self.assertEqual(p.get_attribute('#bloco-nao-feito', 'aria-pressed'), 'true')
-        self.assertIn('Por que não fez?', p.inner_text('#bloco-no-lugar-caixa'))
-        self.assertIn('O que fez no lugar?', p.inner_text('#bloco-no-lugar-caixa'))
-        self.assertEqual(p.inner_text('#bloco-cancelar'), 'Fechar')
-        p.fill('#bloco-motivo', 'Machuquei a perna'); p.press('#bloco-motivo', 'Tab')
-        p.wait_for_function("window.__memdb.blocks[0].motivo === 'Machuquei a perna'")
-        p.fill('#bloco-no-lugar', 'Projetos pessoais')
-        self.fechar_folha()
-        p.wait_for_function("window.__memdb.blocks[0].instead_note === 'Projetos pessoais'")
-
-    def test_cumprido_marca_na_hora_sem_botao_extra(self):
-        self.semear(blocos=[self.estudo()])
-        p = self.page
-        self.abrir_bloco_de_terca()
-        p.click('#bloco-cumprido')
-        p.wait_for_function("window.__memdb.blocks[0].status === 'done'")
-        self.assertEqual(p.locator('#bloco-cumprido-ok').count(), 0)
-        self.assertTrue(p.is_visible('#bloco-diario'))
-        self.assertEqual(p.evaluate('document.activeElement.id'), 'bloco-diario')
-
-    def test_ocorrencia_de_fixa_nao_feita_grava_o_porque_na_linha_nova(self):
-        self.semear(commitments=[dict(title='Trabalho', days=[1, 3, 5], start_min=540, end_min=720, valid_from=SEG)])
-        p = self.page
-        p.click(f'.dia[data-data="{QUA}"] .bloco .bloco-cabeca'); self.folha_aberta()
-        p.click('#bloco-nao-feito')
-        p.wait_for_function("window.__memdb.blocks.length === 1 && window.__memdb.blocks[0].status === 'missed'")
-        p.fill('#bloco-motivo', 'Feriado'); self.fechar_folha()
-        p.wait_for_function("window.__memdb.blocks.length === 1 && window.__memdb.blocks[0].motivo === 'Feriado'")
-
-    def test_concluir_card_volta_para_a_folha_com_o_diario(self):
-        self.semear(blocos=[dict(kind='study', title='A', card_id='cA', date=TER, start_min=1080, end_min=1140)])
-        p = self.page
-        self.abrir_bloco_de_terca(); p.click('#bloco-cumprido')
-        p.wait_for_selector('#bloco-escopo:not([hidden])')
-        p.click('[data-escopo="nao"]')
-        p.wait_for_selector('#bloco-escopo', state='hidden')
-        self.assertTrue(p.is_visible('#bloco-diario'))
-
-    def test_fechar_com_texto_que_nao_gravou_mantem_a_folha_com_o_erro(self):
-        self.semear(blocos=[self.estudo(status='missed')])
-        p = self.page
-        self.abrir_bloco_de_terca()
-        p.fill('#bloco-motivo', 'Sem internet')
-        p.evaluate("window.__memFalharSempre = 'update'")
-        p.click('#bloco-cancelar')
-        p.wait_for_function("document.querySelector('#bloco-erro').textContent.length > 0")
-        self.assertFalse(p.evaluate("document.querySelector('#folha-bloco').hidden"))
-        self.assertEqual(p.input_value('#bloco-motivo'), 'Sem internet')
-        p.evaluate("window.__memFalharSempre = null")
-        p.click('#bloco-cancelar')
-        p.wait_for_function("document.querySelector('#folha-bloco').hidden")
-        self.assertEqual(self.db()['blocks'][0]['motivo'], 'Sem internet')
-
-    def test_texto_e_estado_ao_mesmo_tempo_terminam_no_estado_novo(self):
-        self.semear(blocos=[self.estudo(status='missed')])
-        p = self.page
-        self.abrir_bloco_de_terca()
-        p.evaluate("window.__memAtraso = { update: 400 }")
-        p.fill('#bloco-motivo', 'Cansado')
-        p.click('#bloco-cumprido')  # o campo perde o foco (grava o texto) e o estado muda logo em seguida
-        p.wait_for_function("window.__memdb.blocks[0].status === 'done'")
-        p.wait_for_function("!document.querySelector('#bloco-salvar').disabled")
-        p.wait_for_timeout(900)
-        self.fechar_folha()
-        p.wait_for_selector(f'.dia[data-data="{TER}"] .bloco[data-status="done"]')
-        self.assertEqual(self.db()['blocks'][0]['motivo'], 'Cansado')
-
-    def test_sem_internet_a_segunda_tentativa_fecha_sem_o_texto(self):
-        self.semear(blocos=[self.estudo(status='missed')])
-        p = self.page
-        self.abrir_bloco_de_terca()
-        p.fill('#bloco-motivo', 'Sem internet')
-        p.evaluate("window.__memFalharSempre = 'update'")
-        p.click('#bloco-cancelar')
-        p.wait_for_function("document.querySelector('#bloco-cancelar').textContent === 'Fechar sem salvar o texto'")
-        p.click('#bloco-cancelar')
-        p.wait_for_function("document.querySelector('#folha-bloco').hidden")
-        self.assertEqual(self.db()['blocks'][0].get('motivo', ''), '')
+        p.click('#bloco-baralho-escolher')
+        p.click('[data-seletor="bX"]')
+        p.wait_for_selector('#bloco-baralho-tirar')
+        p.click('#bloco-cumprido'); p.click('#bloco-salvar')
+        self.folha_fechada()
+        b = self.db()['blocks'][0]
+        self.assertEqual((b['baralho_id'], b['status']), ('bX', 'done'))
+        self.assertEqual(self.db()['baralhos'][0]['id'], 'bX')

@@ -76,6 +76,20 @@ class UITest(unittest.TestCase):
             p.click(f'#sem-grade .dia[data-data="{self.TODAY}"] .dia-nome')
         p.wait_for_selector(f'#tela-{tela}', state='visible')
 
+    def escolher(self, sel, valor):
+        """Escolhe na lista colorida (tag/subtag do bloco) pelo id da categoria; '' = nenhuma."""
+        self.page.click(sel)
+        self.page.click(f'{sel}-lista [data-cat="{valor}"]')
+
+    def valor(self, sel):
+        return self.page.get_attribute(sel, 'data-valor')
+
+    def opcoes_da_lista(self, sel):
+        self.page.click(sel)
+        textos = [t.strip() for t in self.page.locator(f'{sel}-lista [role="option"]').all_inner_texts()]
+        self.page.keyboard.press('Escape')
+        return textos
+
     def seed(self, table, rows):
         self.page.evaluate('([t, r]) => window.__memSeed(t, r)', [table, rows])
 

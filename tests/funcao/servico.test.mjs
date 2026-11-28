@@ -104,14 +104,14 @@ test('token alterado ou vencido → 403 sem escrever nada', async () => {
 
 const token = (acaoNome, ref = 'b1', data = SEG) => assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref, data, acao: acaoNome, expira: Math.floor(em('21:20') / 1000) + 3600 });
 
-test('cumprir bloco gravado marca done e o item do card', async () => {
+test('cumprir bloco gravado marca done e não mexe no item do card', async () => {
   const dados = base();
   Object.assign(dados.blocks[0], { item_id: 'i1', card_id: 'c1', kind: 'study' });
   dados.items.push({ id: 'i1', owner_id: DONO, card_id: 'c1', done: false });
   const { servico, banco } = montar({ dados });
   assert.equal((await acao(servico, 'cumprir', await token('cumprir'))).status, 200);
   assert.equal(banco.dados.blocks[0].status, 'done');
-  assert.equal(banco.dados.items[0].done, true);
+  assert.equal(banco.dados.items[0].done, false);
 });
 
 test('cumprir ocorrência virtual cria o bloco done com os dados da fixa', async () => {
@@ -224,56 +224,6 @@ test('fora do minuto da revisão a função não lê as tags', async () => {
   banco.select = async (n, f) => { lidas.push(n); return sel(n, f); };
   await tique(servico);
   assert.ok(!lidas.includes('categories'));
-});
-
-// ---- Modo foco
-const HOJE_FOCO = '2026-11-24';
-const fimFoco = new Date(em('10:25', HOJE_FOCO)).toISOString();
-const comFoco = (extra = {}) => {
-  const d = base(); d.blocks = [];
-  d.focos = [{ owner_id: DONO, fase: 'foco', ciclo: 2, estado: 'rodando', termina_em: fimFoco, restante_s: null, titulo: 'Espanhol', ...extra }];
-  return d;
-};
-
-test('fim do foco envia uma vez com "Começar pausa" e deixa a linha esperando', async () => {
-  const { servico, enviados, banco } = montar({ dados: comFoco(), instante: em('10:25', HOJE_FOCO) });
-  await tique(servico); await tique(servico);
-  assert.equal(enviados.length, 2);
-  const p = enviados[0].payload;
-  assert.deepEqual([p.titulo, p.corpo, p.tag, p.url], ['Espanhol', 'Foco concluído (ciclo 2 de 4). Hora da pausa de 5 min.', `foco:${DONO}:${fimFoco}`, './?tela=foco']);
-  assert.deepEqual(p.acoes.map((a) => [a.acao, a.titulo]), [['proxima', 'Começar pausa']]);
-  assert.equal(banco.dados.focos[0].estado, 'esperando');
-});
-
-test('foco pausado não envia nada', async () => {
-  const { servico, enviados } = montar({ dados: comFoco({ estado: 'pausado', termina_em: null, restante_s: 60 }), instante: em('10:25', HOJE_FOCO) });
-  await tique(servico);
-  assert.equal(enviados.length, 0);
-});
-
-test('ação "proxima" começa a pausa; link velho não muda nada', async () => {
-  const { servico, banco, relogio } = montar({ dados: comFoco({ estado: 'esperando' }), instante: em('10:27', HOJE_FOCO) });
-  const expira = Math.floor(relogio.agora / 1000) + 3600;
-  const velho = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'foco', data: new Date(em('09:00', HOJE_FOCO)).toISOString(), acao: 'proxima', expira });
-  assert.equal((await acao(servico, 'proxima', velho)).status, 200);
-  assert.equal(banco.dados.focos[0].estado, 'esperando');
-  const certo = await assinarToken(ENV.LEMBRETES_SEGREDO, { dono: DONO, ref: 'foco', data: fimFoco, acao: 'proxima', expira });
-  assert.equal((await acao(servico, 'proxima', certo)).status, 200);
-  const f = banco.dados.focos[0];
-  assert.deepEqual([f.fase, f.ciclo, f.estado, f.termina_em], ['pausa', 2, 'rodando', new Date(em('10:32', HOJE_FOCO)).toISOString()]);
-});
-
-test('foco pausado entre a leitura do tique e o envio não recebe o aviso antigo', async () => {
-  const { servico, enviados, banco } = montar({ dados: comFoco(), instante: em('10:25', HOJE_FOCO) });
-  const sel = banco.select.bind(banco);
-  let leituras = 0;
-  banco.select = async (n, f) => {
-    if (n === 'focos' && (leituras += 1) > 1) { banco.dados.focos[0] = { ...banco.dados.focos[0], estado: 'pausado', termina_em: null, restante_s: 30 }; }
-    return sel(n, f);
-  };
-  await tique(servico);
-  assert.equal(enviados.length, 0);
-  assert.equal(banco.dados.focos[0].estado, 'pausado');
 });
 
 // ---- Aviso dos flashcards do dia

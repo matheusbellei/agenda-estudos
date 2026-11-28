@@ -46,15 +46,7 @@ self.addEventListener('push', (e) => {
     data: { url: d.url || './', acoes },
     actions: acoes.map((a) => ({ action: a.acao, title: a.titulo })),
   });
-  // Fim de fase do foco com o app na tela: o próprio app toca e mostra; o push sairia em dobro.
-  e.waitUntil((async () => {
-    if (String(d.tag || '').startsWith('foco:')) {
-      const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      const visivel = janelas.find((c) => c.visibilityState === 'visible' && c.url.startsWith(self.registration.scope));
-      if (visivel) { visivel.postMessage({ tipo: 'foco-fim' }); return; }
-    }
-    await mostrar();
-  })());
+  e.waitUntil(mostrar());
 });
 
 self.addEventListener('notificationclick', (e) => {
@@ -64,9 +56,8 @@ self.addEventListener('notificationclick', (e) => {
   // "Cumprido" e "Adiar 10 min" resolvem pela função, sem abrir o app.
   if (acao) {
     // Sem rede ou link vencido (vale 24 h): avisa em vez de falhar calado.
-    const doFoco = acao.acao === 'proxima';
-    const avisar = () => self.registration.showNotification(doFoco ? 'Não deu para começar' : 'Não deu para marcar', {
-      body: doFoco ? `"${acao.titulo}" não foi registrado. Abra o app no Modo foco.` : `"${acao.titulo}" não foi registrado. Abra o app para marcar o bloco.`,
+    const avisar = () => self.registration.showNotification('Não deu para marcar', {
+      body: `"${acao.titulo}" não foi registrado. Abra o app para marcar o bloco.`,
       icon: 'icones/icone-192.png', tag: 'falha-acao',
     });
     e.waitUntil(fetch(acao.url).then((r) => (r.ok ? null : avisar()), avisar));

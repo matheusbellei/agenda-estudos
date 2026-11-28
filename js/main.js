@@ -8,8 +8,6 @@ import { iniciarAjustes } from './telas/ajustes.js';
 import { iniciarTags } from './telas/tags.js';
 import { iniciarDashboards } from './telas/dashboards.js';
 import { iniciarRevisao } from './telas/revisao.js';
-import { iniciarFoco } from './telas/foco.js';
-import { iniciarDiario } from './telas/diario.js';
 import { iniciarFlashcards } from './telas/flashcards.js';
 import { iniciarSessao } from './telas/flash-sessao.js';
 import { iniciarQuadro } from './telas/quadro.js';
@@ -47,8 +45,6 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   iniciarTags({ estado });
   iniciarDashboards({ estado });
   iniciarRevisao({ estado });
-  const vigiaFoco = iniciarFoco({ estado, store });
-  iniciarDiario({ estado });
   iniciarFlashcards({ estado });
   iniciarSessao({ estado });
   iniciarQuadro({ estado, abrirCard });
@@ -87,9 +83,9 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
   function abrirDoLink(endereco) {
     const u = new URL(endereco, location.href);
     // Aviso da revisão da semana: abre a tela da revisão.
-    // Avisos da revisão da semana e do fim de fase do foco: abrem a tela.
+    // Avisos da revisão da semana e dos flashcards: abrem a tela.
     const tela = u.searchParams.get('tela');
-    if (tela === 'revisao' || tela === 'foco' || tela === 'flashcards') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
+    if (tela === 'revisao' || tela === 'flashcards') { history.replaceState(null, '', location.pathname); irPara(tela); return; }
     const data = u.searchParams.get('data');
     const ref = u.searchParams.get('bloco');
     if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
@@ -109,9 +105,8 @@ if ('serviceWorker' in navigator && !window.__TEST_STORE__) {
       dentro = true;
       // Depois de a casca mostrar a tela inicial (Semana), para o dia do link não ser sobrescrito.
       setTimeout(() => abrirDoLink(location.href), 0);
-      vigiaFoco.entrar().catch(() => {});
       sincronizarAparelho(store).catch(() => {});
     },
-    aoSair: () => { dentro = false; vigiaFoco.sair(); },
+    aoSair: () => { dentro = false; },
   });
 })();

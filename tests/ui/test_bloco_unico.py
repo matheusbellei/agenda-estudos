@@ -37,7 +37,7 @@ class TestBlocoUnico(CalendarioBase):
     def test_perguntar_cria_card_na_lista_escolhida(self):
         self.novo_bloco(lists=LISTAS, categories=[dict(id='cat1', name='Idiomas')]); p = self.page
         p.fill('#bloco-titulo', 'Vocabulário em Espanhol')
-        p.select_option('#bloco-tag', 'cat1')
+        self.escolher('#bloco-tag', 'cat1')
         p.check('#bloco-criar-card')
         self.assertEqual(p.input_value('#bloco-novo-card-titulo'), 'Vocabulário em Espanhol')
         self.assertEqual(p.input_value('#bloco-novo-card-lista'), 'L1')
@@ -164,3 +164,20 @@ class TestFimNaMeiaNoite(CalendarioBase):
         p.wait_for_function("window.__memdb.blocks.length === 1")
         b = self.db()['blocks'][0]
         self.assertEqual((b['start_min'], b['end_min']), (0, 1440))
+
+
+class TestEspacoEntreBlocos(CalendarioBase):
+    def test_toque_num_vao_curto_entre_dois_blocos_cria_compromisso_ali(self):
+        # 10:00–11:00 e 11:30–13:00: sobra meia hora entre eles (menos que metade da faixa, sem "Livre" desenhado).
+        self.preparar(blocks=[self.bloco(id='a', date=TER, start_min=600, end_min=660), self.bloco(id='b', date=TER, start_min=690, end_min=780)])
+        p = self.page
+        x, y = p.evaluate("""([dia]) => {
+          const a = document.querySelector(`.dia[data-data="${dia}"] [data-bloco="a"]`).getBoundingClientRect();
+          const b = document.querySelector(`.dia[data-data="${dia}"] [data-bloco="b"]`).getBoundingClientRect();
+          return [a.left + a.width / 2, (a.bottom + b.top) / 2];
+        }""", [TER])
+        p.mouse.click(x, y)
+        self.folha_aberta()
+        self.assertEqual(p.input_value('#bloco-data'), TER)
+        self.assertEqual(p.input_value('#bloco-inicio'), '11:00')
+        self.assertEqual(p.input_value('#bloco-fim'), '11:30')

@@ -4,8 +4,8 @@ const VALIDADE_URL_S = 3600;
 const BUCKET = 'anexos';
 
 // Colunas que identificam a linha quando a tabela não tem `id`.
-const CHAVE = { settings: 'owner_id', focos: 'owner_id' };
-const ORDEM_LISTA = { settings: ['owner_id'], focos: ['owner_id'], card_categories: ['card_id', 'category_id'] };
+const CHAVE = { settings: 'owner_id' };
+const ORDEM_LISTA = { settings: ['owner_id'], card_categories: ['card_id', 'category_id'] };
 
 function traduzErro(erro) {
   const msg = String((erro && erro.message) || erro || '');

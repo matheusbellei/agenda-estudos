@@ -80,6 +80,13 @@ Faça nesta ordem (se pular a ordem, telas novas dão erro até as migrações r
 5. Atualize a função dos avisos: em **Edge Functions › lembretes**, abra o código, apague tudo, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy**. O agendamento e os segredos continuam os mesmos. Sem isso, o aviso da revisão da semana e o aviso do fim de cada fase do foco não chegam.
 6. No app, em **Tags**, edite as tags que contam como estudo e marque **Conta como estudo** (e, se quiser, a meta por semana). Em **Configurações › Geral** ficam o tema (claro/escuro), os tempos do modo foco, os dias da revisão espaçada e a opção dos modelos de semana.
 
+### Rodada 5: agenda simples (28/11/2026)
+
+1. No **SQL Editor** do Supabase, rode `supabase/migracao-2026-11-agenda-simples.sql` (pode rodar de novo sem problema).
+2. Publique o código no GitHub e atualize a função: em **Edge Functions › lembretes**, cole o conteúdo novo de `supabase/functions/lembretes/index.ts` e clique em **Deploy**.
+3. Foram removidos o modo foco e o diário. Apague do seu computador: `js/foco.js`, `js/regras/foco.js`, `js/telas/foco.js`, `js/regras/diario.js`, `js/telas/diario.js`.
+4. Na agenda, o bloco agora vincula card (por título ou por coluna) e baralho/grupo de flashcards; Cumprido e Não feito só valem ao tocar em Salvar.
+
 O app instalado no celular pode demorar uma abertura para pegar a versão nova; se algo parecer antigo, feche e abra de novo.
 
 ### Rodada 5: flashcards (24/11/2026)

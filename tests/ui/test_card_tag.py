@@ -148,17 +148,6 @@ class TestCardTag(CardTagBase):
         self.assertTrue(self.visivel('#card-tag-lista'))
         self.assertFalse(self.visivel('#card-subtags-lista'))
 
-    def test_secao_na_agenda(self):
-        self.preparar_tags(); p = self.page; self.abrir()
-        sec = p.inner_text('#card-na-agenda')
-        for t in ['Na agenda', 'Marcar sessão', 'Coloca este card num horário da agenda.',
-                  'Revisões espaçadas', 'Marca revisões em datas futuras, como 7 e 30 dias depois.',
-                  'Repetir toda semana', 'Vira um card fixo, nos dias que você escolher.']:
-            self.assertIn(t, sec)
-        self.assertEqual(p.locator('#card-agendar').count(), 0)
-        p.click('#card-sessao')
-        p.wait_for_selector('#folha-bloco', state='visible')
-
     def test_toques_rapidos_nao_deixam_sem_categoria(self):
         self.preparar_tags(); p = self.page
         self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Orações']}])
@@ -194,24 +183,3 @@ class TestCardTag(CardTagBase):
         self.esperar([self.cat['Espiritual']])
         p.wait_for_timeout(100)
         self.assertFalse(self.visivel('#card-tag-lista'))
-
-    def test_marcar_sessao_traz_a_tag_e_a_subtag_do_card(self):
-        self.preparar_tags(); p = self.page
-        self.seed('card_categories', [{'card_id': self.cid, 'category_id': self.cat['Orações']}])
-        p.reload(); p.wait_for_selector('#app', state='visible'); self.ir('quadro'); self.abrir()
-        p.click('#card-sessao'); p.wait_for_selector('#folha-bloco', state='visible')
-        self.assertEqual(p.input_value('#bloco-tag'), self.cat['Espiritual'])
-        self.assertEqual(p.input_value('#bloco-subtag'), self.cat['Orações'])
-
-    def test_marcar_sessao_em_card_sem_tag(self):
-        self.preparar_tags(); p = self.page; self.abrir()
-        p.click('#card-sessao'); p.wait_for_selector('#folha-bloco', state='visible')
-        self.assertEqual(p.input_value('#bloco-tag'), '')
-
-    def test_na_agenda_com_espaco_igual(self):
-        self.preparar_tags(); p = self.page; self.abrir()
-        ys = p.eval_on_selector_all('#card-na-agenda .agenda-linha', 'els => els.map(e => { const r = e.getBoundingClientRect(); return [r.top, r.bottom]; })')
-        self.assertEqual(len(ys), 3)
-        g1, g2 = ys[1][0] - ys[0][1], ys[2][0] - ys[1][1]
-        self.assertLessEqual(abs(g1 - g2), 1, (g1, g2))
-

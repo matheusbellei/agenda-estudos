@@ -520,3 +520,28 @@ test('diagnóstico: só a função grava e lê o status do agendador; a migraç�
   assert.throws(() => psql(DB, `begin; set local role service_role; insert into public.lembretes_status (id) values (2); commit;`));
   assert.equal(psql(DB, `select count(*) from information_schema.columns where table_name = 'push_subscriptions' and column_name = 'ultimo_status'`), '1');
 });
+
+test('migração da agenda simples roda 2× sobre o schema anterior e o baralho do bloco precisa ser do dono', () => {
+  const VELHO = 'estudos_migracao_agenda';
+  psql('postgres', `drop database if exists ${VELHO}`);
+  psql('postgres', `create database ${VELHO}`);
+  psqlFile(VELHO, 'tests/db/supabase-stub.sql');
+  const antigo = execFileSync('git', ['show', 'HEAD:supabase/schema.sql'], { encoding: 'utf8' }).split('\n-- Atualização de 27/11/2026')[0];
+  execFileSync('psql', ['-h', PG.host, '-p', PG.port, '-U', 'postgres', '-d', VELHO, '-v', 'ON_ERROR_STOP=1', '-q'], { input: antigo });
+  psqlFile(VELHO, 'supabase/migracao-2026-11-agenda-simples.sql');
+  psqlFile(VELHO, 'supabase/migracao-2026-11-agenda-simples.sql');
+  assert.equal(psql(VELHO, `select count(*) from information_schema.columns where table_name = 'blocks' and column_name = 'baralho_id'`), '1');
+  psql('postgres', `drop database ${VELHO}`);
+});
+
+test('bloco vinculado a baralho: o meu vale; o de outra pessoa é recusado', () => {
+  const bar = id(as(A, `insert into baralhos (nome) values ('Verbos do bloco') returning id`));
+  const ok = id(as(A, `insert into blocks (date,start_min,end_min,kind,title,baralho_id) values ('2026-11-17',600,660,'commitment','Estudar','${bar}') returning id`));
+  assert.equal(psql(DB, `select baralho_id from blocks where id = '${ok}'`), bar);
+  fails(() => as(B, `insert into blocks (date,start_min,end_min,kind,title,baralho_id) values ('2026-11-17',600,660,'commitment','x','${bar}')`), /row-level security/);
+  const fx = id(as(A, `insert into commitments (title,days,start_min,end_min,valid_from,baralho_id) values ('Fixa',array[1],600,660,'2026-11-01','${bar}') returning id`));
+  fails(() => as(B, `insert into commitments (title,days,start_min,end_min,valid_from,baralho_id) values ('x',array[1],600,660,'2026-11-01','${bar}')`), /row-level security/);
+  as(A, `delete from baralhos where id = '${bar}'`);
+  assert.equal(psql(DB, `select coalesce(baralho_id::text,'nulo') from commitments where id = '${fx}'`), 'nulo');
+  assert.equal(psql(DB, `select coalesce(baralho_id::text,'nulo') from blocks where id = '${ok}'`), 'nulo');
+});

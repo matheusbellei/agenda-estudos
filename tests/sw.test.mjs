@@ -54,37 +54,10 @@ const janela = (visibilityState) => {
   return { url: 'https://app.teste/agenda/index.html', visibilityState, postMessage: (m) => recebidas.push(m), recebidas };
 };
 
-test('fim de fase do foco com o app visível: não mostra o push e avisa a janela', async () => {
-  const j = janela('visible');
-  const { ouvintes, mostradas } = carregar(async () => ({ ok: true }), [j]);
-  await receber(ouvintes, { titulo: 'Modo foco', corpo: 'x', tag: 'foco:u1:2026', url: './?tela=foco' });
-  assert.equal(mostradas.length, 0);
-  assert.equal(JSON.stringify(j.recebidas), JSON.stringify([{ tipo: 'foco-fim' }])); // objeto de outro contexto (vm)
-});
-
-test('fim de fase do foco com o app escondido: mostra', async () => {
-  const { ouvintes, mostradas } = carregar(async () => ({ ok: true }), [janela('hidden')]);
-  await receber(ouvintes, { titulo: 'Modo foco', corpo: 'x', tag: 'foco:u1:2026' });
-  assert.equal(mostradas.length, 1);
-});
-
 test('lembrete comum com o app visível continua aparecendo', async () => {
   const { ouvintes, mostradas } = carregar(async () => ({ ok: true }), [janela('visible')]);
   await receber(ouvintes, { titulo: 'Vocabulário', corpo: 'x', tag: 'antes:b1' });
   assert.equal(mostradas.length, 1);
-});
-
-test('falha em "Começar pausa" avisa com o texto do foco', async () => {
-  const { ouvintes, mostradas } = carregar(async () => ({ ok: false, status: 403 }));
-  let espera;
-  ouvintes.notificationclick({
-    action: 'proxima',
-    notification: { close() {}, data: { url: './?tela=foco', acoes: [{ acao: 'proxima', titulo: 'Começar pausa', url: 'https://f/l?acao=proxima' }] } },
-    waitUntil: (p) => { espera = p; },
-  });
-  await espera;
-  assert.equal(mostradas[0].t, 'Não deu para começar');
-  assert.match(mostradas[0].o.body, /Abra o app no Modo foco/);
 });
 
 // ---- pushsubscriptionchange: o navegador renovou a inscrição com o app fechado

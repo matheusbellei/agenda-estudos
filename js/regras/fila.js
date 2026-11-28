@@ -118,21 +118,6 @@ export function pendenciasDaVirada({ cards, occurrences, blocks, hoje, ultimaVir
   return { perguntar, fecharSozinho };
 }
 
-export function efeitosDeEstado(bloco, novo, { cards, items }) {
-  if (bloco.revisao_id) return { marcarItem: null, perguntarConcluirCard: false };
-  let marcarItem = null;
-  if (bloco.item_id) {
-    if (novo === 'done') marcarItem = { id: bloco.item_id, done: true };
-    else if (bloco.status === 'done') marcarItem = { id: bloco.item_id, done: false };
-  }
-  let perguntarConcluirCard = false;
-  if (novo === 'done' && bloco.kind === 'study' && bloco.card_id) {
-    const c = cards.find((x) => x.id === bloco.card_id);
-    perguntarConcluirCard = !!c && !c.is_fixed && !items.some((i) => i.card_id === c.id);
-  }
-  return { marcarItem, perguntarConcluirCard };
-}
-
 // Levadas há mais de 4 semanas (antes da segunda-feira de 4 semanas atrás) sem sessão cumprida:
 // a virada as fecha como não feitas para a fila não acumular atrasos.
 export function levadasVencidas({ occurrences, blocks, hoje }) {

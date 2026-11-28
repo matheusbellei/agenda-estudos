@@ -7,8 +7,6 @@ import { blocosDoPeriodo, ocorrenciasDeCompromissos } from '../../../js/regras/c
 import { devidos, agoraNoFuso, refDoBloco, revisaoVence, flashVence } from '../../../js/regras/lembretes.js';
 import { paraHoje, textoDoAvisoFlash } from '../../../js/regras/flash.js';
 import { semanaDaRevisao, textoDaRevisao } from '../../../js/regras/acompanhamento.js';
-import { focoNoTique, proximaFase, iniciarFase } from '../../../js/regras/foco.js';
-import { efeitosDeEstado } from '../../../js/regras/fila.js';
 import { somaDias } from '../../../js/regras/datas.js';
 import { paraB64u, deB64u } from './webpush.js';
 
@@ -16,7 +14,6 @@ export const PADROES = {
   notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
   notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
   sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
-  foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
   revisoes_dias: [7, 30], modelos_com_fixas: false,
   flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140,
 };
@@ -95,7 +92,6 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
   async function tique() {
     const inscricoes = await banco.select('push_subscriptions', {});
     const donos = [...new Set(inscricoes.map((s) => s.owner_id))];
-    const focos = donos.length ? await banco.select('focos', { owner_id: { in: donos } }) : [];
     let total = 0;
     for (const dono of donos) {
       const [linha] = await banco.select('settings', { owner_id: dono });
@@ -137,21 +133,9 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
         const { total } = paraHoje({ baralhos, cards, flashcards, flash_lados }, avisoFlash.data, ajustes);
         if (total > 0) lista.push({ ...avisoFlash, tipo: 'flash', titulo: 'Flashcards', corpo: textoDoAvisoFlash(total), acoes: [], url: './?tela=flashcards' });
       }
-      // Modo foco: a fase que acabou vira aviso (uma vez) e a linha passa a "esperando".
-      const foco = focos.find((f) => f.owner_id === dono);
-      const fimDoFoco = focoNoTique({ foco, instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
-      if (fimDoFoco.aviso) {
-        const { chave, titulo, corpo, botao } = fimDoFoco.aviso;
-        lista.push({ chave, tipo: 'foco', titulo, corpo, acoes: ['proxima'], tituloAcao: botao, ref: 'foco', data: foco.termina_em, url: './?tela=foco' });
-      }
       const aparelhos = inscricoes.filter((s) => s.owner_id === dono);
       for (const n of lista) {
         // Grava antes de enviar: se dois tiques rodarem juntos, só um consegue gravar e enviar.
-        // A fase pode ter sido pausada, pulada ou parada desde a leitura do começo do tique.
-        if (n.tipo === 'foco') {
-          const [atual] = await banco.select('focos', { owner_id: dono });
-          if (!atual || atual.estado !== 'rodando' || atual.termina_em !== foco.termina_em) continue;
-        }
         const gravou = await banco.insert('notificacoes_enviadas', { owner_id: dono, chave: n.chave, enviada_em: new Date(agora()).toISOString() }, { ignorarConflito: true });
         if (!gravou.length) continue;
         const { aceitos, passageiras } = await enviarParaAparelhos(aparelhos, await payloadDe(dono, n));
@@ -159,9 +143,6 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
         // (dentro da tolerância do lembrete).
         if (!aceitos && passageiras) await banco.remove('notificacoes_enviadas', { owner_id: dono, chave: n.chave });
         total += 1;
-      }
-      if (fimDoFoco.esperando) {
-        await banco.update('focos', { owner_id: dono, termina_em: foco.termina_em }, { estado: 'esperando', atualizado_em: new Date(agora()).toISOString() });
       }
     }
     await banco.remove('notificacoes_enviadas', { enviada_em: { lt: new Date(agora() - GUARDAR_ENVIADAS_MS).toISOString() } });
@@ -182,37 +163,15 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
   async function cumprir(dono, ref, data) {
     const bloco = await acharBloco(dono, ref, data);
     if (!bloco || bloco.cancelled || bloco.status !== 'planned') return { ok: true, nada: true };
-    const [cards, items] = await Promise.all([banco.select('cards', { owner_id: dono }), banco.select('items', { owner_id: dono })]);
-    const { marcarItem } = efeitosDeEstado(bloco, 'done', { cards, items });
     if (bloco.virtual) {
       await banco.insert('blocks', {
         owner_id: dono, commitment_id: bloco.commitment_id, date: bloco.date, start_min: bloco.start_min, end_min: bloco.end_min,
-        kind: bloco.kind, card_id: bloco.card_id || null, title: bloco.title, category_id: bloco.category_id || null,
+        kind: bloco.kind, card_id: bloco.card_id || null, baralho_id: bloco.baralho_id || null, title: bloco.title, category_id: bloco.category_id || null,
         lembrete_min: bloco.lembrete_min ?? null, status: 'done', instead_note: '',
       });
     } else {
       await banco.update('blocks', { id: bloco.id, owner_id: dono }, { status: 'done' });
     }
-    if (marcarItem) {
-      try { await banco.update('items', { id: marcarItem.id, owner_id: dono }, { done: marcarItem.done }); } catch (err) {
-        // Mesma regra do app: sem o item, o bloco volta a planejado.
-        if (!bloco.virtual) await banco.update('blocks', { id: bloco.id, owner_id: dono }, { status: 'planned' });
-        throw err;
-      }
-    }
-    return { ok: true };
-  }
-
-  // "Começar pausa" / "Começar foco" na notificação: só vale para a fase que o aviso anunciou.
-  async function proximaDoFoco(dono, terminaEm) {
-    const [foco] = await banco.select('focos', { owner_id: dono });
-    const mesma = foco && foco.termina_em && Date.parse(foco.termina_em) === Date.parse(terminaEm);
-    if (!mesma || !['rodando', 'esperando'].includes(foco.estado)) return { ok: true, nada: true };
-    const [linha] = await banco.select('settings', { owner_id: dono });
-    const ajustes = { ...PADROES, ...Object.fromEntries(Object.entries(linha || {}).filter(([, v]) => v !== null && v !== undefined)) };
-    const p = proximaFase(foco, ajustes);
-    await banco.update('focos', { owner_id: dono, termina_em: foco.termina_em },
-      { ...iniciarFase(p.fase, p.ciclo, agora(), ajustes), atualizado_em: new Date(agora()).toISOString() });
     return { ok: true };
   }
 
@@ -225,7 +184,6 @@ export function criarServico({ banco, enviar, agora = () => Date.now(), env }) {
       await banco.insert('adiamentos', { owner_id: t.dono, ref: t.ref, data: t.data, quando: new Date(agora() + ADIAR_MS).toISOString() });
       return resposta(req, 200, { ok: true });
     }
-    if (pedida === 'proxima') return resposta(req, 200, await proximaDoFoco(t.dono, t.data));
     return resposta(req, 400, { erro: 'Ação desconhecida.' });
   }
 

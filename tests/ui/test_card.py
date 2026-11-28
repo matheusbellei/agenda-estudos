@@ -120,17 +120,10 @@ class TestCard(QuadroBase):
         self.abrir(); self.fechar()
         self.assertEqual(self.db()['cards'][0]['notes'], 'externo')
 
-    def test_tornar_fixa_e_voltar_ao_quadro(self):
-        self.preparar_card(); p = self.page; self.abrir()
-        p.click('#card-fixa')
-        p.click('#card-fixa-dias [data-dia="1"]')
-        p.click('#card-fixa-confirmar')
-        p.wait_for_function("window.__memdb.cards[0].is_fixed === true")
-        c = self.db()['cards'][0]
-        self.assertEqual((c['fixed_days'], c['list_id']), ([1], None))
-        self.fechar()
-        self.assertEqual(p.locator('.cartao-card').count(), 0)
-        # reabrir pelo hook e voltar ao quadro
+    def test_card_fixo_volta_ao_quadro(self):
+        self.preparar(cards=[{'title': 'Curso de Python', 'is_fixed': True, 'fixed_days': [1], 'list_id': None, 'position': 1024}])
+        self.cid = self.card_id('Curso de Python'); p = self.page
+        self.ir('fixas')
         p.evaluate(f"import('/js/telas/card.js').then(m => m.abrirCard('{self.cid}'))")
         p.wait_for_selector('#folha-card', state='visible')
         p.select_option('#card-voltar-lista', self.ids['Em andamento'])
@@ -139,11 +132,9 @@ class TestCard(QuadroBase):
         c = self.db()['cards'][0]
         self.assertEqual((c['list_id'], c['fixed_days']), (self.ids['Em andamento'], []))
 
-    def test_tornar_fixa_sem_dias(self):
-        self.preparar_card(); p = self.page; self.abrir()
-        p.click('#card-fixa'); p.click('#card-fixa-confirmar')
-        p.wait_for_function("window.__memdb.cards[0].is_fixed === true")
-        self.assertEqual(self.db()['cards'][0]['fixed_days'], [])
+    def test_card_comum_nao_tem_secao_na_agenda(self):
+        self.preparar_card(); self.abrir()
+        self.assertEqual(self.page.locator('#card-sessao, #card-fixa, #card-revisoes').count(), 0)
 
     def test_excluir_card_preserva_bloco_passado_e_apaga_o_futuro(self):
         self.preparar_card(); p = self.page
@@ -221,14 +212,6 @@ class TestCard(QuadroBase):
         self.assertTrue(p.is_visible('#folha-card'))
         p.keyboard.press('Escape')
         p.wait_for_selector('#folha-card', state='hidden')
-
-    def test_tornar_fixa_limpa_a_conclusao(self):
-        self.preparar(cards=[{'title': 'Curso de Python', 'lista': 'Backlog', 'position': 1024, 'completed_at': '2026-11-10T12:00:00Z'}])
-        self.cid = self.card_id('Curso de Python'); p = self.page; self.abrir()
-        p.click('#card-fixa'); p.click('#card-fixa-confirmar')
-        p.wait_for_function("window.__memdb.cards[0].is_fixed === true")
-        self.assertIsNone(self.db()['cards'][0]['completed_at'])
-
 
 class TestMetaCard(QuadroBase):
     def preparar_com_blocos(self, meta=None):

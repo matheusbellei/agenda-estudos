@@ -109,7 +109,7 @@ export function montarPainelNotificacoes({ estado, store }) {
         criar('p', { class: 'suave', texto: 'As horas da semana e um toque para abrir a revisão.' }),
         revisaoNoSilencio),
       silencio.el,
-      criar('p', { class: 'notif-aviso', id: 'notif-silencio-aviso', texto: 'Com o silêncio ligado, você não recebe nenhum aviso nesse intervalo — nem lembretes, nem resumo, nem pendências, nem a revisão da semana, nem os flashcards do dia, nem o fim de fase do foco. O que cair nele é descartado, não chega depois.' }),
+      criar('p', { class: 'notif-aviso', id: 'notif-silencio-aviso', texto: 'Com o silêncio ligado, você não recebe nenhum aviso nesse intervalo — nem lembretes, nem resumo, nem pendências, nem a revisão da semana, nem os flashcards do dia. O que cair nele é descartado, não chega depois.' }),
       criar('div', { class: 'notif-sub' }, camposSilencio),
       erroPrefs, msgPrefs, criar('div', { class: 'linha-botoes' }, salvar)));
 

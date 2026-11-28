@@ -5,10 +5,9 @@ import { OPCOES_LEMBRETE, textoDoLembrete } from './notificacoes.js';
 import { emOrdem, categoriaParaBloco } from '../regras/tags.js';
 import { criarTagPeloBloco } from './tags.js';
 import { horaTexto, minutosDe, somaDias, diaDaSemana, DIAS_CURTOS } from '../regras/datas.js';
-import { efeitosDeEstado } from '../regras/fila.js';
-import { moverCard, cardsDaLista, posicaoNoFim } from './quadro.js';
+import { colunasComCards, arvoreParaEscolher } from '../regras/vinculos.js';
+import { abrirSeletor } from './vincular.js';
 import { registrarTextoNaoSalvo, pedirDescarte } from './folhas.js';
-import { focarNoBloco } from './foco.js';
 
 let estado = null;
 let abrirCardFn = () => {};
@@ -37,12 +36,7 @@ export function iniciarBloco({ estado: e, abrirCard }) {
   registrarTextoNaoSalvo(() => !camada.hidden && temTextoAberto());
 }
 
-// Ao fechar, os textos do estado (porquê, no lugar, diário) ainda não gravados são gravados.
-let aoFecharBloco = null;
 function fecharBloco() {
-  const gravarPendentes = aoFecharBloco;
-  aoFecharBloco = null;
-  gravarPendentes?.();
   camada.hidden = true;
   camada.replaceChildren();
   document.body.classList.remove('sem-rolagem');
@@ -88,7 +82,7 @@ export async function gravarBloco(est, bloco, patch) {
   if (bloco.virtual) {
     const linha = {
       commitment_id: bloco.commitment_id, date: bloco.date, start_min: bloco.start_min, end_min: bloco.end_min,
-      card_id: bloco.card_id || null, title: bloco.title, category_id: bloco.category_id, lembrete_min: bloco.lembrete_min ?? null,
+      card_id: bloco.card_id || null, baralho_id: bloco.baralho_id || null, title: bloco.title, category_id: bloco.category_id, lembrete_min: bloco.lembrete_min ?? null,
       status: 'planned', instead_note: '', ...patch,
     };
     return est.criar('blocks', { ...linha, ...tipo(linha) });
@@ -96,48 +90,13 @@ export async function gravarBloco(est, bloco, patch) {
   return est.alterar('blocks', bloco.id, { ...patch, ...tipo(patch) });
 }
 
-// Muda o estado do bloco e aplica o efeito no item. O item vai primeiro: se algo falhar, nunca sobra
-// um bloco cumprido cujo item não foi marcado. Se o bloco falhar depois, o item volta como estava.
-// Devolve o card a oferecer para concluir (só em transição real e se existir lista de conclusão).
-export async function mudarEstado(est, bloco, novo, { instead_note = '', diario, motivo } = {}) {
-  const atual = bloco.status || 'planned';
-  if (bloco.virtual && novo === 'planned') return { concluirCard: null, bloco };
-  let concluirCard = null;
-  let desfazer = null;
-  let gravado = bloco;
-  if (novo !== atual) {
-    const { marcarItem, perguntarConcluirCard } = efeitosDeEstado(bloco, novo, { cards: est.dados.cards, items: est.dados.items });
-    const antes = marcarItem && est.dados.items.find((i) => i.id === marcarItem.id);
-    if (antes) {
-      await est.alterar('items', antes.id, { done: marcarItem.done, done_at: marcarItem.done ? new Date().toISOString() : null });
-      desfazer = () => est.alterar('items', antes.id, { done: antes.done, done_at: antes.done_at });
-    }
-    if (perguntarConcluirCard && est.dados.lists.some((l) => l.is_done)) concluirCard = est.dados.cards.find((c) => c.id === bloco.card_id) || null;
-  }
-  try {
-    // O texto de "o que fiz no lugar" nunca é apagado por mudança de estado: só é regravado em "não feito".
-    // O diário só é gravado quando vem junto com "cumprido" (pelo foco ou pela folha do bloco).
-    const comDiario = novo === 'done' && typeof diario === 'string' ? { diario: diario.trim() } : {};
-    const comMotivo = typeof motivo === 'string' ? { motivo: motivo.trim() } : {};
-    gravado = await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim(), ...comMotivo } : { status: novo, ...comDiario });
-  } catch (err) {
-    if (desfazer) {
-      try { await desfazer(); } catch {
-        throw new Error(novo === 'done'
-          ? 'Não foi possível salvar o compromisso, e o item ficou marcado como feito no card. Desmarque-o no card.'
-          : 'Não foi possível salvar o compromisso, e o item ficou desmarcado no card. Marque-o de novo no card.');
-      }
-    }
-    throw err;
-  }
-  return { concluirCard, bloco: gravado };
-}
-
-// Move o card para a lista de conclusão (ele ganha `completed_at`).
-export function concluirCard(est, card) {
-  const lista = est.dados.lists.find((l) => l.is_done);
-  if (!lista) throw new Error('Marque uma lista como de conclusão em Ajustes.');
-  return moverCard(est, card, lista.id, posicaoNoFim(cardsDaLista(est, lista.id)));
+// Muda o estado do bloco. Só o próprio bloco muda: card, itens e baralho vinculados nunca são tocados.
+export async function mudarEstado(est, bloco, novo, { instead_note = '', motivo } = {}) {
+  if (bloco.virtual && novo === 'planned') return { bloco };
+  const comMotivo = typeof motivo === 'string' ? { motivo: motivo.trim() } : {};
+  // O texto de "o que fiz no lugar" nunca é apagado por mudança de estado: só é regravado em "não feito".
+  const gravado = await gravarBloco(est, bloco, novo === 'missed' ? { status: novo, instead_note: instead_note.trim(), ...comMotivo } : { status: novo });
+  return { bloco: gravado };
 }
 
 export { criar };
@@ -162,6 +121,7 @@ export function abrirBloco(arg) {
   const novo = Boolean(arg.novo);
   const regra = !novo && arg.commitment_id ? estado.dados.commitments.find((c) => c.id === arg.commitment_id) : null;
   let cardId = arg.card_id || null;
+  let baralhoId = arg.baralho_id || null;
   let ocupado = false;
   let tituloAuto = '';
   const dias = new Set(regra ? regra.days : [diaDaSemana(arg.date)]);
@@ -227,12 +187,16 @@ export function abrirBloco(arg) {
   const fim = criar('input', { id: 'bloco-fim', type: 'time', value: textoHora(arg.end_min) });
 
 
-  // estudo: card pela busca de título e, se houver, o item
+  // Vínculos, só para organização (nada acontece no card nem no baralho ao cumprir o bloco):
+  // card (busca pelo título ou por coluna do Quadro) e baralho ou grupo de flashcards.
   const busca = criar('input', { id: 'bloco-card-busca', type: 'search', placeholder: 'Buscar card pelo título', autocomplete: 'off' });
   const opcoes = criar('div', { id: 'bloco-card-opcoes', class: 'card-opcoes' });
   const escolhido = criar('div', { id: 'bloco-card-escolhido', class: 'card-escolhido' });
-  const item = criar('select', { id: 'bloco-item' });
-  const campoItem = campo('Item', item);
+  const porColuna = criar('button', { type: 'button', class: 'btn', id: 'bloco-card-colunas', texto: 'Escolher por coluna' });
+  porColuna.addEventListener('click', () => abrirSeletor({
+    titulo: 'Escolher card', raiz: colunasComCards(estado.dados), vazio: 'Nenhum card no Quadro.',
+    aoEscolher: (id) => { const c = estado.dados.cards.find((x) => x.id === id); if (c) escolherCard(c); },
+  }));
   // Card que nasce junto com o bloco: o bloco novo sem card sempre pergunta ("Criar card para este bloco",
   // desmarcado), sugerindo a lista ativa. Sem listas no Quadro, não oferece.
   const listas = [...estado.dados.lists].sort((a, b) => a.position - b.position);
@@ -249,7 +213,7 @@ export function abrirBloco(arg) {
   const caixaNovoCard = criar('div', { class: 'bloco-novo-card' },
     criar('label', { class: 'repetir' }, criarCard, criar('span', { texto: 'Criar card para este bloco' })), detalhesNovoCard);
   function atualizarNovoCard() {
-    caixaNovoCard.hidden = !(novo && !cardId && modoCard === 'perguntar');
+    caixaNovoCard.hidden = !(novo && !cardId && !baralhoId && modoCard === 'perguntar');
     detalhesNovoCard.hidden = !criarCard.checked;
     if (!novoCardTituloEditado) novoCardTitulo.value = titulo.value.trim();
   }
@@ -258,39 +222,47 @@ export function abrirBloco(arg) {
 
   const tirar = criar('button', { type: 'button', class: 'btn', id: 'bloco-card-tirar', texto: 'Tirar card' });
   tirar.addEventListener('click', () => { cardId = null; mostrarEscolhido(); atualizarNovoCard(); });
-  const caixaEstudo = criar('div', { class: 'bloco-estudo' }, campo('Card (opcional)', busca), opcoes, escolhido, campoItem, caixaNovoCard);
-  // Sessão de revisão: é sempre do card da revisão, sem item (trocar o card desligaria a revisão do que foi estudado).
-  if (arg.revisao_id) caixaEstudo.hidden = true;
+  const caixaEstudo = criar('div', { class: 'bloco-estudo' }, campo('Card (opcional)', busca), opcoes, porColuna, escolhido, caixaNovoCard);
+
+  const baralhoPorId = (id) => estado.dados.baralhos.find((b) => b.id === id) || null;
+  const baralhoEscolhido = criar('div', { id: 'bloco-baralho-escolhido', class: 'vinculo-escolhido' });
+  const escolherBaralho = criar('button', { type: 'button', class: 'btn', id: 'bloco-baralho-escolher', texto: 'Vincular baralho de flashcards' });
+  escolherBaralho.addEventListener('click', () => abrirSeletor({
+    titulo: 'Escolher baralho ou grupo', raiz: arvoreParaEscolher(estado.dados.baralhos), vazio: 'Nenhum baralho criado ainda.',
+    aoEscolher: (id) => { baralhoId = id; mostrarBaralho(); sugerirTitulo(); atualizarNovoCard(); },
+  }));
+  const caixaBaralho = criar('div', { class: 'bloco-estudo' }, criar('span', { class: 'suave', texto: 'Baralho ou grupo de flashcards (opcional)' }), baralhoEscolhido, escolherBaralho);
+  function mostrarBaralho() {
+    const b = baralhoPorId(baralhoId);
+    baralhoEscolhido.replaceChildren();
+    baralhoEscolhido.hidden = !b;
+    escolherBaralho.hidden = Boolean(b);
+    if (!b) return;
+    const tirarB = criar('button', { type: 'button', class: 'btn', id: 'bloco-baralho-tirar', texto: 'Tirar' });
+    tirarB.addEventListener('click', () => { baralhoId = null; mostrarBaralho(); atualizarNovoCard(); });
+    baralhoEscolhido.append(criar('span', { class: 'nome', texto: `${b.e_grupo ? 'Grupo' : 'Baralho'}: ${b.nome}` }), tirarB);
+  }
 
   function mostrarEscolhido() {
     const card = estado.dados.cards.find((c) => c.id === cardId);
     escolhido.replaceChildren();
     escolhido.hidden = !card;
-    campoItem.hidden = true;
+    porColuna.hidden = Boolean(card);
     if (!card) return;
     const abrir = criar('button', { type: 'button', class: 'btn', id: 'bloco-card-abrir', texto: 'Abrir card' });
     abrir.addEventListener('click', () => { fecharBloco(); abrirCardFn(card.id); });
     escolhido.append(criar('span', { class: 'card-escolhido-nome', texto: card.title }), abrir, tirar);
-    const itens = estado.dados.items.filter((i) => i.card_id === card.id).sort((a, b) => a.position - b.position);
-    if (!itens.length) return;
-    item.replaceChildren(criar('option', { value: '', texto: 'Sem item específico' }));
-    itens.forEach((i) => { const o = criar('option', { value: i.id }); o.textContent = `${i.group_name ? `${i.group_name} — ` : ''}${i.title}${i.done ? ' (feito)' : ''}`; item.append(o); });
-    item.value = itens.some((i) => i.id === arg.item_id) && card.id === arg.card_id ? arg.item_id : '';
-    campoItem.hidden = false;
   }
 
-  // "Card · Item": o título que o bloco de estudo leva quando o usuário não escreveu outro.
+  // O título que o bloco leva quando o usuário não escreveu outro: o do card ou, sem card, o do baralho.
   function sugestao() {
     const card = estado.dados.cards.find((c) => c.id === cardId);
-    if (!card) return '';
-    const it = item.value && !campoItem.hidden ? estado.dados.items.find((i) => i.id === item.value) : null;
-    return it ? `${card.title} · ${it.title}` : card.title;
+    return card ? card.title : baralhoPorId(baralhoId)?.nome || '';
   }
   function sugerirTitulo() {
     const nova = sugestao();
     if (nova && (!titulo.value.trim() || titulo.value === tituloAuto)) { titulo.value = nova; tituloAuto = nova; }
   }
-  item.addEventListener('change', sugerirTitulo);
 
   function escolherCard(card) {
     // Tag vazia: vem a do card (a subtag, se houver). Tag já escolhida nunca é trocada; tag arquivada não vem.
@@ -346,27 +318,30 @@ export function abrirBloco(arg) {
   }
   if (regra) { repetir.checked = true; repetir.disabled = true; }
 
-  // cumprido / não feito: só em bloco que já existe
-  const estadoAtual = arg.status || 'planned';
-  const botaoEstado = (id, texto, valor) => criar('button', { type: 'button', class: `btn estado-btn estado-${valor}`, id, 'aria-pressed': String(estadoAtual === valor), texto });
+  // Cumprido / não feito: só em bloco que já existe. É uma escolha da folha: só vale ao tocar em Salvar.
+  const estadoAntes = arg.status || 'planned';
+  let estadoEscolhido = estadoAntes;
+  const botaoEstado = (id, texto, valor) => criar('button', { type: 'button', class: `btn estado-btn estado-${valor}`, id, 'aria-pressed': String(estadoAntes === valor), texto });
   const btnCumprido = botaoEstado('bloco-cumprido', 'Cumprido', 'done');
   const btnNaoFeito = botaoEstado('bloco-nao-feito', 'Não feito', 'missed');
-  // Não feito: o porquê e o que fez no lugar. Cumprido: o diário. Os três gravam sozinhos ao sair do campo
-  // (e ao fechar a folha); não há botão de confirmar.
+  // Não feito: o porquê e o que fez no lugar (opcionais).
   const motivo = criar('textarea', { id: 'bloco-motivo', rows: '2', placeholder: 'Opcional' });
   motivo.value = arg.motivo || '';
   const noLugar = criar('textarea', { id: 'bloco-no-lugar', rows: '3', placeholder: 'Opcional' });
   noLugar.value = arg.instead_note || '';
   const caixaNoLugar = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-no-lugar-caixa' },
     campo('Por que não fez?', motivo), campo('O que fez no lugar?', noLugar));
-  caixaNoLugar.hidden = estadoAtual !== 'missed';
-  const diario = criar('textarea', { id: 'bloco-diario', rows: '3', placeholder: 'O que você estudou (opcional)' });
-  diario.value = arg.diario || '';
-  const caixaDiario = criar('div', { class: 'bloco-no-lugar-caixa', id: 'bloco-diario-caixa' }, campo('Diário', diario));
-  caixaDiario.hidden = estadoAtual !== 'done';
+  caixaNoLugar.hidden = estadoAntes !== 'missed';
   const areaEstado = criar('div', { class: 'bloco-area-estado' },
-    criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito), caixaNoLugar, caixaDiario);
+    criar('div', { class: 'bloco-estado', role: 'group', 'aria-label': 'Estado do bloco' }, btnCumprido, btnNaoFeito), caixaNoLugar);
   areaEstado.hidden = novo;
+  function mostrarEstado() {
+    for (const [b, v] of [[btnCumprido, 'done'], [btnNaoFeito, 'missed']]) b.setAttribute('aria-pressed', String(estadoEscolhido === v));
+    caixaNoLugar.hidden = estadoEscolhido !== 'missed';
+  }
+  // Tocar no estado que já está escolhido desfaz: volta a planejado.
+  btnCumprido.addEventListener('click', () => { estadoEscolhido = estadoEscolhido === 'done' ? 'planned' : 'done'; mostrarEstado(); });
+  btnNaoFeito.addEventListener('click', () => { estadoEscolhido = estadoEscolhido === 'missed' ? 'planned' : 'missed'; mostrarEstado(); });
 
   const campoData = campo('Data', data);
   const erro = criar('div', { id: 'bloco-erro', class: 'erro', role: 'alert' });
@@ -374,11 +349,7 @@ export function abrirBloco(arg) {
   const cancelar = criar('button', { type: 'button', class: 'btn', id: 'bloco-cancelar', texto: 'Cancelar' });
   const excluir = criar('button', { type: 'button', class: 'btn perigo', id: 'bloco-excluir', texto: 'Excluir' });
   excluir.hidden = novo;
-  // Modo foco ligado a este bloco (só em bloco que já existe).
-  const focar = criar('button', { type: 'button', class: 'btn', id: 'bloco-focar' }, criar('i', { class: 'ti ti-hourglass', 'aria-hidden': 'true' }), ' Focar');
-  focar.hidden = novo;
-  focar.addEventListener('click', () => { fecharBloco(); focarNoBloco(arg); });
-  const botoes = criar('div', { class: 'linha-botoes' }, salvar, cancelar, focar, excluir);
+  const botoes = criar('div', { class: 'linha-botoes' }, salvar, cancelar, excluir);
   const escopo = criar('div', { id: 'bloco-escopo', class: 'bloco-escopo', hidden: '' });
 
   function atualizarTipo() {
@@ -402,7 +373,7 @@ export function abrirBloco(arg) {
     const fm = lerHora(fim.value, true);
     if (ini == null || fm == null) return 'Informe o início e o fim.';
     if (fm <= ini) return 'O fim precisa ser depois do início.';
-    if (!titulo.value.trim() && !cardId) return 'Dê um título ao bloco.';
+    if (!titulo.value.trim() && !cardId && !baralhoId) return 'Dê um título ao bloco.';
     const repetindo = repetir.checked && !rotuloRepetir.hidden;
     if (repetindo) {
       if (!dias.size) return 'Escolha ao menos um dia da semana.';
@@ -448,24 +419,24 @@ export function abrirBloco(arg) {
     mostrarEscopo(true);
   }
 
-  // Texto que o usuário escreveu e que ainda não foi gravado (o título sugerido pelo card não conta).
-  const notaMudou = () => !caixaNoLugar.hidden && noLugar.value.trim() !== (arg.instead_note || '').trim();
-  const motivoMudou = () => !caixaNoLugar.hidden && motivo.value.trim() !== (arg.motivo || '').trim();
-  const diarioMudou = () => !caixaDiario.hidden && diario.value.trim() !== (arg.diario || '').trim();
-  // Os textos do estado gravam sozinhos: só o título conta como "texto por salvar".
-  temTextoAberto = () => titulo.value.trim() !== (arg.title || '').trim() && titulo.value !== tituloAuto;
-  // "Salvar" num bloco já não feito também grava o "o que fiz no lugar" corrigido.
-  // Idem para o diário de um bloco já cumprido.
-  const patchNota = () => ({
-    ...(arg.status === 'missed' && notaMudou() ? { instead_note: noLugar.value.trim() } : {}),
-    ...(arg.status === 'missed' && motivoMudou() ? { motivo: motivo.value.trim() } : {}),
-    ...(arg.status === 'done' && diarioMudou() ? { diario: diario.value.trim() } : {}),
-  });
+  // O que mudou no estado (e nos textos do "não feito") desde que a folha abriu. Só isso vai no Salvar do estado.
+  const notaMudou = () => estadoEscolhido === 'missed' && noLugar.value.trim() !== (arg.instead_note || '').trim();
+  const motivoMudou = () => estadoEscolhido === 'missed' && motivo.value.trim() !== (arg.motivo || '').trim();
+  const estadoMudou = () => estadoEscolhido !== estadoAntes || notaMudou() || motivoMudou();
+  const patchEstado = () => {
+    if (!estadoMudou()) return {};
+    return {
+      ...(estadoEscolhido !== estadoAntes ? { status: estadoEscolhido } : {}),
+      ...(estadoEscolhido === 'missed' ? { instead_note: noLugar.value.trim(), motivo: motivo.value.trim() } : {}),
+    };
+  };
+  // Pergunta antes de descartar o que não foi salvo: o título digitado (o sugerido pelo card não conta) e o estado.
+  temTextoAberto = () => (titulo.value.trim() !== (arg.title || '').trim() && titulo.value !== tituloAuto) || estadoMudou();
 
   const valores = () => {
     const card = estado.dados.cards.find((c) => c.id === cardId);
     return {
-      title: titulo.value.trim() || card?.title || '',
+      title: titulo.value.trim() || card?.title || baralhoPorId(baralhoId)?.nome || '',
       category_id: categoriaValor(),
       lembrete_min: lembrete.value === '' ? null : Number(lembrete.value),
       start_min: lerHora(inicio.value),
@@ -479,10 +450,10 @@ export function abrirBloco(arg) {
     erro.textContent = '';
     const v = valores();
     const repetindo = repetir.checked && !rotuloRepetir.hidden;
-    // Com card é estudo (conta no progresso do card); sem card é compromisso.
-    const doCard = () => ({ card_id: cardId, item_id: cardId && !campoItem.hidden ? item.value || null : null, kind: cardId ? 'study' : 'commitment' });
-    const regraNova = () => ({ ...v, card_id: cardId, days: [...dias].sort((a, b) => a - b), valid_from: de.value, valid_to: ate.value || null });
-    const querCard = novo && !cardId && Boolean(listaPadrao) && modoCard === 'perguntar' && criarCard.checked;
+    // Com card é estudo (conta no progresso do card); sem card é compromisso. O baralho é só vínculo.
+    const doCard = () => ({ card_id: cardId, baralho_id: baralhoId, item_id: null, kind: cardId ? 'study' : 'commitment' });
+    const regraNova = () => ({ ...v, card_id: cardId, baralho_id: baralhoId, days: [...dias].sort((a, b) => a - b), valid_from: de.value, valid_to: ate.value || null });
+    const querCard = novo && !cardId && !baralhoId && Boolean(listaPadrao) && modoCard === 'perguntar' && criarCard.checked;
     // Cria o card antes do bloco. Se o bloco falhar depois, tentar de novo usa o card já criado.
     async function garantirCard() {
       if (!querCard || cardId) return;
@@ -507,8 +478,8 @@ export function abrirBloco(arg) {
     if (novo) {
       executar(async () => {
         await garantirCard();
-        const { kind, ...card } = doCard();
-        return estado.criar('blocks', { ...v, date: data.value, kind, ...card, fixed_date: arg.fixed_date || null });
+        const { kind, ...vinculos } = doCard();
+        return estado.criar('blocks', { ...v, date: data.value, kind, ...vinculos, fixed_date: arg.fixed_date || null });
       });
       return;
     }
@@ -518,27 +489,34 @@ export function abrirBloco(arg) {
       executar(async () => {
         const nova = await estado.criar('commitments', regraNova());
         const cai = arg.date >= de.value && (!ate.value || arg.date <= ate.value) && dias.has(diaDaSemana(arg.date));
-        if (cai) await estado.alterar('blocks', arg.id, { ...v, ...doCard(), ...patchNota(), commitment_id: nova.id });
+        if (cai) await estado.alterar('blocks', arg.id, { ...v, ...doCard(), ...patchEstado(), commitment_id: nova.id });
         return nova;
       });
       return;
     }
     if (regra) {
+      const camposIguais = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k])
+        && (arg.card_id || null) === cardId && (arg.baralho_id || null) === baralhoId && (arg.lembrete_min ?? null) === v.lembrete_min;
+      const regraIgual = [...dias].sort().join() === [...regra.days].sort().join() && de.value === regra.valid_from && (ate.value || null) === (regra.valid_to || null);
+      // Só o estado (e os textos do "não feito") mudou: vale para este dia, sem perguntar "quais dias".
+      if (camposIguais && regraIgual) {
+        executar(async () => { const p = patchEstado(); if (Object.keys(p).length) await gravarBloco(estado, arg, p); });
+        return;
+      }
       perguntar('Alterar quais dias?', [['dia', 'Só este dia'], ['todos', 'Todos']], async (esc) => {
-        const nota = patchNota();
+        const patch = patchEstado();
         if (esc === 'todos') {
           await estado.alterar('commitments', regra.id, regraNova());
-          if (Object.keys(nota).length) await gravarBloco(estado, arg, nota);
+          if (Object.keys(patch).length) await gravarBloco(estado, arg, patch);
           return;
         }
         // Ocorrência virtual sem nenhuma mudança não vira linha gravada.
-        const { kind, ...card } = doCard();
-        const igual = ['title', 'category_id', 'start_min', 'end_min'].every((k) => v[k] === arg[k]) && (arg.card_id || null) === cardId && (arg.lembrete_min ?? null) === v.lembrete_min;
-        if (!(arg.virtual && igual)) await gravarBloco(estado, arg, { ...v, ...card, ...nota });
+        const { kind, ...vinculos } = doCard();
+        if (!(arg.virtual && camposIguais && !Object.keys(patch).length)) await gravarBloco(estado, arg, { ...v, ...vinculos, ...patch });
       });
       return;
     }
-    executar(() => estado.alterar('blocks', arg.id, { ...v, date: data.value, ...doCard(), ...patchNota() }));
+    executar(() => estado.alterar('blocks', arg.id, { ...v, date: data.value, ...doCard(), ...patchEstado() }));
   });
 
   excluir.addEventListener('click', () => {
@@ -567,92 +545,14 @@ export function abrirBloco(arg) {
       return MANTER_ABERTA;
     });
   });
-  cancelar.addEventListener('click', () => fecharGravandoTextos());
-
-  // Cumprido e não feito gravam na hora, sem passar pelo Salvar, e a folha fica aberta para o texto do estado.
-  // Voltar a planejado (tocar de novo no estado marcado) fecha. O card só é oferecido depois de tudo gravado.
-  function mostrarEstado(valor) {
-    for (const [b, v] of [[btnCumprido, 'done'], [btnNaoFeito, 'missed']]) b.setAttribute('aria-pressed', String(valor === v));
-    caixaNoLugar.hidden = valor !== 'missed';
-    caixaDiario.hidden = valor !== 'done';
-    // Depois de marcar não há o que cancelar: o botão vira "Fechar".
-    cancelar.textContent = 'Fechar';
-  }
-  const aplicarEstado = (valor) => executar(async () => {
-    // Um texto ainda gravando termina antes: as duas gravações nunca se cruzam no mesmo bloco.
-    await filaTextos;
-    const { concluirCard: card, bloco: gravado } = await mudarEstado(estado, arg, valor,
-      { instead_note: noLugar.value, motivo: motivo.value, diario: diario.value });
-    if (gravado) arg = gravado;
-    if (valor === 'planned') return undefined;
-    mostrarEstado(valor);
-    const campoTexto = valor === 'missed' ? motivo : diario;
-    if (!card) { campoTexto.focus(); return MANTER_ABERTA; }
-    perguntar('Concluir este card?', [['sim', 'Concluir card'], ['nao', 'Agora não']],
-      async (esc) => {
-        if (esc === 'sim') {
-          try { await concluirCard(estado, card); } catch {
-            throw new Error('O compromisso ficou como cumprido, mas não foi possível concluir o card. Mova o card para a lista de concluídos.');
-          }
-        }
-        mostrarEscopo(false);
-        campoTexto.focus();
-        return MANTER_ABERTA;
-      }, { semVoltar: true });
-    return MANTER_ABERTA;
-  });
-  // Tocar no estado que já está marcado desfaz: o bloco volta a planejado (e fecha).
-  btnCumprido.addEventListener('click', () => aplicarEstado(arg.status === 'done' ? 'planned' : 'done'));
-  btnNaoFeito.addEventListener('click', () => aplicarEstado(arg.status === 'missed' ? 'planned' : 'missed'));
-
-  // Grava um texto do estado (uma gravação de cada vez). Só a coluna do texto muda na cópia da folha:
-  // a resposta do banco nunca desfaz um estado gravado depois. Devolve false se não deu para gravar.
-  let filaTextos = Promise.resolve(true);
-  const gravarTexto = (coluna, el) => {
-    filaTextos = filaTextos.then(async () => {
-      const valor = el.value.trim();
-      if (arg.virtual || valor === (arg[coluna] || '').trim()) return true;
-      try {
-        await gravarBloco(estado, arg, { [coluna]: valor });
-        arg = { ...arg, [coluna]: valor };
-        erro.textContent = '';
-        return true;
-      } catch (err) {
-        erro.textContent = `O texto não foi salvo: ${err.message || 'tente de novo.'}`;
-        return false;
-      }
-    });
-    return filaTextos;
-  };
-  // Fechar pela folha (Fechar/Cancelar, fundo, Esc): grava os textos pendentes e só fecha se der certo.
-  async function fecharGravandoTextos() {
-    const pendentes = [];
-    if (motivoMudou()) pendentes.push(gravarTexto('motivo', motivo));
-    if (notaMudou()) pendentes.push(gravarTexto('instead_note', noLugar));
-    if (diarioMudou()) pendentes.push(gravarTexto('diario', diario));
-    const resultados = await Promise.all([filaTextos, ...pendentes]);
-    if (resultados.every((ok) => ok !== false)) { fecharBloco(); return; }
-    // Não gravou: a folha fica aberta com o aviso. Se falhar de novo na próxima vez, fecha sem o texto.
-    if (jaFalhouAoFechar) { aoFecharBloco = null; fecharBloco(); return; }
-    jaFalhouAoFechar = true;
-    cancelar.textContent = 'Fechar sem salvar o texto';
-  }
-  let jaFalhouAoFechar = false;
-  motivo.addEventListener('change', () => gravarTexto('motivo', motivo));
-  noLugar.addEventListener('change', () => gravarTexto('instead_note', noLugar));
-  diario.addEventListener('change', () => gravarTexto('diario', diario));
-  aoFecharBloco = () => {
-    if (motivoMudou()) gravarTexto('motivo', motivo);
-    if (notaMudou()) gravarTexto('instead_note', noLugar);
-    if (diarioMudou()) gravarTexto('diario', diario);
-  };
+  cancelar.addEventListener('click', () => fecharBloco());
 
   const fundo = criar('div', { class: 'menu-fundo' });
-  fecharPeloFundo = () => { if (temTextoAberto()) pedirDescarte(painel, () => fecharGravandoTextos()); else fecharGravandoTextos(); };
+  fecharPeloFundo = () => { if (temTextoAberto()) pedirDescarte(painel, () => fecharBloco()); else fecharBloco(); };
   fundo.addEventListener('click', () => fecharPeloFundo());
   const painel = criar('form', { class: 'menu-folha bloco-painel', novalidate: '' },
     criar('h3', { texto: novo ? 'Novo bloco' : 'Editar bloco' }), areaEstado,
-    campo('Título', titulo), caixaEstudo, campoTag, campoSub, campoData,
+    campo('Título', titulo), caixaEstudo, caixaBaralho, campoTag, campoSub, campoData,
     criar('div', { class: 'linha-campos' }, campo('Início', inicio), campo('Fim', fim)),
     campo('Lembrete', lembrete),
     rotuloRepetir, painelRepeticao, erro, botoes, escopo);
@@ -662,6 +562,7 @@ export function abrirBloco(arg) {
   document.body.classList.add('sem-rolagem');
   marcarDias();
   mostrarEscolhido();
+  mostrarBaralho();
   if (arg.title && arg.title === sugestao()) tituloAuto = arg.title;
   else if (novo) sugerirTitulo();
   atualizarTipo();

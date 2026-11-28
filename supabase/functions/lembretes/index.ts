@@ -43,6 +43,7 @@ function ocorrenciasDeCompromissos(commitments, de, ate) {
         // Sem separação estudo/compromisso na tela: com card é estudo (conta no progresso do card).
         kind: c.card_id ? "study" : "commitment",
         card_id: c.card_id || null,
+        baralho_id: c.baralho_id || null,
         lembrete_min: c.lembrete_min ?? null,
         title: c.title,
         category_id: c.category_id,
@@ -296,60 +297,6 @@ function formatarHoras(min) {
 }
 var MAX_DIAS_INTERVALO = 5 * 366;
 
-// js/regras/foco.js
-var TOLERANCIA_MS = 2 * 6e4;
-function proximaFase({ fase, ciclo }, ajustes) {
-  if (fase !== "foco") return { fase: "foco", ciclo: ciclo + 1 };
-  return { fase: ciclo % ajustes.ciclos_longa === 0 ? "pausa_longa" : "pausa", ciclo };
-}
-function duracaoS(fase, ajustes) {
-  const min = fase === "foco" ? ajustes.foco_min : fase === "pausa" ? ajustes.pausa_min : ajustes.pausa_longa_min;
-  return min * 60;
-}
-function iniciarFase(fase, ciclo, agoraMs, ajustes) {
-  return { fase, ciclo, estado: "rodando", termina_em: new Date(agoraMs + duracaoS(fase, ajustes) * 1e3).toISOString(), restante_s: null };
-}
-function textoDoFim(foco, ajustes) {
-  const titulo2 = (foco.titulo || "").trim() || "Modo foco";
-  if (foco.fase === "foco") {
-    const longa = proximaFase(foco, ajustes).fase === "pausa_longa";
-    const pos = (foco.ciclo - 1) % ajustes.ciclos_longa + 1;
-    return {
-      titulo: titulo2,
-      botao: "Começar pausa",
-      corpo: `Foco concluído (ciclo ${pos} de ${ajustes.ciclos_longa}). Hora da pausa${longa ? " longa" : ""} de ${longa ? ajustes.pausa_longa_min : ajustes.pausa_min} min.`
-    };
-  }
-  if (foco.fase === "pausa") return { titulo: titulo2, botao: "Começar foco", corpo: `Pausa terminada. Pronto para o foco ${foco.ciclo + 1}?` };
-  return { titulo: titulo2, botao: "Começar foco", corpo: "Pausa longa terminada. Começar um novo ciclo?" };
-}
-function focoNoTique({ foco, instanteMs, fuso, ajustes, enviadas = /* @__PURE__ */ new Set() }) {
-  if (!foco || foco.estado !== "rodando" || !foco.termina_em) return { aviso: null, esperando: false };
-  const fim = Date.parse(foco.termina_em);
-  if (fim > instanteMs) return { aviso: null, esperando: false };
-  const chave = `foco:${foco.owner_id}:${foco.termina_em}`;
-  const recente = fim > instanteMs - TOLERANCIA_MS;
-  const silencio = emSilencio(agoraNoFuso(fim, fuso).minuto, ajustes);
-  if (!recente || silencio || enviadas.has(chave)) return { aviso: null, esperando: true };
-  return { aviso: { chave, ...textoDoFim(foco, ajustes) }, esperando: true };
-}
-
-// js/regras/fila.js
-function efeitosDeEstado(bloco, novo, { cards, items }) {
-  if (bloco.revisao_id) return { marcarItem: null, perguntarConcluirCard: false };
-  let marcarItem = null;
-  if (bloco.item_id) {
-    if (novo === "done") marcarItem = { id: bloco.item_id, done: true };
-    else if (bloco.status === "done") marcarItem = { id: bloco.item_id, done: false };
-  }
-  let perguntarConcluirCard = false;
-  if (novo === "done" && bloco.kind === "study" && bloco.card_id) {
-    const c = cards.find((x) => x.id === bloco.card_id);
-    perguntarConcluirCard = !!c && !c.is_fixed && !items.some((i) => i.card_id === c.id);
-  }
-  return { marcarItem, perguntarConcluirCard };
-}
-
 // supabase/functions/lembretes/webpush.js
 var sutil = globalThis.crypto.subtle;
 var enc = new TextEncoder();
@@ -441,11 +388,6 @@ var PADROES = {
   revisao: true,
   revisao_dia: 7,
   revisao_min: 1200,
-  foco_min: 25,
-  pausa_min: 5,
-  pausa_longa_min: 15,
-  ciclos_longa: 4,
-  foco_som: true,
   revisoes_dias: [7, 30],
   modelos_com_fixas: false,
   flash_card_novos_dia: 20,
@@ -530,7 +472,6 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
   async function tique() {
     const inscricoes = await banco2.select("push_subscriptions", {});
     const donos = [...new Set(inscricoes.map((s) => s.owner_id))];
-    const focos = donos.length ? await banco2.select("focos", { owner_id: { in: donos } }) : [];
     let total = 0;
     for (const dono of donos) {
       const [linha] = await banco2.select("settings", { owner_id: dono });
@@ -581,26 +522,13 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
         const { total: total2 } = paraHoje({ baralhos, cards, flashcards, flash_lados }, avisoFlash.data, ajustes);
         if (total2 > 0) lista.push({ ...avisoFlash, tipo: "flash", titulo: "Flashcards", corpo: textoDoAvisoFlash(total2), acoes: [], url: "./?tela=flashcards" });
       }
-      const foco = focos.find((f) => f.owner_id === dono);
-      const fimDoFoco = focoNoTique({ foco, instanteMs: agora(), fuso: ajustes.fuso, ajustes, enviadas });
-      if (fimDoFoco.aviso) {
-        const { chave, titulo: titulo2, corpo, botao } = fimDoFoco.aviso;
-        lista.push({ chave, tipo: "foco", titulo: titulo2, corpo, acoes: ["proxima"], tituloAcao: botao, ref: "foco", data: foco.termina_em, url: "./?tela=foco" });
-      }
       const aparelhos = inscricoes.filter((s) => s.owner_id === dono);
       for (const n of lista) {
-        if (n.tipo === "foco") {
-          const [atual] = await banco2.select("focos", { owner_id: dono });
-          if (!atual || atual.estado !== "rodando" || atual.termina_em !== foco.termina_em) continue;
-        }
         const gravou = await banco2.insert("notificacoes_enviadas", { owner_id: dono, chave: n.chave, enviada_em: new Date(agora()).toISOString() }, { ignorarConflito: true });
         if (!gravou.length) continue;
         const { aceitos, passageiras } = await enviarParaAparelhos(aparelhos, await payloadDe(dono, n));
         if (!aceitos && passageiras) await banco2.remove("notificacoes_enviadas", { owner_id: dono, chave: n.chave });
         total += 1;
-      }
-      if (fimDoFoco.esperando) {
-        await banco2.update("focos", { owner_id: dono, termina_em: foco.termina_em }, { estado: "esperando", atualizado_em: new Date(agora()).toISOString() });
       }
     }
     await banco2.remove("notificacoes_enviadas", { enviada_em: { lt: new Date(agora() - GUARDAR_ENVIADAS_MS).toISOString() } });
@@ -618,8 +546,6 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
   async function cumprir(dono, ref, data) {
     const bloco = await acharBloco(dono, ref, data);
     if (!bloco || bloco.cancelled || bloco.status !== "planned") return { ok: true, nada: true };
-    const [cards, items] = await Promise.all([banco2.select("cards", { owner_id: dono }), banco2.select("items", { owner_id: dono })]);
-    const { marcarItem } = efeitosDeEstado(bloco, "done", { cards, items });
     if (bloco.virtual) {
       await banco2.insert("blocks", {
         owner_id: dono,
@@ -629,6 +555,7 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
         end_min: bloco.end_min,
         kind: bloco.kind,
         card_id: bloco.card_id || null,
+        baralho_id: bloco.baralho_id || null,
         title: bloco.title,
         category_id: bloco.category_id || null,
         lembrete_min: bloco.lembrete_min ?? null,
@@ -638,28 +565,6 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
     } else {
       await banco2.update("blocks", { id: bloco.id, owner_id: dono }, { status: "done" });
     }
-    if (marcarItem) {
-      try {
-        await banco2.update("items", { id: marcarItem.id, owner_id: dono }, { done: marcarItem.done });
-      } catch (err) {
-        if (!bloco.virtual) await banco2.update("blocks", { id: bloco.id, owner_id: dono }, { status: "planned" });
-        throw err;
-      }
-    }
-    return { ok: true };
-  }
-  async function proximaDoFoco(dono, terminaEm) {
-    const [foco] = await banco2.select("focos", { owner_id: dono });
-    const mesma = foco && foco.termina_em && Date.parse(foco.termina_em) === Date.parse(terminaEm);
-    if (!mesma || !["rodando", "esperando"].includes(foco.estado)) return { ok: true, nada: true };
-    const [linha] = await banco2.select("settings", { owner_id: dono });
-    const ajustes = { ...PADROES, ...Object.fromEntries(Object.entries(linha || {}).filter(([, v]) => v !== null && v !== void 0)) };
-    const p = proximaFase(foco, ajustes);
-    await banco2.update(
-      "focos",
-      { owner_id: dono, termina_em: foco.termina_em },
-      { ...iniciarFase(p.fase, p.ciclo, agora(), ajustes), atualizado_em: new Date(agora()).toISOString() }
-    );
     return { ok: true };
   }
   async function acao(req, url) {
@@ -671,7 +576,6 @@ function criarServico({ banco: banco2, enviar, agora = () => Date.now(), env: en
       await banco2.insert("adiamentos", { owner_id: t.dono, ref: t.ref, data: t.data, quando: new Date(agora() + ADIAR_MS).toISOString() });
       return resposta(req, 200, { ok: true });
     }
-    if (pedida === "proxima") return resposta(req, 200, await proximaDoFoco(t.dono, t.data));
     return resposta(req, 400, { erro: "Ação desconhecida." });
   }
   async function registrarTique(campos) {

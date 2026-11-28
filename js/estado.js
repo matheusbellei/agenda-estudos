@@ -5,7 +5,6 @@ const AJUSTES_PADRAO = { day_start_min: 0, day_end_min: 1440, week_slot_min: 120
   notif_antes_min: 10, notif_resumo: true, notif_resumo_min: 420, notif_pendencias: true, notif_pendencias_min: 1290,
   notif_silencio: false, notif_silencio_de: 1320, notif_silencio_ate: 420, fuso: 'America/Sao_Paulo',
   sequencia_min: 30, revisao: true, revisao_dia: 7, revisao_min: 1200,
-  foco_min: 25, pausa_min: 5, pausa_longa_min: 15, ciclos_longa: 4, foco_som: true,
   modelos_com_fixas: false,
   flash_card_novos_dia: 20, flash_card_revisoes_dia: 200, flash_card_fator: 2.5, flash_aviso: true, flash_aviso_min: 1140 };
 

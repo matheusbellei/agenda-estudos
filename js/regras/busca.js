@@ -1,8 +1,8 @@
-// Busca em cards, itens, histórico "o que fiz no lugar" (blocos e ocorrências de fixas) e diário dos blocos. Funções puras sobre os dados em memória.
+// Busca em cards, itens, histórico "o que fiz no lugar" (blocos e ocorrências de fixas) dos blocos. Funções puras sobre os dados em memória.
 
 const MARGEM = 60;
 const POR_CARD_E_CAMPO = 3;
-const ORDEM_CAMPOS = ['titulo', 'item', 'notas', 'notas_item', 'no_lugar', 'motivo', 'diario'];
+const ORDEM_CAMPOS = ['titulo', 'item', 'notas', 'notas_item', 'no_lugar', 'motivo'];
 
 // Minúsculas e sem acentos, caractere a caractere: o tamanho do texto não muda,
 // então um índice no texto normalizado vale também no texto original.
@@ -96,7 +96,6 @@ export function buscar(termo, { cards = [], items = [], blocks = [], occurrences
       // O texto fica gravado quando o bloco volta a cumprido ou planejado, mas só vale enquanto ele está não feito.
       if (b.status === 'missed' && passa(b.card_id, b)) juntar('no_lugar', b.card_id ?? null, b.item_id ?? null, b.id, b.instead_note, true);
       if (b.status === 'missed' && (b.motivo || '').trim() && passa(b.card_id, b)) juntar('motivo', b.card_id ?? null, b.item_id ?? null, b.id, b.motivo, false);
-      if (!b.cancelled && (b.diario || '').trim() && passa(b.card_id, b)) juntar('diario', b.card_id ?? null, b.item_id ?? null, b.id, b.diario, false);
     } else if (passa(h.ocorrencia.card_id)) {
       juntar('no_lugar', h.ocorrencia.card_id, null, null, h.ocorrencia.instead_note, true, { ocorrencia_data: h.data });
     }

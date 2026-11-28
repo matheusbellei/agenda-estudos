@@ -69,18 +69,6 @@ class TestDescartarBloco(BlocoBase):
         p.wait_for_function("document.querySelector('#folha-bloco').hidden")
 
 
-class TestEscComCardAberto(CalendarioBase):
-    def test_esc_na_folha_do_bloco_nao_fecha_o_card(self):
-        self.preparar(lists=[dict(id='L1', name='Backlog', position=1)], cards=[dict(id='c1', title='Curso de Python', list_id='L1', position=1)])
-        p = self.page
-        self.ir('quadro'); p.click('.cartao-card[data-card="c1"] .cartao-titulo')
-        p.wait_for_selector('#folha-card', state='visible')
-        p.click('#card-sessao'); self.folha_aberta()
-        p.keyboard.press('Escape')
-        p.wait_for_function("document.querySelector('#folha-bloco').hidden")
-        self.assertTrue(p.is_visible('#folha-card'))
-
-
 class TestExcluirRegraComHistorico(CalendarioBase):
     def regra(self, status_qua='done', status_seg='missed'):
         self.preparar(commitments=[{'id': 'r1', 'title': 'Trabalho', 'days': [1, 3, 5], 'start_min': 540, 'end_min': 720, 'valid_from': SEG}])
@@ -181,7 +169,7 @@ class TestSalvarComNotaEmBlocoPlanejado(BlocoBase):
     def test_nao_feito_e_salvar_grava_a_nota(self):
         self.preparar(blocks=[self.bloco(id='b1', date=TER, start_min=600, end_min=660, title='Aula')]); p = self.page
         p.click(f'.dia[data-data="{TER}"] .bloco .bloco-cabeca'); self.folha_aberta()
-        p.click('#bloco-nao-feito'); p.wait_for_function("window.__memdb.blocks[0].status === 'missed'")
+        p.click('#bloco-nao-feito')
         p.fill('#bloco-no-lugar', 'Estudei outra matéria')
         p.click('#bloco-salvar')
         p.wait_for_function("document.querySelector('#folha-bloco').hidden")

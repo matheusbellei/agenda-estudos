@@ -621,28 +621,6 @@ body.escolhendo-horario .faixa .livre, body.escolhendo-horario .linha-do-tempo .
 .card-meta-barra { display: block; margin-top: 6px; }
 .notif-aviso { font-size: 13px; color: var(--mocha); background: var(--rosa-claro); border-radius: 8px; padding: 8px 10px; margin: 4px 0 8px; }
 
-/* ===== Modo foco ===== */
-#tela-foco { display: grid; gap: 10px; }
-.foco-painel { display: grid; justify-items: center; gap: 6px; padding: 24px 14px; text-align: center; }
-.foco-titulo { font-size: 14px; color: var(--mocha); }
-.foco-fase { font-family: var(--fonte-titulo); font-size: 20px; color: var(--espresso); }
-.foco-tempo { font-size: 64px; font-weight: 600; letter-spacing: 1px; color: var(--espresso); font-variant-numeric: tabular-nums; line-height: 1.1; }
-.foco-fim { margin: 4px 0; color: var(--mocha); }
-.foco-botoes { justify-content: center; flex-wrap: wrap; margin-top: 8px; }
-.foco-perguntar textarea, #bloco-diario { width: 100%; }
-
-/* ===== Diário ===== */
-#tela-diario { display: grid; gap: 10px; }
-.diario-filtros { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-.diario-filtros input, .diario-filtros select { background: var(--espuma); border: 1px solid var(--borda-campo); border-radius: 10px; padding: 9px 12px; min-width: 0; }
-.diario-dia h3 { font-size: 15px; margin: 0 0 6px; }
-.diario-lista { display: grid; gap: 6px; }
-.diario-item { display: grid; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--linha); padding: 8px 0 4px; font: inherit; color: inherit; cursor: pointer; }
-.diario-dia .diario-item:first-of-type { border-top: 0; }
-.diario-origem { font-size: 12px; color: var(--texto-suave); }
-.diario-texto { white-space: pre-wrap; }
-.foco-aviso { position: fixed; left: 12px; right: 12px; bottom: 16px; z-index: 80; display: flex; align-items: center; gap: 10px; justify-content: space-between; background: var(--barra); color: var(--barra-texto); border-radius: 12px; padding: 12px 14px; box-shadow: 0 6px 18px rgba(var(--sombra-rgb), .3); }
-.foco-aviso .btn { background: var(--barra-texto); color: var(--barra); border: 0; }
 .janela-extra { z-index: 76; }
 .modelos-lista { display: grid; gap: 6px; }
 .modelo-item { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--linha); padding-top: 8px; }
@@ -714,3 +692,15 @@ body.escolhendo-horario .faixa .livre, body.escolhendo-horario .linha-do-tempo .
 /* Caixas de marcar na cor do app e ajuda logo abaixo do campo com um respiro */
 input[type="checkbox"] { accent-color: var(--mocha); }
 #tela-ajustes .campo + p.suave { margin-top: 6px; }
+
+/* ===== Escolher card ou baralho por níveis ===== */
+.seletor-camada { z-index: 90; }
+.seletor-folha { max-height: 80vh; overflow-y: auto; display: grid; gap: 8px; align-content: start; }
+.seletor-cabeca { display: flex; align-items: center; gap: 8px; }
+.seletor-cabeca h3 { flex: 1; min-width: 0; margin: 0; }
+.seletor-lista { display: grid; gap: 6px; }
+.seletor-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.seletor-nome { overflow-wrap: anywhere; }
+.seletor-seta { color: var(--texto-suave); white-space: nowrap; font-size: 13px; }
+.vinculo-escolhido { display: flex; align-items: center; gap: 8px; background: var(--latte); border-radius: 10px; padding: 6px 6px 6px 12px; }
+.vinculo-escolhido .nome { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }

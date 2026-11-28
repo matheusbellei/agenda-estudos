@@ -280,29 +280,6 @@ export function iniciarAjustes({ estado, store }) {
     try { await estado.alterar('settings', null, { sequencia_min: v }); } catch (err) { erroAcomp.textContent = err.message || 'Não foi possível salvar.'; }
   });
 
-  const num = (id, min, max) => criar('input', { id, type: 'number', min: String(min), max: String(max), inputmode: 'numeric' });
-  const focoMin = num('aj-foco-min', 5, 120); const pausaMin = num('aj-pausa-min', 1, 60);
-  const pausaLongaMin = num('aj-pausa-longa-min', 1, 60); const ciclosLonga = num('aj-ciclos-longa', 2, 8);
-  const focoSom = criar('input', { type: 'checkbox', id: 'aj-foco-som' });
-  const erroFoco = criar('div', { class: 'erro', id: 'aj-foco-erro', role: 'alert' });
-  const salvarFoco = criar('button', { class: 'btn btn-principal', id: 'aj-foco-salvar', type: 'button', texto: 'Salvar' });
-  const campoN = (rotulo, el) => criar('label', { class: 'campo' }, criar('span', { texto: rotulo }), el);
-  const cartaoFoco = criar('div', { class: 'cartao', id: 'aj-foco' },
-    criar('h2', { texto: 'Modo foco' }),
-    criar('div', { class: 'linha-campos' }, campoN('Foco (min)', focoMin), campoN('Pausa (min)', pausaMin)),
-    criar('div', { class: 'linha-campos' }, campoN('Pausa longa (min)', pausaLongaMin), campoN('Ciclos até a pausa longa', ciclosLonga)),
-    criar('label', { class: 'campo-check' }, focoSom, criar('span', { texto: 'Som e vibração no fim de cada fase (com o app aberto)' })),
-    erroFoco, salvarFoco);
-  salvarFoco.addEventListener('click', async () => {
-    const v = [focoMin, pausaMin, pausaLongaMin, ciclosLonga].map((i) => Number(i.value));
-    const [f, p, l, c] = v;
-    const ok = v.every(Number.isInteger) && f >= 5 && f <= 120 && p >= 1 && p <= 60 && l >= 1 && l <= 60 && c >= 2 && c <= 8;
-    if (!ok) { erroFoco.textContent = 'Foco de 5 a 120 min, pausas de 1 a 60 e de 2 a 8 ciclos.'; return; }
-    erroFoco.textContent = '';
-    try { await estado.alterar('settings', null, { foco_min: f, pausa_min: p, pausa_longa_min: l, ciclos_longa: c, foco_som: focoSom.checked }); }
-    catch (err) { erroFoco.textContent = err.message || 'Não foi possível salvar.'; }
-  });
-
   // Aparência: Automático (segue o aparelho), Claro ou Escuro, em botões como no controle financeiro.
   const tema = criar('div', { id: 'aj-tema', class: 'chips-escolha', role: 'group', 'aria-label': 'Tema' },
     ...[['auto', 'Automático', 'ti-device-mobile'], ['claro', 'Claro', 'ti-sun'], ['escuro', 'Escuro', 'ti-moon']].map(([v, t, i]) => {
@@ -348,7 +325,6 @@ export function iniciarAjustes({ estado, store }) {
     criar('div', { class: 'cartao', id: 'aj-horarios' }, criar('h2', { texto: 'Horários' }), formHor),
     cartaoTema,
     cartaoAcomp,
-    cartaoFoco,
     cartaoModelos,
     cartaoFlash,
     cartaoImportar,
@@ -380,10 +356,6 @@ export function iniciarAjustes({ estado, store }) {
     modelosFixas.checked = !!a.modelos_com_fixas;
     if (!cartaoFlash.contains(document.activeElement)) {
       fcNovos.value = String(a.flash_card_novos_dia); fcRevisoes.value = String(a.flash_card_revisoes_dia); fcFator.value = String(Number(a.flash_card_fator));
-    }
-    if (!cartaoFoco.contains(document.activeElement)) {
-      focoMin.value = String(a.foco_min); pausaMin.value = String(a.pausa_min);
-      pausaLongaMin.value = String(a.pausa_longa_min); ciclosLonga.value = String(a.ciclos_longa); focoSom.checked = !!a.foco_som;
     }
   }
 

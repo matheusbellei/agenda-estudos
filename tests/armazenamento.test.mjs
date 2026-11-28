@@ -142,19 +142,6 @@ test('store real: url da função, chave pública e token da sessão (notificaç
   }
 });
 
-test('list de focos ordena pelo dono (a tabela não tem id)', async () => {
-  const client = fakeClient({ data: [], error: null });
-  await createStore(client).list('focos');
-  assert.deepEqual(ops(client.calls[0]), [['select', '*'], ['order', 'owner_id'], ['range', 0, 999]]);
-});
-
-test('updateWhere filtra por todas as colunas e devolve [] sem erro quando nada casa', async () => {
-  const client = fakeClient({ data: [], error: null });
-  const out = await createStore(client).updateWhere('focos', { owner_id: 'u1', termina_em: '2026-11-24T13:25:00+00:00' }, { estado: 'esperando' });
-  assert.deepEqual(out, []);
-  assert.deepEqual(ops(client.calls[0]), [['update', { estado: 'esperando' }], ['eq', 'owner_id', 'u1'], ['eq', 'termina_em', '2026-11-24T13:25:00+00:00'], ['select']]);
-});
-
 test('removeIds apaga várias linhas numa chamada só', async () => {
   const client = fakeClient({ data: null, error: null });
   await createStore(client).removeIds('blocks', ['a', 'b']);

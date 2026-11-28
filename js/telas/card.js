@@ -4,11 +4,8 @@ import { emOrdem, nomeCompleto, categoriaDoCard, trocarTag, escolherSubtag } fro
 import { criarEscolha, fecharEscolhaAberta } from './escolha.js';
 import { chipCategoria } from './ajustes.js';
 import { progresso } from '../regras/fila.js';
-import { abrirBloco } from './bloco.js';
 import { horasDoCard, formatarHoras } from '../regras/acompanhamento.js';
 import { agoraNoFuso } from '../regras/lembretes.js';
-import { registrosDoDiario } from '../regras/diario.js';
-import { itemDoDiario } from './diario.js';
 import { abrirFormularioFlash, itemDeFlash } from './flashcards.js';
 import { estudar } from './flash-sessao.js';
 import { irPara as irParaTela } from './casca.js';
@@ -607,14 +604,6 @@ export function iniciarCard({ estado, store }) {
     nodos.flashLista.replaceChildren(...fs.map((f) => itemDeFlash(estado, f)));
   }
 
-  // Registros do diário dos blocos deste card; tocar abre o bloco.
-  function desenharDiario(c) {
-    const registros = registrosDoDiario(estado.dados, { cardId: c.id });
-    nodos.diarioCard.replaceChildren(...(registros.length
-      ? registros.map((r) => itemDoDiario(r, { comData: true, aoAbrir: () => abrirBloco(r.bloco) }))
-      : [criar('p', { class: 'suave', texto: 'Ao marcar um bloco deste card como cumprido, escreva o que estudou: aparece aqui.' })]));
-  }
-
   function desenharMeta(c) {
     const meta = c.meta_min || 0;
     if (document.activeElement !== nodos.metaH && document.activeElement !== nodos.metaM) {
@@ -642,7 +631,6 @@ export function iniciarCard({ estado, store }) {
     if (nodos.chaveFixa !== chaveFixa) { nodos.chaveFixa = chaveFixa; desenharFixa(c); }
     nodos.arquivar.textContent = c.archived ? 'Desarquivar' : 'Arquivar';
     desenharMeta(c);
-    desenharDiario(c);
     desenharFlash(c);
     desenharItens();
     desenharAnexos();
@@ -673,7 +661,6 @@ export function iniciarCard({ estado, store }) {
     const erroEl = criar('div', { class: 'erro', id: 'card-erro', role: 'alert' });
     const salvar = criar('span', { id: 'card-salvar', class: 'card-salvar', 'aria-live': 'polite' });
     const anexos = criar('div', { id: 'card-anexos' });
-    const diarioCard = criar('div', { id: 'card-diario', class: 'diario-lista' });
     const flashEstudar = criar('button', { type: 'button', class: 'btn btn-principal', id: 'card-flash-estudar' });
     // Ao sair da sessão, volta para este card (por cima do Quadro).
     flashEstudar.addEventListener('click', async () => {
@@ -711,12 +698,11 @@ export function iniciarCard({ estado, store }) {
         criar('section', {}, criar('h3', { texto: 'Itens' }), itens, criar('div', { class: 'linha-botoes' }, novoGrupoBtn), grupoForm),
         criar('section', { id: 'card-flash' }, criar('h3', { texto: 'Flashcards' }), flashResumo,
           criar('div', { class: 'linha-botoes' }, flashEstudar, flashAdicionar), flashLista),
-        criar('section', {}, criar('h3', { texto: 'Diário' }), diarioCard),
         criar('section', {}, criar('h3', { texto: 'Anexos' }), anexos,
           criar('div', { class: 'linha-botoes' }, linkAbrir), linkForm),
         erroEl,
         criar('div', { class: 'card-acoes' }, arquivar, excluir)));
-    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, diarioCard, flashEstudar, flashLista, flashResumo };
+    nodos = { titulo, progresso, progressoCaixa, barra, escolhaTag, escolhaSub, tagOutras, lista, blocoLista, fixa, notas, itens, arquivar, erro: erroEl, salvar, anexos, metaH, metaM, metaTexto, metaBarra, metaBarraFill, flashEstudar, flashLista, flashResumo };
 
     fecharBtn.addEventListener('click', fechar);
     // Meta do card em minutos: vazio ou zero = sem meta.
